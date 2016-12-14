@@ -42,11 +42,10 @@ import org.powermock.core.classloader.annotations.PrepareForTest;
 import org.powermock.modules.junit4.PowerMockRunner;
 
 import java.util.ArrayList;
-import java.util.Map;
 import java.util.Properties;
 import java.util.UUID;
 
-import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.assertEquals;
 
 /**
  * Suite of FlinkKinesisConsumer tests for the methods called throughout the source life cycle.
@@ -386,7 +385,7 @@ public class FlinkKinesisConsumerTest {
 
 		FlinkKinesisConsumer<String> consumer = new FlinkKinesisConsumer<>("fakeStream", new SimpleStringSchema(), config);
 
-		assertTrue(consumer.snapshotState(123, 123).size() == 0); //arbitrary checkpoint id and timestamp
+		assertEquals(consumer.snapshotState(123, 123).size(), 0); //arbitrary checkpoint id and timestamp
 	}
 
 	@Test
@@ -399,7 +398,7 @@ public class FlinkKinesisConsumerTest {
 		FlinkKinesisConsumer<String> consumer = new FlinkKinesisConsumer<>("fakeStream", new SimpleStringSchema(), config);
 		consumer.open(new Configuration()); // only opened, not run
 
-		assertTrue(consumer.snapshotState(123, 123).size() == 0); //arbitrary checkpoint id and timestamp
+		assertEquals(consumer.snapshotState(123, 123).size(), 0); //arbitrary checkpoint id and timestamp
 	}
 
 	// ----------------------------------------------------------------------
@@ -434,7 +433,7 @@ public class FlinkKinesisConsumerTest {
 		PowerMockito.mockStatic(KinesisConfigUtil.class);
 		PowerMockito.doNothing().when(KinesisConfigUtil.class);
 
-		ArrayList<Tuple2<KinesisStreamShard, SequenceNumber>> fakeRestoredState = new ArrayList<>();
+		ArrayList<Tuple2<KinesisStreamShard, SequenceNumber>> fakeRestoredState = new ArrayList<>(5);
 		fakeRestoredState.add(Tuple2.of(
 			new KinesisStreamShard("fakeStream1",
 				new Shard().withShardId(KinesisShardIdGenerator.generateFromShardOrder(0))),

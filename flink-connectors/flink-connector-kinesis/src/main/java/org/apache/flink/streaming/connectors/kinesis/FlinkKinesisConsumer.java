@@ -272,17 +272,17 @@ public class FlinkKinesisConsumer<T> extends RichParallelSourceFunction<T>
 	public List<Tuple2<KinesisStreamShard, SequenceNumber>> snapshotState(long checkpointId, long checkpointTimestamp) throws Exception {
 		if (lastStateSnapshot == null) {
 			LOG.debug("snapshotState() requested on not yet opened source; returning null.");
-			return new ArrayList<>();
+			return Collections.emptyList();
 		}
 
 		if (fetcher == null) {
 			LOG.debug("snapshotState() requested on not yet running source; returning null.");
-			return new ArrayList<>();
+			return Collections.emptyList();
 		}
 
 		if (!running) {
 			LOG.debug("snapshotState() called on closed source; returning null.");
-			return new ArrayList<>();
+			return Collections.emptyList();
 		}
 
 		if (LOG.isDebugEnabled()) {
@@ -296,7 +296,7 @@ public class FlinkKinesisConsumer<T> extends RichParallelSourceFunction<T>
 				lastStateSnapshot.toString(), checkpointId, checkpointTimestamp);
 		}
 
-		List<Tuple2<KinesisStreamShard, SequenceNumber>> listState = new ArrayList<>();
+		List<Tuple2<KinesisStreamShard, SequenceNumber>> listState = new ArrayList<>(lastStateSnapshot.size());
 		for (Map.Entry<KinesisStreamShard, SequenceNumber> entry: lastStateSnapshot.entrySet()) {
 			listState.add(Tuple2.of(entry.getKey(), entry.getValue()));
 		}
