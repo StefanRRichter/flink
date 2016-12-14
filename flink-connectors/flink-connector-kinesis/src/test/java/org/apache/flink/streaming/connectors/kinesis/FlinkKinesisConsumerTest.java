@@ -18,6 +18,7 @@
 package org.apache.flink.streaming.connectors.kinesis;
 
 import com.amazonaws.services.kinesis.model.Shard;
+import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.streaming.api.functions.source.SourceFunction;
 import org.apache.flink.streaming.connectors.kinesis.config.AWSConfigConstants;
@@ -40,7 +41,7 @@ import org.powermock.api.mockito.PowerMockito;
 import org.powermock.core.classloader.annotations.PrepareForTest;
 import org.powermock.modules.junit4.PowerMockRunner;
 
-import java.util.HashMap;
+import java.util.ArrayList;
 import java.util.Map;
 import java.util.Properties;
 import java.util.UUID;
@@ -377,7 +378,7 @@ public class FlinkKinesisConsumerTest {
 	// ----------------------------------------------------------------------
 
 	@Test
-	public void testSnapshotStateShouldBeNullIfSourceNotOpened() throws Exception {
+	public void testSnapshotStateShouldBeEmptyListIfSourceNotOpened() throws Exception {
 		Properties config = new Properties();
 		config.setProperty(AWSConfigConstants.AWS_REGION, "us-east-1");
 		config.setProperty(AWSConfigConstants.AWS_ACCESS_KEY_ID, "accessKeyId");
@@ -385,11 +386,11 @@ public class FlinkKinesisConsumerTest {
 
 		FlinkKinesisConsumer<String> consumer = new FlinkKinesisConsumer<>("fakeStream", new SimpleStringSchema(), config);
 
-		assertTrue(consumer.snapshotState(123, 123) == null); //arbitrary checkpoint id and timestamp
+		assertTrue(consumer.snapshotState(123, 123).size() == 0); //arbitrary checkpoint id and timestamp
 	}
 
 	@Test
-	public void testSnapshotStateShouldBeNullIfSourceNotRun() throws Exception {
+	public void testSnapshotStateShouldBeEmptyListIfSourceNotRun() throws Exception {
 		Properties config = new Properties();
 		config.setProperty(AWSConfigConstants.AWS_REGION, "us-east-1");
 		config.setProperty(AWSConfigConstants.AWS_ACCESS_KEY_ID, "accessKeyId");
@@ -398,7 +399,7 @@ public class FlinkKinesisConsumerTest {
 		FlinkKinesisConsumer<String> consumer = new FlinkKinesisConsumer<>("fakeStream", new SimpleStringSchema(), config);
 		consumer.open(new Configuration()); // only opened, not run
 
-		assertTrue(consumer.snapshotState(123, 123) == null); //arbitrary checkpoint id and timestamp
+		assertTrue(consumer.snapshotState(123, 123).size() == 0); //arbitrary checkpoint id and timestamp
 	}
 
 	// ----------------------------------------------------------------------
@@ -433,27 +434,27 @@ public class FlinkKinesisConsumerTest {
 		PowerMockito.mockStatic(KinesisConfigUtil.class);
 		PowerMockito.doNothing().when(KinesisConfigUtil.class);
 
-		HashMap<KinesisStreamShard, SequenceNumber> fakeRestoredState = new HashMap<>();
-		fakeRestoredState.put(
+		ArrayList<Tuple2<KinesisStreamShard, SequenceNumber>> fakeRestoredState = new ArrayList<>();
+		fakeRestoredState.add(Tuple2.of(
 			new KinesisStreamShard("fakeStream1",
 				new Shard().withShardId(KinesisShardIdGenerator.generateFromShardOrder(0))),
-			new SequenceNumber(UUID.randomUUID().toString()));
-		fakeRestoredState.put(
+			new SequenceNumber(UUID.randomUUID().toString())));
+		fakeRestoredState.add(Tuple2.of(
 			new KinesisStreamShard("fakeStream1",
 				new Shard().withShardId(KinesisShardIdGenerator.generateFromShardOrder(1))),
-			new SequenceNumber(UUID.randomUUID().toString()));
-		fakeRestoredState.put(
+			new SequenceNumber(UUID.randomUUID().toString())));
+		fakeRestoredState.add(Tuple2.of(
 			new KinesisStreamShard("fakeStream1",
 				new Shard().withShardId(KinesisShardIdGenerator.generateFromShardOrder(2))),
-			new SequenceNumber(UUID.randomUUID().toString()));
-		fakeRestoredState.put(
+			new SequenceNumber(UUID.randomUUID().toString())));
+		fakeRestoredState.add(Tuple2.of(
 			new KinesisStreamShard("fakeStream2",
 				new Shard().withShardId(KinesisShardIdGenerator.generateFromShardOrder(0))),
-			new SequenceNumber(UUID.randomUUID().toString()));
-		fakeRestoredState.put(
+			new SequenceNumber(UUID.randomUUID().toString())));
+		fakeRestoredState.add(Tuple2.of(
 			new KinesisStreamShard("fakeStream2",
 				new Shard().withShardId(KinesisShardIdGenerator.generateFromShardOrder(1))),
-			new SequenceNumber(UUID.randomUUID().toString()));
+			new SequenceNumber(UUID.randomUUID().toString())));
 
 		TestableFlinkKinesisConsumer consumer = new TestableFlinkKinesisConsumer(
 			"fakeStream", new Properties(), 10, 2);
@@ -462,11 +463,11 @@ public class FlinkKinesisConsumerTest {
 		consumer.run(Mockito.mock(SourceFunction.SourceContext.class));
 
 		Mockito.verify(mockedFetcher).setIsRestoringFromFailure(true);
-		for (Map.Entry<KinesisStreamShard, SequenceNumber> restoredShard : fakeRestoredState.entrySet()) {
+		for (Tuple2<KinesisStreamShard, SequenceNumber> restoredShard : fakeRestoredState) {
 			Mockito.verify(mockedFetcher).advanceLastDiscoveredShardOfStream(
-				restoredShard.getKey().getStreamName(), restoredShard.getKey().getShard().getShardId());
+				restoredShard.f0.getStreamName(), restoredShard.f0.getShard().getShardId());
 			Mockito.verify(mockedFetcher).registerNewSubscribedShardState(
-				new KinesisStreamShardState(restoredShard.getKey(), restoredShard.getValue()));
+				new KinesisStreamShardState(restoredShard.f0, restoredShard.f1));
 		}
 	}
 }

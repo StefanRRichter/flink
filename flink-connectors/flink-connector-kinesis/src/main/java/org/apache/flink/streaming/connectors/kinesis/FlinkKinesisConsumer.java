@@ -18,9 +18,10 @@
 package org.apache.flink.streaming.connectors.kinesis;
 
 import org.apache.flink.api.common.typeinfo.TypeInformation;
+import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.api.java.typeutils.ResultTypeQueryable;
 import org.apache.flink.configuration.Configuration;
-import org.apache.flink.streaming.api.checkpoint.CheckpointedAsynchronously;
+import org.apache.flink.streaming.api.checkpoint.ListCheckpointed;
 import org.apache.flink.streaming.api.functions.source.RichParallelSourceFunction;
 import org.apache.flink.streaming.connectors.kinesis.internals.KinesisDataFetcher;
 import org.apache.flink.streaming.connectors.kinesis.model.KinesisStreamShard;
@@ -38,6 +39,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.List;
 import java.util.Properties;
+import java.util.ArrayList;
 
 import static org.apache.flink.util.Preconditions.checkArgument;
 import static org.apache.flink.util.Preconditions.checkNotNull;
@@ -56,7 +58,7 @@ import static org.apache.flink.util.Preconditions.checkNotNull;
  * @param <T> the type of data emitted
  */
 public class FlinkKinesisConsumer<T> extends RichParallelSourceFunction<T>
-	implements CheckpointedAsynchronously<HashMap<KinesisStreamShard, SequenceNumber>>, ResultTypeQueryable<T> {
+	implements ListCheckpointed<Tuple2<KinesisStreamShard, SequenceNumber>>, ResultTypeQueryable<T> {
 
 	private static final long serialVersionUID = 4724006128720664870L;
 
@@ -267,20 +269,20 @@ public class FlinkKinesisConsumer<T> extends RichParallelSourceFunction<T>
 	// ------------------------------------------------------------------------
 
 	@Override
-	public HashMap<KinesisStreamShard, SequenceNumber> snapshotState(long checkpointId, long checkpointTimestamp) throws Exception {
+	public List<Tuple2<KinesisStreamShard, SequenceNumber>> snapshotState(long checkpointId, long checkpointTimestamp) throws Exception {
 		if (lastStateSnapshot == null) {
 			LOG.debug("snapshotState() requested on not yet opened source; returning null.");
-			return null;
+			return new ArrayList<>();
 		}
 
 		if (fetcher == null) {
 			LOG.debug("snapshotState() requested on not yet running source; returning null.");
-			return null;
+			return new ArrayList<>();
 		}
 
 		if (!running) {
 			LOG.debug("snapshotState() called on closed source; returning null.");
-			return null;
+			return new ArrayList<>();
 		}
 
 		if (LOG.isDebugEnabled()) {
@@ -294,11 +296,18 @@ public class FlinkKinesisConsumer<T> extends RichParallelSourceFunction<T>
 				lastStateSnapshot.toString(), checkpointId, checkpointTimestamp);
 		}
 
-		return lastStateSnapshot;
+		List<Tuple2<KinesisStreamShard, SequenceNumber>> listState = new ArrayList<>();
+		for (Map.Entry<KinesisStreamShard, SequenceNumber> entry: lastStateSnapshot.entrySet()) {
+			listState.add(Tuple2.of(entry.getKey(), entry.getValue()));
+		}
+		return listState;
 	}
 
 	@Override
-	public void restoreState(HashMap<KinesisStreamShard, SequenceNumber> restoredState) throws Exception {
-		sequenceNumsToRestore = restoredState;
+	public void restoreState(List<Tuple2<KinesisStreamShard, SequenceNumber>> state) throws Exception {
+		sequenceNumsToRestore = new HashMap<>();
+		for (Tuple2<KinesisStreamShard, SequenceNumber> subState: state) {
+			sequenceNumsToRestore.put(subState.f0, subState.f1);
+		}
 	}
 }
