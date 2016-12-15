@@ -297,7 +297,7 @@ public class FlinkKinesisConsumer<T> extends RichParallelSourceFunction<T>
 		}
 
 		List<Tuple2<KinesisStreamShard, SequenceNumber>> listState = new ArrayList<>(lastStateSnapshot.size());
-		for (Map.Entry<KinesisStreamShard, SequenceNumber> entry: lastStateSnapshot.entrySet()) {
+		for (Map.Entry<KinesisStreamShard, SequenceNumber> entry : lastStateSnapshot.entrySet()) {
 			listState.add(Tuple2.of(entry.getKey(), entry.getValue()));
 		}
 		return listState;
@@ -305,9 +305,11 @@ public class FlinkKinesisConsumer<T> extends RichParallelSourceFunction<T>
 
 	@Override
 	public void restoreState(List<Tuple2<KinesisStreamShard, SequenceNumber>> state) throws Exception {
-		sequenceNumsToRestore = new HashMap<>();
-		for (Tuple2<KinesisStreamShard, SequenceNumber> subState: state) {
-			sequenceNumsToRestore.put(subState.f0, subState.f1);
+		if (state != null && state.size() > 0) {
+			sequenceNumsToRestore = new HashMap<>();
+			for (Tuple2<KinesisStreamShard, SequenceNumber> subState : state) {
+				sequenceNumsToRestore.put(subState.f0, subState.f1);
+			}
 		}
 	}
 }
