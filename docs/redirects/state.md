@@ -22,3 +22,43 @@ KIND, either express or implied.  See the License for the
 specific language governing permissions and limitations
 under the License.
 -->
+
+# Hierarchy
+ManagedSnapshotContext (managed) -> FunctionSnapshotContext (exposed to UDF) -> StateSnapshotContext (managed+raw)
+ManagedInitializationContext (managed) -> FunctionInitializationContext (exposed to UDF) -> StateInitializationContext (managed+raw)
+
+# Operator Level
+
+- AbstractStreamOperator::snapshotState(StateSnapshotContext context) throws Exception
+- AbstractStreamOperator::initializeState(StateInitializationContext context) throws Exception
+
+# Function Level
+
+interface CheckpointedFunction {
+	void snapshotState(FunctionSnapshotContext context) throws Exception;
+	void initializeState(FunctionInitializationContext context) throws Exception;
+}
+
+## Operator State
+
+## Keyed State
+
+## Managed State
+
+## Raw State
+
+### KeyedStateCheckpointOutputStream
+ - KeyGroupsList getKeyGroupList()
+ - void startNewKeyGroup(int keyGroupId) throws IOException
+ - boolean isKeyGroupAlreadyStarted(int keyGroupId)
+ - boolean isKeyGroupAlreadyFinished(int keyGroupId)
+ - int getCurrentKeyGroup()
+
+### OperatorStateCheckpointOutputStream
+ - startNewPartition()
+ - int getNumberOfPartitions()
+
+## Legacy Operator State
+ - Checkpointed and CheckpointedRestoring
+
+## State in the context of rescaling operator parallelism
