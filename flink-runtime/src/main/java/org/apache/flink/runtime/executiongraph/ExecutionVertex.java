@@ -47,6 +47,7 @@ import org.apache.flink.util.ExceptionUtils;
 import org.apache.flink.util.SerializedValue;
 import org.slf4j.Logger;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
@@ -601,8 +602,7 @@ public class ExecutionVertex implements AccessExecutionVertex, Archiveable<Archi
 		for (IntermediateResultPartition partition : resultPartitions.values()) {
 			producedPartitions.add(ResultPartitionDeploymentDescriptor.from(partition, lazyScheduling));
 		}
-		
-		
+
 		for (ExecutionEdge[] edges : inputEdges) {
 			InputChannelDeploymentDescriptor[] partitions = InputChannelDeploymentDescriptor
 					.fromEdges(edges, targetSlot, lazyScheduling);
@@ -620,7 +620,14 @@ public class ExecutionVertex implements AccessExecutionVertex, Archiveable<Archi
 		}
 
 		SerializedValue<JobInformation> serializedJobInformation = getExecutionGraph().getSerializedJobInformation();
-		SerializedValue<TaskInformation> serializedJobVertexInformation = jobVertex.getSerializedTaskInformation();
+		SerializedValue<TaskInformation> serializedJobVertexInformation = null;
+
+		try {
+			serializedJobVertexInformation = jobVertex.getSerializedTaskInformation();
+		} catch (IOException e) {
+			throw new ExecutionGraphException(
+					"Could not create a serialized JobVertexInformation for " + jobVertex.getJobVertexId(), e);
+		}
 
 		return new TaskDeploymentDescriptor(
 			serializedJobInformation,

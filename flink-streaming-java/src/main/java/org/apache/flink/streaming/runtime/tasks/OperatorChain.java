@@ -27,6 +27,7 @@ import org.apache.flink.runtime.io.network.api.CheckpointBarrier;
 import org.apache.flink.runtime.io.network.api.writer.ResultPartitionWriter;
 import org.apache.flink.runtime.metrics.groups.OperatorMetricGroup;
 import org.apache.flink.runtime.plugable.SerializationDelegate;
+import org.apache.flink.runtime.state.KeyGroupRangeAssignment;
 import org.apache.flink.streaming.api.collector.selector.CopyingDirectedOutput;
 import org.apache.flink.streaming.api.collector.selector.DirectedOutput;
 import org.apache.flink.streaming.api.collector.selector.OutputSelector;
@@ -38,6 +39,7 @@ import org.apache.flink.streaming.api.operators.StreamOperator;
 import org.apache.flink.streaming.api.watermark.Watermark;
 import org.apache.flink.streaming.runtime.io.RecordWriterOutput;
 import org.apache.flink.streaming.runtime.io.StreamRecordWriter;
+import org.apache.flink.streaming.runtime.partitioner.ConfigurableStreamPartitioner;
 import org.apache.flink.streaming.runtime.partitioner.StreamPartitioner;
 import org.apache.flink.streaming.runtime.streamrecord.LatencyMarker;
 import org.apache.flink.streaming.runtime.streamrecord.StreamRecord;
@@ -94,6 +96,7 @@ public class OperatorChain<OUT, OP extends StreamOperator<OUT>> {
 		try {
 			for (int i = 0; i < outEdgesInOrder.size(); i++) {
 				StreamEdge outEdge = outEdgesInOrder.get(i);
+
 				RecordWriterOutput<?> streamOutput = createStreamOutput(
 						outEdge, chainedConfigs.get(outEdge.getSourceId()), i,
 						containingTask.getEnvironment(), containingTask.getName());
@@ -321,6 +324,8 @@ public class OperatorChain<OUT, OP extends StreamOperator<OUT>> {
 			Environment taskEnvironment,
 			String taskName)
 	{
+
+
 		TypeSerializer<T> outSerializer = upStreamConfig.getTypeSerializerOut(taskEnvironment.getUserClassLoader());
 
 		@SuppressWarnings("unchecked")
@@ -329,6 +334,13 @@ public class OperatorChain<OUT, OP extends StreamOperator<OUT>> {
 		LOG.debug("Using partitioner {} for output {} of task ", outputPartitioner, outputIndex, taskName);
 		
 		ResultPartitionWriter bufferWriter = taskEnvironment.getWriter(outputIndex);
+
+		// we initialize the partitioner here with the number of key groups (aka max. parallelism)
+		if (outputPartitioner instanceof ConfigurableStreamPartitioner) {
+			int numKeyGroups = taskEnvironment.getTaskInfo().getNumberOfKeyGroups();
+			KeyGroupRangeAssignment.checkParallelismPreconditions(numKeyGroups);
+			((ConfigurableStreamPartitioner) outputPartitioner).configure(numKeyGroups);
+		}
 
 		StreamRecordWriter<SerializationDelegate<StreamRecord<T>>> output = 
 				new StreamRecordWriter<>(bufferWriter, outputPartitioner, upStreamConfig.getBufferTimeout());
