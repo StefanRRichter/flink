@@ -56,7 +56,6 @@ import org.apache.flink.runtime.util.SerializableObject;
 import org.apache.flink.util.FileUtils;
 import org.apache.flink.util.InstantiationUtil;
 import org.apache.flink.util.Preconditions;
-
 import org.rocksdb.ColumnFamilyDescriptor;
 import org.rocksdb.ColumnFamilyHandle;
 import org.rocksdb.ColumnFamilyOptions;
@@ -66,7 +65,6 @@ import org.rocksdb.RocksDB;
 import org.rocksdb.RocksDBException;
 import org.rocksdb.RocksIterator;
 import org.rocksdb.Snapshot;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -93,12 +91,6 @@ import java.util.concurrent.RunnableFuture;
 public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 
 	private static final Logger LOG = LoggerFactory.getLogger(RocksDBKeyedStateBackend.class);
-
-	/** Operator identifier that is used to uniqueify the RocksDB storage path. */
-	private final String operatorIdentifier;
-
-	/** JobID for uniquifying backup paths. */
-	private final JobID jobId;
 
 	/** The options from the options factory, cached */
 	private final ColumnFamilyOptions columnOptions;
@@ -144,10 +136,7 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 			int numberOfKeyGroups,
 			KeyGroupRange keyGroupRange
 	) throws Exception {
-
 		super(kvStateRegistry, keySerializer, userCodeClassLoader, numberOfKeyGroups, keyGroupRange);
-		this.operatorIdentifier = operatorIdentifier;
-		this.jobId = jobId;
 		this.columnOptions = columnFamilyOptions;
 
 		this.instanceBasePath = instanceBasePath;
@@ -491,12 +480,11 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 			byte[] previousKey = null;
 			byte[] previousValue = null;
 
-			List<Tuple2<RocksIterator, Integer>> kvStateIteratorsHandover = this.kvStateIterators;
-			this.kvStateIterators = null;
-
 			// Here we transfer ownership of RocksIterators to the RocksDBMergeIterator
 			try (RocksDBMergeIterator mergeIterator = new RocksDBMergeIterator(
-					kvStateIteratorsHandover, stateBackend.keyGroupPrefixBytes)) {
+					this.kvStateIterators, stateBackend.keyGroupPrefixBytes)) {
+
+				this.kvStateIterators = null;
 
 				//preamble: setup with first key-group as our lookahead
 				if (mergeIterator.isValid()) {

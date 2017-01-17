@@ -323,12 +323,16 @@ public abstract class AbstractStreamOperator<OUT>
 
 		if (operatorStateBackend != null) {
 			IOUtils.closeQuietly(operatorStateBackend);
-			operatorStateBackend.dispose();
+			synchronized (getContainingTask().getCheckpointLock()) {
+				operatorStateBackend.dispose();
+			}
 		}
 
 		if (keyedStateBackend != null) {
 			IOUtils.closeQuietly(keyedStateBackend);
-			keyedStateBackend.dispose();
+			synchronized (getContainingTask().getCheckpointLock()) {
+				keyedStateBackend.dispose();
+			}
 		}
 	}
 
