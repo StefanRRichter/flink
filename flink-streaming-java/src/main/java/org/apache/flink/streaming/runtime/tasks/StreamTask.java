@@ -43,6 +43,7 @@ import org.apache.flink.runtime.state.KeyGroupsStateHandle;
 import org.apache.flink.runtime.state.OperatorStateBackend;
 import org.apache.flink.runtime.state.OperatorStateHandle;
 import org.apache.flink.runtime.state.StateBackendFactory;
+import org.apache.flink.runtime.state.StateUtil;
 import org.apache.flink.runtime.state.StreamStateHandle;
 import org.apache.flink.runtime.state.TaskStateHandles;
 import org.apache.flink.runtime.state.filesystem.FsStateBackend;
@@ -321,6 +322,7 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 			try {
 				cancelables.close();
 				shutdownAsyncThreads();
+				stateBackend.close();
 			}
 			catch (Throwable t) {
 				// catch and log the exception to not replace the original exception
@@ -892,14 +894,16 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 		@Override
 		public void run() {
 
+			List<OperatorStateHandle> operatorStatesBackend = new ArrayList<>(snapshotInProgressList.size());
+			List<OperatorStateHandle> operatorStatesStream = new ArrayList<>(snapshotInProgressList.size());
+			KeyGroupsStateHandle keyedStateHandleBackend = null;
+			KeyGroupsStateHandle keyedStateHandleStream = null;
+
 			try {
 
 				// Keyed state handle future, currently only one (the head) operator can have this
-				KeyGroupsStateHandle keyedStateHandleBackend = FutureUtil.runIfNotDoneAndGet(futureKeyedBackendStateHandles);
-				KeyGroupsStateHandle keyedStateHandleStream = FutureUtil.runIfNotDoneAndGet(futureKeyedStreamStateHandles);
-
-				List<OperatorStateHandle> operatorStatesBackend = new ArrayList<>(snapshotInProgressList.size());
-				List<OperatorStateHandle> operatorStatesStream = new ArrayList<>(snapshotInProgressList.size());
+				keyedStateHandleBackend = FutureUtil.runIfNotDoneAndGet(futureKeyedBackendStateHandles);
+				keyedStateHandleStream = FutureUtil.runIfNotDoneAndGet(futureKeyedStreamStateHandles);
 
 				for (OperatorSnapshotResult snapshotInProgress : snapshotInProgressList) {
 					if (null != snapshotInProgress) {
@@ -948,6 +952,35 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 							" for operator " + owner.getName() + '.',
 						e));
 				owner.handleAsyncException("Failure in asynchronous checkpoint materialization", asyncException);
+
+				try {
+					StateUtil.bestEffortDiscardAllStateObjects(operatorStatesBackend);
+				} catch (Exception ex) {
+					LOG.info("Error while discarding operator state (backend)", ex);
+				}
+
+				try {
+					StateUtil.bestEffortDiscardAllStateObjects(operatorStatesStream);
+				} catch (Exception ex) {
+					LOG.info("Error while discarding operator state (stream)", ex);
+				}
+
+				if (null != keyedStateHandleBackend) {
+					try {
+						keyedStateHandleBackend.discardState();
+					} catch (Exception e1) {
+						LOG.info("Error while discarding keyed state (backend)", e1);
+					}
+				}
+
+				if (null != keyedStateHandleStream) {
+					try {
+						keyedStateHandleStream.discardState();
+					} catch (Exception e1) {
+						LOG.info("Error while discarding keyed state (stream)", e1);
+					}
+				}
+
 			} finally {
 				owner.cancelables.unregisterClosable(this);
 			}
@@ -961,6 +994,27 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 					snapshotResult.cancel();
 				}
 			}
+			snapshotInProgressList.clear();
+
+			try {
+				StateUtil.bestEffortDiscardAllStateObjects(nonPartitionedStateHandles);
+			} catch (Exception ex) {
+				LOG.info("Error while discarding legacy state", ex);
+			}
+
+			for (StreamStateHandle nonPartitionedStateHandle : nonPartitionedStateHandles) {
+
+				if (null != nonPartitionedStateHandle) {
+					try {
+						nonPartitionedStateHandle.discardState();
+					} catch (Exception ex) {
+						if (LOG.isDebugEnabled()) {
+							LOG.debug("Exception while discarding state", ex);
+						}
+					}
+				}
+			}
+			nonPartitionedStateHandles.clear();
 		}
 	}
 
@@ -1033,6 +1087,16 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 					for (OperatorSnapshotResult operatorSnapshotResult : snapshotInProgressList) {
 						if (null != operatorSnapshotResult) {
 							operatorSnapshotResult.cancel();
+						}
+					}
+
+					for (StreamStateHandle nonPartitionedState : nonPartitionedStates) {
+						if (null != nonPartitionedState) {
+							try {
+								nonPartitionedState.discardState();
+							} catch (Exception ex) {
+								LOG.info("Exception while discarding legacy state", ex);
+							}
 						}
 					}
 

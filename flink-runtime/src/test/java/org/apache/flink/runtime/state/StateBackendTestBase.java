@@ -51,6 +51,7 @@ import org.apache.flink.types.IntValue;
 import org.apache.flink.util.TestLogger;
 import org.junit.Test;
 
+import java.io.IOException;
 import java.util.Collections;
 import java.util.List;
 import java.util.Random;
@@ -934,7 +935,7 @@ public abstract class StateBackendTestBase<B extends AbstractStateBackend> exten
 				state.value();
 
 				fail("should recognize wrong serializers");
-			} catch (RuntimeException e) {
+			} catch (IOException e) {
 				if (!e.getMessage().contains("Trying to access state using wrong")) {
 					fail("wrong exception " + e);
 				}
@@ -985,7 +986,7 @@ public abstract class StateBackendTestBase<B extends AbstractStateBackend> exten
 				state.get();
 
 				fail("should recognize wrong serializers");
-			} catch (RuntimeException e) {
+			} catch (IOException e) {
 				if (!e.getMessage().contains("Trying to access state using wrong")) {
 					fail("wrong exception " + e);
 				}
@@ -1038,7 +1039,7 @@ public abstract class StateBackendTestBase<B extends AbstractStateBackend> exten
 				state.get();
 
 				fail("should recognize wrong serializers");
-			} catch (RuntimeException e) {
+			} catch (IOException e) {
 				if (!e.getMessage().contains("Trying to access state using wrong ")) {
 					fail("wrong exception " + e);
 				}

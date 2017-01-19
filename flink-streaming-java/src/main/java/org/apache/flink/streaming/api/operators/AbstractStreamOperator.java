@@ -346,17 +346,24 @@ public abstract class AbstractStreamOperator<OUT>
 
 		OperatorSnapshotResult snapshotInProgress = new OperatorSnapshotResult();
 
-		snapshotInProgress.setKeyedStateRawFuture(snapshotContext.getKeyedStateStreamFuture());
-		snapshotInProgress.setOperatorStateRawFuture(snapshotContext.getOperatorStateStreamFuture());
+		try {
 
-		if (null != operatorStateBackend) {
-			snapshotInProgress.setOperatorStateManagedFuture(
-					operatorStateBackend.snapshot(checkpointId, timestamp, streamFactory));
-		}
+			snapshotInProgress.setKeyedStateRawFuture(snapshotContext.getKeyedStateStreamFuture());
+			snapshotInProgress.setOperatorStateRawFuture(snapshotContext.getOperatorStateStreamFuture());
 
-		if (null != keyedStateBackend) {
-			snapshotInProgress.setKeyedStateManagedFuture(
-					keyedStateBackend.snapshot(checkpointId, timestamp, streamFactory));
+			if (null != operatorStateBackend) {
+				snapshotInProgress.setOperatorStateManagedFuture(
+						operatorStateBackend.snapshot(checkpointId, timestamp, streamFactory));
+			}
+
+			if (null != keyedStateBackend) {
+				snapshotInProgress.setKeyedStateManagedFuture(
+						keyedStateBackend.snapshot(checkpointId, timestamp, streamFactory));
+			}
+
+		} catch (Exception ex) {
+			snapshotInProgress.cancel();
+			throw ex;
 		}
 
 		return snapshotInProgress;
