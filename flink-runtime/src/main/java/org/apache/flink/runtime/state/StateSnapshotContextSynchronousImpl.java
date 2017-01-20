@@ -23,6 +23,7 @@ import org.apache.flink.core.fs.CloseableRegistry;
 import org.apache.flink.util.Preconditions;
 
 import java.io.IOException;
+import java.util.concurrent.Phaser;
 import java.util.concurrent.RunnableFuture;
 
 /**
@@ -32,6 +33,7 @@ public class StateSnapshotContextSynchronousImpl implements StateSnapshotContext
 	
 	private final long checkpointId;
 	private final long checkpointTimestamp;
+	private final Phaser waitInAsyncPhaser;
 	
 	/** Factory for he checkpointing stream */
 	private final CheckpointStreamFactory streamFactory;
@@ -55,6 +57,7 @@ public class StateSnapshotContextSynchronousImpl implements StateSnapshotContext
 		this.streamFactory = null;
 		this.keyGroupRange = KeyGroupRange.EMPTY_KEY_GROUP_RANGE;
 		this.closableRegistry = null;
+		this.waitInAsyncPhaser = new Phaser(0);
 	}
 
 
@@ -70,6 +73,7 @@ public class StateSnapshotContextSynchronousImpl implements StateSnapshotContext
 		this.streamFactory = Preconditions.checkNotNull(streamFactory);
 		this.keyGroupRange = Preconditions.checkNotNull(keyGroupRange);
 		this.closableRegistry = Preconditions.checkNotNull(closableRegistry);
+		this.waitInAsyncPhaser = new Phaser(0);
 	}
 
 	@Override
@@ -80,6 +84,16 @@ public class StateSnapshotContextSynchronousImpl implements StateSnapshotContext
 	@Override
 	public long getCheckpointTimestamp() {
 		return checkpointTimestamp;
+	}
+
+	@Override
+	public void signalWait() {
+		waitInAsyncPhaser.register();
+	}
+
+	@Override
+	public void signalReady() {
+		waitInAsyncPhaser.arriveAndDeregister();
 	}
 
 	private CheckpointStreamFactory.CheckpointStateOutputStream openAndRegisterNewStream() throws Exception {
@@ -127,4 +141,7 @@ public class StateSnapshotContextSynchronousImpl implements StateSnapshotContext
 		return new DoneFuture<>(stream.closeAndGetHandle());
 	}
 
+	public Phaser getWaitInAsyncPhaser() {
+		return waitInAsyncPhaser;
+	}
 }

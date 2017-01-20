@@ -38,4 +38,8 @@ public interface ManagedSnapshotContext {
 	 */
 	long getCheckpointTimestamp();
 
+	void signalWait();
+
+	void signalReady();
+
 }

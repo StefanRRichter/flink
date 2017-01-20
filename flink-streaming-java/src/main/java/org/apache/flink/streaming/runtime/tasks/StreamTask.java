@@ -901,12 +901,11 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 
 			try {
 
-				// Keyed state handle future, currently only one (the head) operator can have this
-				keyedStateHandleBackend = FutureUtil.runIfNotDoneAndGet(futureKeyedBackendStateHandles);
-				keyedStateHandleStream = FutureUtil.runIfNotDoneAndGet(futureKeyedStreamStateHandles);
-
 				for (OperatorSnapshotResult snapshotInProgress : snapshotInProgressList) {
 					if (null != snapshotInProgress) {
+
+						snapshotInProgress.awaitAsyncCanStart();
+
 						operatorStatesBackend.add(
 								FutureUtil.runIfNotDoneAndGet(snapshotInProgress.getOperatorStateManagedFuture()));
 						operatorStatesStream.add(
@@ -916,6 +915,10 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 						operatorStatesStream.add(null);
 					}
 				}
+
+				// Keyed state handle future, currently only one (the head) operator can have this
+				keyedStateHandleBackend = FutureUtil.runIfNotDoneAndGet(futureKeyedBackendStateHandles);
+				keyedStateHandleStream = FutureUtil.runIfNotDoneAndGet(futureKeyedStreamStateHandles);
 
 				final long asyncEndNanos = System.nanoTime();
 				final long asyncDurationMillis = (asyncEndNanos - asyncStartNanos) / 1_000_000;

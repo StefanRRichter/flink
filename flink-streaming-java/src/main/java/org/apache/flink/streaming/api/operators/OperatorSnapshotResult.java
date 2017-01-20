@@ -22,6 +22,7 @@ import org.apache.flink.runtime.state.KeyGroupsStateHandle;
 import org.apache.flink.runtime.state.OperatorStateHandle;
 
 import java.util.concurrent.Future;
+import java.util.concurrent.Phaser;
 import java.util.concurrent.RunnableFuture;
 
 /**
@@ -34,19 +35,23 @@ public class OperatorSnapshotResult {
 	private RunnableFuture<OperatorStateHandle> operatorStateManagedFuture;
 	private RunnableFuture<OperatorStateHandle> operatorStateRawFuture;
 
+	private Phaser awaitPhaser;
+
 	public OperatorSnapshotResult() {
-		this(null, null, null, null);
+		this(null, null, null, null, null);
 	}
 
 	public OperatorSnapshotResult(
 			RunnableFuture<KeyGroupsStateHandle> keyedStateManagedFuture,
 			RunnableFuture<KeyGroupsStateHandle> keyedStateRawFuture,
 			RunnableFuture<OperatorStateHandle> operatorStateManagedFuture,
-			RunnableFuture<OperatorStateHandle> operatorStateRawFuture) {
+			RunnableFuture<OperatorStateHandle> operatorStateRawFuture,
+			Phaser awaitPhaser) {
 		this.keyedStateManagedFuture = keyedStateManagedFuture;
 		this.keyedStateRawFuture = keyedStateRawFuture;
 		this.operatorStateManagedFuture = operatorStateManagedFuture;
 		this.operatorStateRawFuture = operatorStateRawFuture;
+		this.awaitPhaser = awaitPhaser;
 	}
 
 	public RunnableFuture<KeyGroupsStateHandle> getKeyedStateManagedFuture() {
@@ -88,9 +93,20 @@ public class OperatorSnapshotResult {
 		cancelIfNotNull(getOperatorStateRawFuture());
 	}
 
+	public void setAwaitPhaser(Phaser awaitPhaser) {
+		this.awaitPhaser = awaitPhaser;
+	}
+
 	private static void cancelIfNotNull(Future<?> future) {
 		if (null != future) {
 			future.cancel(true);
+		}
+	}
+
+	public void awaitAsyncCanStart() {
+		if (null != awaitPhaser) {
+			int phase = awaitPhaser.getPhase();
+			awaitPhaser.awaitAdvance(phase);
 		}
 	}
 }

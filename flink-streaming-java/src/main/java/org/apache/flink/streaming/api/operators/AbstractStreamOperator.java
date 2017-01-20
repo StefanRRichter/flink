@@ -348,6 +348,8 @@ public abstract class AbstractStreamOperator<OUT>
 
 		try {
 
+			snapshotInProgress.setAwaitPhaser(snapshotContext.getWaitInAsyncPhaser());
+
 			snapshotInProgress.setKeyedStateRawFuture(snapshotContext.getKeyedStateStreamFuture());
 			snapshotInProgress.setOperatorStateRawFuture(snapshotContext.getOperatorStateStreamFuture());
 
