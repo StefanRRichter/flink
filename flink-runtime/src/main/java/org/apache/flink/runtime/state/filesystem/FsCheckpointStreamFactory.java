@@ -250,6 +250,8 @@ public class FsCheckpointStreamFactory implements CheckpointStreamFactory {
 		public void close() {
 			if (closed.compareAndSet(false, true)) {
 
+				LOG.info("Discarding close on CheckpointOutputStream called.", new Exception("Exception to obtain stacktrace."));
+
 				// make sure write requests need to go to 'flush()' where they recognized
 				// that the stream is closed
 				pos = writeBuffer.length;

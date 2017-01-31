@@ -19,6 +19,8 @@
 package org.apache.flink.runtime.io.async;
 
 import org.apache.flink.util.Preconditions;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.concurrent.FutureTask;
 
@@ -27,6 +29,7 @@ import java.util.concurrent.FutureTask;
  */
 public class AsyncStoppableTaskWithCallback<V> extends FutureTask<V> {
 
+	private static final Logger LOG = LoggerFactory.getLogger(AsyncStoppableTaskWithCallback.class);
 	protected final StoppableCallbackCallable<V> stoppableCallbackCallable;
 
 	public AsyncStoppableTaskWithCallback(StoppableCallbackCallable<V> callable) {
@@ -36,6 +39,7 @@ public class AsyncStoppableTaskWithCallback<V> extends FutureTask<V> {
 
 	@Override
 	public boolean cancel(boolean mayInterruptIfRunning) {
+		LOG.info("Discarding cancel on AsyncStoppableTaskWithCallback called.", new Exception("Exception to obtain stacktrace."));
 		stoppableCallbackCallable.stop();
 		return super.cancel(mayInterruptIfRunning);
 	}

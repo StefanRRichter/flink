@@ -992,6 +992,7 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 
 		@Override
 		public void close() {
+			LOG.info("Close on AsyncCheckpointRunnable called.", new Exception("Exception to obtain stacktrace."));
 			try {
 				cleanup();
 			} catch (Exception cleanupException) {
