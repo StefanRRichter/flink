@@ -28,7 +28,6 @@ import org.apache.flink.util.Preconditions;
 
 import java.io.ByteArrayOutputStream;
 import java.util.ArrayList;
-import java.util.Map;
 
 /**
  * Heap-backed partitioned {@link org.apache.flink.api.common.state.ListState} that is snapshotted
@@ -68,8 +67,8 @@ public class HeapListState<K, N, V>
 		Preconditions.checkState(currentNamespace != null, "No namespace set.");
 		Preconditions.checkState(backend.getCurrentKey() != null, "No key set.");
 
-		Map<KeyNamespace<K, N>, ArrayList<V>> namespaceMap = stateTable.getState();
-		return namespaceMap.get(getCurrentKeyAndNamespace());
+		CoWHashMap<K, N, ArrayList<V>> namespaceMap = stateTable.getState();
+		return namespaceMap.get(backend.getCurrentKey(), currentNamespace);
 	}
 
 	@Override
@@ -82,13 +81,15 @@ public class HeapListState<K, N, V>
 			return;
 		}
 
-		final Map<KeyNamespace<K, N>, ArrayList<V>> keyNamespaceArrayListMap = stateTable.getState();
-		KeyNamespace<K, N> keyNamespace = getCurrentKeyAndNamespace();
-		ArrayList<V> list = keyNamespaceArrayListMap.get(keyNamespace);
+		K key = backend.getCurrentKey();
+		N namespace = currentNamespace;
+
+		final CoWHashMap<K, N, ArrayList<V>> keyNamespaceArrayListMap = stateTable.getState();
+		ArrayList<V> list = keyNamespaceArrayListMap.get(key, namespace);
 
 		if (list == null) {
 			list = new ArrayList<>();
-			keyNamespaceArrayListMap.put(keyNamespace, list);
+			keyNamespaceArrayListMap.put(key, namespace, list);
 		}
 		list.add(value);
 	}
@@ -98,9 +99,8 @@ public class HeapListState<K, N, V>
 		Preconditions.checkState(namespace != null, "No namespace given.");
 		Preconditions.checkState(key != null, "No key given.");
 
-		final Map<KeyNamespace<K, N>, ArrayList<V>> keyNamespaceArrayListMap = stateTable.getState();
-		KeyNamespace<K, N> keyNamespace = getCurrentKeyAndNamespace();
-		ArrayList<V> result = keyNamespaceArrayListMap.get(keyNamespace);
+		final CoWHashMap<K, N, ArrayList<V>> keyNamespaceArrayListMap = stateTable.getState();
+		ArrayList<V> result = keyNamespaceArrayListMap.get(key, namespace);
 
 		if (result == null) {
 			return null;

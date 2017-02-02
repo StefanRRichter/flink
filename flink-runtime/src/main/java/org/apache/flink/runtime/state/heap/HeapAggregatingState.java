@@ -27,7 +27,6 @@ import org.apache.flink.runtime.state.KeyedStateBackend;
 import org.apache.flink.runtime.state.internal.InternalAggregatingState;
 
 import java.io.IOException;
-import java.util.Map;
 
 import static org.apache.flink.util.Preconditions.checkState;
 
@@ -81,16 +80,17 @@ public class HeapAggregatingState<K, N, IN, ACC, OUT>
 		checkState(currentNamespace != null, "No namespace set.");
 		checkState(key != null, "No key set.");
 
-		final Map<KeyNamespace<K, N>, ACC> keyNamespaceACCMap = stateTable.getState();
-		final ACC accumulator = keyNamespaceACCMap.get(getCurrentKeyAndNamespace());
+		final CoWHashMap<K, N, ACC> keyNamespaceACCMap = stateTable.getState();
+		final ACC accumulator = keyNamespaceACCMap.get(backend.getCurrentKey(), currentNamespace);
 		return aggFunction.getResult(accumulator);
 	}
 
 	@Override
 	public void add(IN value) throws IOException {
 		final K key = backend.getCurrentKey();
+		final N namespace = currentNamespace;
 
-		checkState(currentNamespace != null, "No namespace set.");
+		checkState(namespace != null, "No namespace set.");
 		checkState(key != null, "No key set.");
 
 		if (value == null) {
@@ -98,15 +98,14 @@ public class HeapAggregatingState<K, N, IN, ACC, OUT>
 			return;
 		}
 
-		final Map<KeyNamespace<K, N>, ACC> keyNamespaceACCMap = stateTable.getState();
+		final CoWHashMap<K, N, ACC>  keyNamespaceACCMap = stateTable.getState();
 
-		final KeyNamespace<K, N> keyNamespace = getCurrentKeyAndNamespace();
 
 		// if this is the first value for the key, create a new accumulator
-		ACC accumulator = keyNamespaceACCMap.get(keyNamespace);
+		ACC accumulator = keyNamespaceACCMap.get(key, namespace);
 		if (accumulator == null) {
 			accumulator = aggFunction.createAccumulator();
-			keyNamespaceACCMap.put(keyNamespace, accumulator);
+			keyNamespaceACCMap.put(key, namespace, accumulator);
 		}
 
 		aggFunction.add(value, accumulator);

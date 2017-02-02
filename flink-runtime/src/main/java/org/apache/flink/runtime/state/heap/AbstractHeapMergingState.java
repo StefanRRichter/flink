@@ -26,7 +26,6 @@ import org.apache.flink.runtime.state.KeyedStateBackend;
 import org.apache.flink.runtime.state.internal.InternalMergingState;
 
 import java.util.Collection;
-import java.util.Map;
 
 import static org.apache.flink.util.Preconditions.checkState;
 
@@ -71,16 +70,15 @@ public abstract class AbstractHeapMergingState<K, N, IN, OUT, SV, S extends Stat
 		final K key = backend.getCurrentKey();
 		checkState(key != null, "No key set.");
 
-		Map<KeyNamespace<K, N>, SV> namespaceMap = stateTable.getState();
+		CoWHashMap<K, N, SV> namespaceMap = stateTable.getState();
 
 		SV merged = null;
 
 		// merge the sources
 		for (N source : sources) {
-			KeyNamespace<K, N> keyNamespace = new KeyNamespace<>(key, source, 0);
 
 			// get and remove the next source per namespace/key
-			SV sourceState = namespaceMap.remove(keyNamespace);
+			SV sourceState = namespaceMap.remove(key, source);
 
 			if (merged != null && sourceState != null) {
 				merged = mergeState(merged, sourceState);
@@ -91,16 +89,15 @@ public abstract class AbstractHeapMergingState<K, N, IN, OUT, SV, S extends Stat
 
 		// merge into the target, if needed
 		if (merged != null) {
-			KeyNamespace<K, N> keyNamespace = new KeyNamespace<>(key, target, 0);
 
-			SV targetState = namespaceMap.get(keyNamespace);
+			SV targetState = namespaceMap.get(key, target);
 
 			if (targetState != null) {
 				targetState = mergeState(targetState, merged);
 			} else {
 				targetState = merged;
 			}
-			namespaceMap.put(keyNamespace, targetState);
+			namespaceMap.put(key, target, targetState);
 		}
 	}
 

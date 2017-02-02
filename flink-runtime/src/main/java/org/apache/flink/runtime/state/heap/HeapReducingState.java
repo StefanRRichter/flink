@@ -27,7 +27,6 @@ import org.apache.flink.runtime.state.internal.InternalReducingState;
 import org.apache.flink.util.Preconditions;
 
 import java.io.IOException;
-import java.util.Map;
 
 /**
  * Heap-backed partitioned {@link org.apache.flink.api.common.state.ReducingState} that is
@@ -71,8 +70,8 @@ public class HeapReducingState<K, N, V>
 		Preconditions.checkState(currentNamespace != null, "No namespace set.");
 		Preconditions.checkState(backend.getCurrentKey() != null, "No key set.");
 
-		Map<KeyNamespace<K, N>, V> keyNamespaceVMap = stateTable.getState();
-		return keyNamespaceVMap.get(getCurrentKeyAndNamespace());
+		CoWHashMap<K, N, V>  keyNamespaceVMap = stateTable.getState();
+		return keyNamespaceVMap.get(backend.getCurrentKey(), currentNamespace);
 	}
 
 	@Override
@@ -85,10 +84,11 @@ public class HeapReducingState<K, N, V>
 			return;
 		}
 
-		final Map<KeyNamespace<K, N>, V> keyNamespaceVMap = stateTable.getState();
+		final CoWHashMap<K, N, V> keyNamespaceVMap = stateTable.getState();
 
-		final KeyNamespace<K, N> keyNamespace = getCurrentKeyAndNamespace();
-		final V currentValue = keyNamespaceVMap.put(keyNamespace, value);
+		final K key = backend.getCurrentKey();
+		final N namespace = currentNamespace;
+		final V currentValue = keyNamespaceVMap.put(key, namespace, value);
 
 		if (currentValue != null) {
 			V reducedValue;
@@ -97,7 +97,7 @@ public class HeapReducingState<K, N, V>
 			} catch (Exception e) {
 				throw new IOException("Exception while applying ReduceFunction in reducing state", e);
 			}
-			keyNamespaceVMap.put(keyNamespace, reducedValue);
+			keyNamespaceVMap.put(key, namespace, reducedValue);
 		}
 	}
 

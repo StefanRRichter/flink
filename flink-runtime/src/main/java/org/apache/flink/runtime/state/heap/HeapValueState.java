@@ -25,8 +25,6 @@ import org.apache.flink.runtime.state.KeyedStateBackend;
 import org.apache.flink.runtime.state.internal.InternalValueState;
 import org.apache.flink.util.Preconditions;
 
-import java.util.Map;
-
 /**
  * Heap-backed partitioned {@link org.apache.flink.api.common.state.ValueState} that is snapshotted
  * into files.
@@ -61,8 +59,8 @@ public class HeapValueState<K, N, V>
 		Preconditions.checkState(currentNamespace != null, "No namespace set.");
 		Preconditions.checkState(backend.getCurrentKey() != null, "No key set.");
 
-		final Map<KeyNamespace<K, N>, V> keyNamespaceVMap = stateTable.getState();
-		final V result = keyNamespaceVMap.get(getCurrentKeyAndNamespace());
+		final CoWHashMap<K, N, V> keyNamespaceVMap = stateTable.getState();
+		final V result = keyNamespaceVMap.get(backend.getCurrentKey(), currentNamespace);
 
 		if (result == null) {
 			return stateDesc.getDefaultValue();
@@ -81,7 +79,7 @@ public class HeapValueState<K, N, V>
 			return;
 		}
 
-		final Map<KeyNamespace<K, N>, V> keyNamespaceVMap = stateTable.getState();
-		keyNamespaceVMap.put(getCurrentKeyAndNamespace(), value);
+		final CoWHashMap<K, N, V> keyNamespaceVMap = stateTable.getState();
+		keyNamespaceVMap.put(backend.getCurrentKey(), currentNamespace, value);
 	}
 }
