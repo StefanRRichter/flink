@@ -98,9 +98,25 @@ public class TimeWindow extends Window {
 
 	@Override
 	public int hashCode() {
-		int result = (int) (start ^ (start >>> 32));
-		result = 31 * result + (int) (end ^ (end >>> 32));
-		return result;
+//		return (int) (start ^end);
+		return scramble(start + end);
+	}
+
+	private static int scramble(long x) {
+		x = (x ^ (x >>> 30)) * 0xbf58476d1ce4e5b9L;
+		x = (x ^ (x >>> 27)) * 0x94d049bb133111ebL;
+		x = x ^ (x >>> 31);
+		return (int) x;
+	}
+
+	public static int scrambleLongToInt(long key) {
+		key = (~key) + (key << 18);
+		key = key ^ (key >>> 31);
+		key = key * 21;
+		key = key ^ (key >>> 11);
+		key = key + (key << 6);
+		key = key ^ (key >>> 22);
+		return (int) key;
 	}
 
 	@Override

@@ -26,7 +26,6 @@ import org.apache.flink.runtime.state.KeyedStateBackend;
 import org.apache.flink.runtime.state.internal.InternalMergingState;
 
 import java.util.Collection;
-import java.util.Map;
 
 import static org.apache.flink.util.Preconditions.checkState;
 
@@ -71,52 +70,35 @@ public abstract class AbstractHeapMergingState<K, N, IN, OUT, SV, S extends Stat
 		final K key = backend.getCurrentKey();
 		checkState(key != null, "No key set.");
 
-		final Map<N, Map<K, SV>> namespaceMap = stateTable.getState();
+		final StateTable<K, N, SV> map = stateTable;
 
-		if (namespaceMap != null) {
-			SV merged = null;
+		SV merged = null;
 
-			// merge the sources
-			for (N source : sources) {
-				Map<K, SV> keysForNamespace = namespaceMap.get(source);
-				if (keysForNamespace != null) {
-					// get and remove the next source per namespace/key
-					SV sourceState = keysForNamespace.remove(key);
+		// merge the sources
+		for (N source : sources) {
 
-					// if the namespace map became empty, remove 
-					if (keysForNamespace.isEmpty()) {
-						namespaceMap.remove(source);
-					}
+			// get and remove the next source per namespace/key
+			SV sourceState = map.removeAndGetOld(key, source);
 
-					if (merged != null && sourceState != null) {
-						merged = mergeState(merged, sourceState);
-					}
-					else if (merged == null) {
-						merged = sourceState;
-					}
-				}
-			}
-
-			// merge into the target, if needed
-			if (merged != null) {
-				Map<K, SV> keysForTarget = namespaceMap.get(target);
-				if (keysForTarget == null) {
-					keysForTarget = createNewMap();
-					namespaceMap.put(target, keysForTarget);
-				}
-				SV targetState = keysForTarget.get(key);
-
-				if (targetState != null) {
-					targetState = mergeState(targetState, merged);
-				}
-				else {
-					targetState = merged;
-				}
-				keysForTarget.put(key, targetState);
+			if (merged != null && sourceState != null) {
+				merged = mergeState(merged, sourceState);
+			} else if (merged == null) {
+				merged = sourceState;
 			}
 		}
 
-		// else no entries for that key at all, nothing to do skip
+		// merge into the target, if needed
+		if (merged != null) {
+
+			SV targetState = map.get(key, target);
+
+			if (targetState != null) {
+				targetState = mergeState(targetState, merged);
+			} else {
+				targetState = merged;
+			}
+			map.put(key, target, targetState);
+		}
 	}
 
 	protected abstract SV mergeState(SV a, SV b) throws Exception;

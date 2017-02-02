@@ -27,7 +27,6 @@ import org.apache.flink.runtime.state.internal.InternalReducingState;
 import org.apache.flink.util.Preconditions;
 
 import java.io.IOException;
-import java.util.Map;
 
 /**
  * Heap-backed partitioned {@link org.apache.flink.api.common.state.ReducingState} that is
@@ -68,55 +67,39 @@ public class HeapReducingState<K, N, V>
 
 	@Override
 	public V get() {
-		Preconditions.checkState(currentNamespace != null, "No namespace set.");
-		Preconditions.checkState(backend.getCurrentKey() != null, "No key set.");
+		final N namespace = currentNamespace;
+		final K key = backend.getCurrentKey();
 
-		Map<N, Map<K, V>> namespaceMap = stateTable.getState();
+		Preconditions.checkState(namespace != null, "No namespace set.");
+		Preconditions.checkState(key != null, "No key set.");
 
-		if (namespaceMap == null) {
-			return null;
-		}
-
-		Map<K, V> keyedMap = namespaceMap.get(currentNamespace);
-
-		if (keyedMap == null) {
-			return null;
-		}
-
-		return keyedMap.get(backend.<K>getCurrentKey());
+		return stateTable.get(key, namespace);
 	}
 
 	@Override
 	public void add(V value) throws IOException {
-		Preconditions.checkState(currentNamespace != null, "No namespace set.");
-		Preconditions.checkState(backend.getCurrentKey() != null, "No key set.");
+		final N namespace = currentNamespace;
+		final K key = backend.getCurrentKey();
+
+		Preconditions.checkState(namespace != null, "No namespace set.");
+		Preconditions.checkState(key != null, "No key set.");
 
 		if (value == null) {
 			clear();
 			return;
 		}
 
-		Map<N, Map<K, V>> namespaceMap = stateTable.getState();
+		final StateTable<K, N, V> map = stateTable;
+		final V currentValue = map.putAndGetOld(key, namespace, value);
 
-		Map<K, V> keyedMap = namespaceMap.get(currentNamespace);
-
-		if (keyedMap == null) {
-			keyedMap = createNewMap();
-			namespaceMap.put(currentNamespace, keyedMap);
-		}
-
-		V currentValue = keyedMap.put(backend.<K>getCurrentKey(), value);
-
-		if (currentValue == null) {
-			// we're good, just added the new value
-		} else {
+		if (currentValue != null) {
 			V reducedValue;
 			try {
 				reducedValue = reduceFunction.reduce(currentValue, value);
 			} catch (Exception e) {
 				throw new IOException("Exception while applying ReduceFunction in reducing state", e);
 			}
-			keyedMap.put(backend.<K>getCurrentKey(), reducedValue);
+			map.put(key, namespace, reducedValue);
 		}
 	}
 

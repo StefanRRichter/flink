@@ -55,6 +55,7 @@ public class ManualWindowSpeedITCase extends StreamingMultipleProgramsTestBase {
 		final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
 
 		env.setStreamTimeCharacteristic(TimeCharacteristic.IngestionTime);
+//		env.setMaxParallelism(1);
 		env.setParallelism(1);
 
 		String checkpoints = tempFolder.newFolder().toURI().toString();
@@ -68,7 +69,7 @@ public class ManualWindowSpeedITCase extends StreamingMultipleProgramsTestBase {
 
 					@Override
 					public Tuple2<String, Integer> reduce(Tuple2<String, Integer> value1,
-							Tuple2<String, Integer> value2) throws Exception {
+					                                      Tuple2<String, Integer> value2) throws Exception {
 						return Tuple2.of(value1.f0, value1.f1 + value2.f1);
 					}
 				})
@@ -104,7 +105,7 @@ public class ManualWindowSpeedITCase extends StreamingMultipleProgramsTestBase {
 
 					@Override
 					public Tuple2<String, Integer> reduce(Tuple2<String, Integer> value1,
-							Tuple2<String, Integer> value2) throws Exception {
+					                                      Tuple2<String, Integer> value2) throws Exception {
 						return Tuple2.of(value1.f0, value1.f1 + value2.f1);
 					}
 				})
@@ -127,7 +128,7 @@ public class ManualWindowSpeedITCase extends StreamingMultipleProgramsTestBase {
 
 		env.setStreamTimeCharacteristic(TimeCharacteristic.IngestionTime);
 		env.setParallelism(1);
-		
+
 		env.setStateBackend(new RocksDBStateBackend(new MemoryStateBackend()));
 
 		env.addSource(new InfiniteTupleSource(10_000))
@@ -138,7 +139,7 @@ public class ManualWindowSpeedITCase extends StreamingMultipleProgramsTestBase {
 
 					@Override
 					public Tuple2<String, Integer> reduce(Tuple2<String, Integer> value1,
-							Tuple2<String, Integer> value2) throws Exception {
+					                                      Tuple2<String, Integer> value2) throws Exception {
 						return Tuple2.of(value1.f0, value1.f1 + value2.f1);
 					}
 				})
@@ -173,7 +174,7 @@ public class ManualWindowSpeedITCase extends StreamingMultipleProgramsTestBase {
 
 					@Override
 					public Tuple2<String, Integer> reduce(Tuple2<String, Integer> value1,
-							Tuple2<String, Integer> value2) throws Exception {
+					                                      Tuple2<String, Integer> value2) throws Exception {
 						return Tuple2.of(value1.f0, value1.f1 + value2.f1);
 					}
 				})
@@ -207,7 +208,7 @@ public class ManualWindowSpeedITCase extends StreamingMultipleProgramsTestBase {
 
 					@Override
 					public Tuple2<String, Integer> reduce(Tuple2<String, Integer> value1,
-							Tuple2<String, Integer> value2) throws Exception {
+					                                      Tuple2<String, Integer> value2) throws Exception {
 						return Tuple2.of(value1.f0, value1.f1 + value2.f1);
 					}
 				})

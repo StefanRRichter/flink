@@ -53,11 +53,7 @@ final public class ArrayListSerializer<T> extends TypeSerializer<ArrayList<T>> {
 
 	@Override
 	public ArrayList<T> copy(ArrayList<T> from) {
-		ArrayList<T> newList = new ArrayList<>(from.size());
-		for (int i = 0; i < from.size(); i++) {
-			newList.add(elementSerializer.copy(from.get(i)));
-		}
-		return newList;
+		return new ArrayList<>(from);
 	}
 
 	@Override

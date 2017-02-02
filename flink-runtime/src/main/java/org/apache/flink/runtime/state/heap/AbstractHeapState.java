@@ -18,6 +18,7 @@
 
 package org.apache.flink.runtime.state.heap;
 
+import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.state.ListState;
 import org.apache.flink.api.common.state.State;
 import org.apache.flink.api.common.state.StateDescriptor;
@@ -27,10 +28,6 @@ import org.apache.flink.runtime.query.netty.message.KvStateRequestSerializer;
 import org.apache.flink.runtime.state.KeyedStateBackend;
 import org.apache.flink.runtime.state.internal.InternalKvState;
 import org.apache.flink.util.Preconditions;
-
-import java.util.HashMap;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Base class for partitioned {@link ListState} implementations that are backed by a regular
@@ -91,30 +88,7 @@ public abstract class AbstractHeapState<K, N, SV, S extends State, SD extends St
 		Preconditions.checkState(currentNamespace != null, "No namespace set.");
 		Preconditions.checkState(backend.getCurrentKey() != null, "No key set.");
 
-		Map<N, Map<K, SV>> namespaceMap =
-				stateTable.getState();
-
-		if (namespaceMap == null) {
-			return;
-		}
-
-		Map<K, SV> keyedMap = namespaceMap.get(currentNamespace);
-
-		if (keyedMap == null) {
-			return;
-		}
-
-		SV removed = keyedMap.remove(backend.getCurrentKey());
-
-		if (removed == null) {
-			return;
-		}
-
-		if (!keyedMap.isEmpty()) {
-			return;
-		}
-
-		namespaceMap.remove(currentNamespace);
+		stateTable.remove(backend.getCurrentKey(), currentNamespace);
 	}
 
 	@Override
@@ -136,20 +110,7 @@ public abstract class AbstractHeapState<K, N, SV, S extends State, SD extends St
 		Preconditions.checkState(namespace != null, "No namespace given.");
 		Preconditions.checkState(key != null, "No key given.");
 
-		Map<N, Map<K, SV>> namespaceMap =
-				stateTable.getState();
-
-		if (namespaceMap == null) {
-			return null;
-		}
-
-		Map<K, SV> keyedMap = namespaceMap.get(currentNamespace);
-
-		if (keyedMap == null) {
-			return null;
-		}
-
-		SV result = keyedMap.get(key);
+		SV result = stateTable.get(key, namespace);
 
 		if (result == null) {
 			return null;
@@ -157,29 +118,13 @@ public abstract class AbstractHeapState<K, N, SV, S extends State, SD extends St
 
 		@SuppressWarnings("unchecked,rawtypes")
 		TypeSerializer serializer = stateDesc.getSerializer();
-
 		return KvStateRequestSerializer.serializeValue(result, serializer);
-	}
-
-	/**
-	 * Creates a new map for use in Heap based state.
-	 *
-	 * <p>If the state queryable ({@link StateDescriptor#isQueryable()}, this
-	 * will create a concurrent hash map instead of a regular one.
-	 *
-	 * @return A new namespace map.
-	 */
-	protected <MK, MV> Map<MK, MV> createNewMap() {
-		if (stateDesc.isQueryable()) {
-			return new ConcurrentHashMap<>();
-		} else {
-			return new HashMap<>();
-		}
 	}
 
 	/**
 	 * This should only be used for testing.
 	 */
+	@VisibleForTesting
 	public StateTable<K, N, SV> getStateTable() {
 		return stateTable;
 	}
