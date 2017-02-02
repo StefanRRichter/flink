@@ -71,8 +71,7 @@ public class HeapReducingState<K, N, V>
 		Preconditions.checkState(currentNamespace != null, "No namespace set.");
 		Preconditions.checkState(backend.getCurrentKey() != null, "No key set.");
 
-		Map<N, Map<K, V>> namespaceMap =
-				stateTable.get(backend.getCurrentKeyGroupIndex());
+		Map<N, Map<K, V>> namespaceMap = stateTable.getState();
 
 		if (namespaceMap == null) {
 			return null;
@@ -97,13 +96,7 @@ public class HeapReducingState<K, N, V>
 			return;
 		}
 
-		Map<N, Map<K, V>> namespaceMap =
-				stateTable.get(backend.getCurrentKeyGroupIndex());
-
-		if (namespaceMap == null) {
-			namespaceMap = createNewMap();
-			stateTable.set(backend.getCurrentKeyGroupIndex(), namespaceMap);
-		}
+		Map<N, Map<K, V>> namespaceMap = stateTable.getState();
 
 		Map<K, V> keyedMap = namespaceMap.get(currentNamespace);
 

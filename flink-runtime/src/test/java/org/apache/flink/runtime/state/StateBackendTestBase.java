@@ -1265,9 +1265,9 @@ public abstract class StateBackendTestBase<B extends AbstractStateBackend> exten
 
 			int keyGroupIndex = KeyGroupRangeAssignment.assignToKeyGroup(1, numberOfKeyGroups);
 			StateTable stateTable = ((AbstractHeapState) kvState).getStateTable();
-			assertNotNull("State not set", stateTable.get(keyGroupIndex));
-			assertTrue(stateTable.get(keyGroupIndex) instanceof ConcurrentHashMap);
-			assertTrue(stateTable.get(keyGroupIndex).get(VoidNamespace.INSTANCE) instanceof ConcurrentHashMap);
+			assertNotNull("State not set", stateTable.getState());
+			assertTrue(stateTable.getState() instanceof ConcurrentHashMap);
+			assertTrue(stateTable.getState().get(VoidNamespace.INSTANCE) instanceof ConcurrentHashMap);
 
 		}
 
@@ -1291,9 +1291,9 @@ public abstract class StateBackendTestBase<B extends AbstractStateBackend> exten
 
 			int keyGroupIndex = KeyGroupRangeAssignment.assignToKeyGroup(1, numberOfKeyGroups);
 			StateTable stateTable = ((AbstractHeapState) kvState).getStateTable();
-			assertNotNull("State not set", stateTable.get(keyGroupIndex));
-			assertTrue(stateTable.get(keyGroupIndex) instanceof ConcurrentHashMap);
-			assertTrue(stateTable.get(keyGroupIndex).get(VoidNamespace.INSTANCE) instanceof ConcurrentHashMap);
+			assertNotNull("State not set", stateTable.getState());
+			assertTrue(stateTable.getState() instanceof ConcurrentHashMap);
+			assertTrue(stateTable.getState().get(VoidNamespace.INSTANCE) instanceof ConcurrentHashMap);
 		}
 
 		{
@@ -1322,9 +1322,9 @@ public abstract class StateBackendTestBase<B extends AbstractStateBackend> exten
 
 			int keyGroupIndex = KeyGroupRangeAssignment.assignToKeyGroup(1, numberOfKeyGroups);
 			StateTable stateTable = ((AbstractHeapState) kvState).getStateTable();
-			assertNotNull("State not set", stateTable.get(keyGroupIndex));
-			assertTrue(stateTable.get(keyGroupIndex) instanceof ConcurrentHashMap);
-			assertTrue(stateTable.get(keyGroupIndex).get(VoidNamespace.INSTANCE) instanceof ConcurrentHashMap);
+			assertNotNull("State not set", stateTable.getState());
+			assertTrue(stateTable.getState() instanceof ConcurrentHashMap);
+			assertTrue(stateTable.getState().get(VoidNamespace.INSTANCE) instanceof ConcurrentHashMap);
 		}
 
 		{
@@ -1353,9 +1353,9 @@ public abstract class StateBackendTestBase<B extends AbstractStateBackend> exten
 
 			int keyGroupIndex = KeyGroupRangeAssignment.assignToKeyGroup(1, numberOfKeyGroups);
 			StateTable stateTable = ((AbstractHeapState) kvState).getStateTable();
-			assertNotNull("State not set", stateTable.get(keyGroupIndex));
-			assertTrue(stateTable.get(keyGroupIndex) instanceof ConcurrentHashMap);
-			assertTrue(stateTable.get(keyGroupIndex).get(VoidNamespace.INSTANCE) instanceof ConcurrentHashMap);
+			assertNotNull("State not set", stateTable.getState());
+			assertTrue(stateTable.getState() instanceof ConcurrentHashMap);
+			assertTrue(stateTable.getState().get(VoidNamespace.INSTANCE) instanceof ConcurrentHashMap);
 		}
 
 		backend.dispose();

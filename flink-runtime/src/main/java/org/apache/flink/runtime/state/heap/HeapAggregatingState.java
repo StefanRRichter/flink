@@ -81,8 +81,7 @@ public class HeapAggregatingState<K, N, IN, ACC, OUT>
 		checkState(currentNamespace != null, "No namespace set.");
 		checkState(key != null, "No key set.");
 
-		Map<N, Map<K, ACC>> namespaceMap =
-				stateTable.get(backend.getCurrentKeyGroupIndex());
+		Map<N, Map<K, ACC>> namespaceMap = stateTable.getState();
 
 		if (namespaceMap == null) {
 			return null;
@@ -110,13 +109,7 @@ public class HeapAggregatingState<K, N, IN, ACC, OUT>
 			return;
 		}
 
-		Map<N, Map<K, ACC>> namespaceMap =
-				stateTable.get(backend.getCurrentKeyGroupIndex());
-
-		if (namespaceMap == null) {
-			namespaceMap = createNewMap();
-			stateTable.set(backend.getCurrentKeyGroupIndex(), namespaceMap);
-		}
+		Map<N, Map<K, ACC>> namespaceMap = stateTable.getState();
 
 		Map<K, ACC> keyedMap = namespaceMap.get(currentNamespace);
 

@@ -71,7 +71,7 @@ public abstract class AbstractHeapMergingState<K, N, IN, OUT, SV, S extends Stat
 		final K key = backend.getCurrentKey();
 		checkState(key != null, "No key set.");
 
-		final Map<N, Map<K, SV>> namespaceMap = stateTable.get(backend.getCurrentKeyGroupIndex());
+		final Map<N, Map<K, SV>> namespaceMap = stateTable.getState();
 
 		if (namespaceMap != null) {
 			SV merged = null;

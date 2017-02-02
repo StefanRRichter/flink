@@ -22,7 +22,6 @@ import org.apache.flink.api.common.state.ListState;
 import org.apache.flink.api.common.state.ListStateDescriptor;
 import org.apache.flink.api.common.typeutils.TypeSerializer;
 import org.apache.flink.core.memory.DataOutputViewStreamWrapper;
-import org.apache.flink.runtime.state.KeyGroupRangeAssignment;
 import org.apache.flink.runtime.state.KeyedStateBackend;
 import org.apache.flink.runtime.state.internal.InternalListState;
 import org.apache.flink.util.Preconditions;
@@ -69,8 +68,7 @@ public class HeapListState<K, N, V>
 		Preconditions.checkState(currentNamespace != null, "No namespace set.");
 		Preconditions.checkState(backend.getCurrentKey() != null, "No key set.");
 
-		Map<N, Map<K, ArrayList<V>>> namespaceMap =
-				stateTable.get(backend.getCurrentKeyGroupIndex());
+		Map<N, Map<K, ArrayList<V>>> namespaceMap = stateTable.getState();
 
 		if (namespaceMap == null) {
 			return null;
@@ -95,13 +93,7 @@ public class HeapListState<K, N, V>
 			return;
 		}
 
-		Map<N, Map<K, ArrayList<V>>> namespaceMap =
-				stateTable.get(backend.getCurrentKeyGroupIndex());
-
-		if (namespaceMap == null) {
-			namespaceMap = createNewMap();
-			stateTable.set(backend.getCurrentKeyGroupIndex(), namespaceMap);
-		}
+		Map<N, Map<K, ArrayList<V>>> namespaceMap = stateTable.getState();
 
 		Map<K, ArrayList<V>> keyedMap = namespaceMap.get(currentNamespace);
 
@@ -124,12 +116,7 @@ public class HeapListState<K, N, V>
 		Preconditions.checkState(namespace != null, "No namespace given.");
 		Preconditions.checkState(key != null, "No key given.");
 
-		Map<N, Map<K, ArrayList<V>>> namespaceMap =
-				stateTable.get(KeyGroupRangeAssignment.assignToKeyGroup(key, backend.getNumberOfKeyGroups()));
-
-		if (namespaceMap == null) {
-			return null;
-		}
+		Map<N, Map<K, ArrayList<V>>> namespaceMap = stateTable.getState();
 
 		Map<K, ArrayList<V>> keyedMap = namespaceMap.get(currentNamespace);
 

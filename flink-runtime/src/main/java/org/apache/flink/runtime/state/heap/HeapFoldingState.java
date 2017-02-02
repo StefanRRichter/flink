@@ -72,12 +72,7 @@ public class HeapFoldingState<K, N, T, ACC>
 		Preconditions.checkState(currentNamespace != null, "No namespace set.");
 		Preconditions.checkState(backend.getCurrentKey() != null, "No key set.");
 
-		Map<N, Map<K, ACC>> namespaceMap =
-				stateTable.get(backend.getCurrentKeyGroupIndex());
-
-		if (namespaceMap == null) {
-			return null;
-		}
+		Map<N, Map<K, ACC>> namespaceMap = stateTable.getState();
 
 		Map<K, ACC> keyedMap = namespaceMap.get(currentNamespace);
 
@@ -98,13 +93,7 @@ public class HeapFoldingState<K, N, T, ACC>
 			return;
 		}
 
-		Map<N, Map<K, ACC>> namespaceMap =
-				stateTable.get(backend.getCurrentKeyGroupIndex());
-
-		if (namespaceMap == null) {
-			namespaceMap = createNewMap();
-			stateTable.set(backend.getCurrentKeyGroupIndex(), namespaceMap);
-		}
+		Map<N, Map<K, ACC>> namespaceMap = stateTable.getState();
 
 		Map<K, ACC> keyedMap = namespaceMap.get(currentNamespace);
 

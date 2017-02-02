@@ -20,7 +20,6 @@ package org.apache.flink.runtime.state.heap;
 
 import org.apache.commons.io.IOUtils;
 import org.apache.flink.annotation.VisibleForTesting;
-
 import org.apache.flink.api.common.state.AggregatingStateDescriptor;
 import org.apache.flink.api.common.state.FoldingStateDescriptor;
 import org.apache.flink.api.common.state.ListStateDescriptor;
@@ -60,7 +59,6 @@ import org.apache.flink.runtime.state.internal.InternalReducingState;
 import org.apache.flink.runtime.state.internal.InternalValueState;
 import org.apache.flink.util.InstantiationUtil;
 import org.apache.flink.util.Preconditions;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -277,7 +275,7 @@ public class HeapKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 		TypeSerializer<N> namespaceSerializer = stateTable.getNamespaceSerializer();
 		TypeSerializer<S> stateSerializer = stateTable.getStateSerializer();
 
-		Map<N, Map<K, S>> namespaceMap = stateTable.get(keyGroupIndex);
+		Map<N, Map<K, S>> namespaceMap = stateTable.getState();
 		if (namespaceMap == null) {
 			outView.writeByte(0);
 		} else {
@@ -381,7 +379,7 @@ public class HeapKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 		TypeSerializer<S> stateSerializer = stateTable.getStateSerializer();
 
 		Map<N, Map<K, S>> namespaceMap = new HashMap<>();
-		stateTable.set(keyGroupIndex, namespaceMap);
+		//stateTable.set(keyGroupIndex, namespaceMap);
 
 		int numNamespaces = inView.readInt();
 		for (int k = 0; k < numNamespaces; k++) {
@@ -462,8 +460,8 @@ public class HeapKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 							namespaceSerializer,
 							stateSerializer);
 
-			StateTable<K, ?, ?> stateTable = new StateTable<>(registeredBackendStateMetaInfo, keyGroupRange);
-			stateTable.getState()[0] = rawResultMap;
+			StateTable<K, ?, ?> stateTable =
+					new StateTable<>(rawResultMap, registeredBackendStateMetaInfo, keyGroupRange);
 
 			// add named state to the backend
 			stateTables.put(registeredBackendStateMetaInfo.getName(), stateTable);
@@ -544,14 +542,13 @@ public class HeapKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 	public int numStateEntries() {
 		int sum = 0;
 		for (StateTable<K, ?, ?> stateTable : stateTables.values()) {
-			for (Map namespaceMap : stateTable.getState()) {
-				if (namespaceMap == null) {
-					continue;
-				}
-				Map<?, Map> typedMap = (Map<?, Map>) namespaceMap;
-				for (Map entriesMap : typedMap.values()) {
-					sum += entriesMap.size();
-				}
+			Map namespaceMap = stateTable.getState();
+			if (namespaceMap == null) {
+				continue;
+			}
+			Map<?, Map> typedMap = (Map<?, Map>) namespaceMap;
+			for (Map entriesMap : typedMap.values()) {
+				sum += entriesMap.size();
 			}
 		}
 		return sum;
@@ -565,16 +562,13 @@ public class HeapKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 	public <N> int numStateEntries(N namespace) {
 		int sum = 0;
 		for (StateTable<K, ?, ?> stateTable : stateTables.values()) {
-			for (Map namespaceMap : stateTable.getState()) {
-				if (namespaceMap == null) {
-					continue;
-				}
-				Map<?, Map> typedMap = (Map<?, Map>) namespaceMap;
-				Map singleNamespace = typedMap.get(namespace);
-				if (singleNamespace != null) {
-					sum += singleNamespace.size();
-				}
+			Map namespaceMap  = stateTable.getState();
+			Map<?, Map> typedMap = (Map<?, Map>) namespaceMap;
+			Map singleNamespace = typedMap.get(namespace);
+			if (singleNamespace != null) {
+				sum += singleNamespace.size();
 			}
+
 		}
 		return sum;
 	}
