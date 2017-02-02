@@ -81,19 +81,8 @@ public class HeapAggregatingState<K, N, IN, ACC, OUT>
 		checkState(currentNamespace != null, "No namespace set.");
 		checkState(key != null, "No key set.");
 
-		Map<N, Map<K, ACC>> namespaceMap = stateTable.getState();
-
-		if (namespaceMap == null) {
-			return null;
-		}
-
-		Map<K, ACC> keyedMap = namespaceMap.get(currentNamespace);
-
-		if (keyedMap == null) {
-			return null;
-		}
-
-		ACC accumulator = keyedMap.get(key);
+		final Map<KeyNamespace<K, N>, ACC> keyNamespaceACCMap = stateTable.getState();
+		final ACC accumulator = keyNamespaceACCMap.get(getCurrentKeyAndNamespace());
 		return aggFunction.getResult(accumulator);
 	}
 
@@ -109,23 +98,17 @@ public class HeapAggregatingState<K, N, IN, ACC, OUT>
 			return;
 		}
 
-		Map<N, Map<K, ACC>> namespaceMap = stateTable.getState();
+		final Map<KeyNamespace<K, N>, ACC> keyNamespaceACCMap = stateTable.getState();
 
-		Map<K, ACC> keyedMap = namespaceMap.get(currentNamespace);
-
-		if (keyedMap == null) {
-			keyedMap = createNewMap();
-			namespaceMap.put(currentNamespace, keyedMap);
-		}
+		final KeyNamespace<K, N> keyNamespace = getCurrentKeyAndNamespace();
 
 		// if this is the first value for the key, create a new accumulator
-		ACC accumulator = keyedMap.get(key);
+		ACC accumulator = keyNamespaceACCMap.get(keyNamespace);
 		if (accumulator == null) {
 			accumulator = aggFunction.createAccumulator();
-			keyedMap.put(key, accumulator);
+			keyNamespaceACCMap.put(keyNamespace, accumulator);
 		}
 
-		// 
 		aggFunction.add(value, accumulator);
 	}
 

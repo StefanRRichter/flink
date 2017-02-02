@@ -71,19 +71,8 @@ public class HeapReducingState<K, N, V>
 		Preconditions.checkState(currentNamespace != null, "No namespace set.");
 		Preconditions.checkState(backend.getCurrentKey() != null, "No key set.");
 
-		Map<N, Map<K, V>> namespaceMap = stateTable.getState();
-
-		if (namespaceMap == null) {
-			return null;
-		}
-
-		Map<K, V> keyedMap = namespaceMap.get(currentNamespace);
-
-		if (keyedMap == null) {
-			return null;
-		}
-
-		return keyedMap.get(backend.<K>getCurrentKey());
+		Map<KeyNamespace<K, N>, V> keyNamespaceVMap = stateTable.getState();
+		return keyNamespaceVMap.get(getCurrentKeyAndNamespace());
 	}
 
 	@Override
@@ -96,27 +85,19 @@ public class HeapReducingState<K, N, V>
 			return;
 		}
 
-		Map<N, Map<K, V>> namespaceMap = stateTable.getState();
+		final Map<KeyNamespace<K, N>, V> keyNamespaceVMap = stateTable.getState();
 
-		Map<K, V> keyedMap = namespaceMap.get(currentNamespace);
+		final KeyNamespace<K, N> keyNamespace = getCurrentKeyAndNamespace();
+		final V currentValue = keyNamespaceVMap.put(keyNamespace, value);
 
-		if (keyedMap == null) {
-			keyedMap = createNewMap();
-			namespaceMap.put(currentNamespace, keyedMap);
-		}
-
-		V currentValue = keyedMap.put(backend.<K>getCurrentKey(), value);
-
-		if (currentValue == null) {
-			// we're good, just added the new value
-		} else {
+		if (currentValue != null) {
 			V reducedValue;
 			try {
 				reducedValue = reduceFunction.reduce(currentValue, value);
 			} catch (Exception e) {
 				throw new IOException("Exception while applying ReduceFunction in reducing state", e);
 			}
-			keyedMap.put(backend.<K>getCurrentKey(), reducedValue);
+			keyNamespaceVMap.put(keyNamespace, reducedValue);
 		}
 	}
 

@@ -61,15 +61,8 @@ public class HeapValueState<K, N, V>
 		Preconditions.checkState(currentNamespace != null, "No namespace set.");
 		Preconditions.checkState(backend.getCurrentKey() != null, "No key set.");
 
-		Map<N, Map<K, V>> namespaceMap = stateTable.getState();
-
-		Map<K, V> keyedMap = namespaceMap.get(currentNamespace);
-
-		if (keyedMap == null) {
-			return stateDesc.getDefaultValue();
-		}
-
-		V result = keyedMap.get(backend.<K>getCurrentKey());
+		final Map<KeyNamespace<K, N>, V> keyNamespaceVMap = stateTable.getState();
+		final V result = keyNamespaceVMap.get(getCurrentKeyAndNamespace());
 
 		if (result == null) {
 			return stateDesc.getDefaultValue();
@@ -88,15 +81,7 @@ public class HeapValueState<K, N, V>
 			return;
 		}
 
-		Map<N, Map<K, V>> namespaceMap = stateTable.getState();
-
-		Map<K, V> keyedMap = namespaceMap.get(currentNamespace);
-
-		if (keyedMap == null) {
-			keyedMap = createNewMap();
-			namespaceMap.put(currentNamespace, keyedMap);
-		}
-
-		keyedMap.put(backend.<K>getCurrentKey(), value);
+		final Map<KeyNamespace<K, N>, V> keyNamespaceVMap = stateTable.getState();
+		keyNamespaceVMap.put(getCurrentKeyAndNamespace(), value);
 	}
 }

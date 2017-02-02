@@ -71,52 +71,37 @@ public abstract class AbstractHeapMergingState<K, N, IN, OUT, SV, S extends Stat
 		final K key = backend.getCurrentKey();
 		checkState(key != null, "No key set.");
 
-		final Map<N, Map<K, SV>> namespaceMap = stateTable.getState();
+		Map<KeyNamespace<K, N>, SV> namespaceMap = stateTable.getState();
 
-		if (namespaceMap != null) {
-			SV merged = null;
+		SV merged = null;
 
-			// merge the sources
-			for (N source : sources) {
-				Map<K, SV> keysForNamespace = namespaceMap.get(source);
-				if (keysForNamespace != null) {
-					// get and remove the next source per namespace/key
-					SV sourceState = keysForNamespace.remove(key);
+		// merge the sources
+		for (N source : sources) {
+			KeyNamespace<K, N> keyNamespace = new KeyNamespace<>(key, source, 0);
 
-					// if the namespace map became empty, remove 
-					if (keysForNamespace.isEmpty()) {
-						namespaceMap.remove(source);
-					}
+			// get and remove the next source per namespace/key
+			SV sourceState = namespaceMap.remove(keyNamespace);
 
-					if (merged != null && sourceState != null) {
-						merged = mergeState(merged, sourceState);
-					}
-					else if (merged == null) {
-						merged = sourceState;
-					}
-				}
-			}
-
-			// merge into the target, if needed
-			if (merged != null) {
-				Map<K, SV> keysForTarget = namespaceMap.get(target);
-				if (keysForTarget == null) {
-					keysForTarget = createNewMap();
-					namespaceMap.put(target, keysForTarget);
-				}
-				SV targetState = keysForTarget.get(key);
-
-				if (targetState != null) {
-					targetState = mergeState(targetState, merged);
-				}
-				else {
-					targetState = merged;
-				}
-				keysForTarget.put(key, targetState);
+			if (merged != null && sourceState != null) {
+				merged = mergeState(merged, sourceState);
+			} else if (merged == null) {
+				merged = sourceState;
 			}
 		}
 
-		// else no entries for that key at all, nothing to do skip
+		// merge into the target, if needed
+		if (merged != null) {
+			KeyNamespace<K, N> keyNamespace = new KeyNamespace<>(key, target, 0);
+
+			SV targetState = namespaceMap.get(keyNamespace);
+
+			if (targetState != null) {
+				targetState = mergeState(targetState, merged);
+			} else {
+				targetState = merged;
+			}
+			namespaceMap.put(keyNamespace, targetState);
+		}
 	}
 
 	protected abstract SV mergeState(SV a, SV b) throws Exception;

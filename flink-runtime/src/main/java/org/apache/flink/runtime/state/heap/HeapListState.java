@@ -68,19 +68,8 @@ public class HeapListState<K, N, V>
 		Preconditions.checkState(currentNamespace != null, "No namespace set.");
 		Preconditions.checkState(backend.getCurrentKey() != null, "No key set.");
 
-		Map<N, Map<K, ArrayList<V>>> namespaceMap = stateTable.getState();
-
-		if (namespaceMap == null) {
-			return null;
-		}
-
-		Map<K, ArrayList<V>> keyedMap = namespaceMap.get(currentNamespace);
-
-		if (keyedMap == null) {
-			return null;
-		}
-
-		return keyedMap.get(backend.<K>getCurrentKey());
+		Map<KeyNamespace<K, N>, ArrayList<V>> namespaceMap = stateTable.getState();
+		return namespaceMap.get(getCurrentKeyAndNamespace());
 	}
 
 	@Override
@@ -93,20 +82,13 @@ public class HeapListState<K, N, V>
 			return;
 		}
 
-		Map<N, Map<K, ArrayList<V>>> namespaceMap = stateTable.getState();
-
-		Map<K, ArrayList<V>> keyedMap = namespaceMap.get(currentNamespace);
-
-		if (keyedMap == null) {
-			keyedMap = createNewMap();
-			namespaceMap.put(currentNamespace, keyedMap);
-		}
-
-		ArrayList<V> list = keyedMap.get(backend.<K>getCurrentKey());
+		final Map<KeyNamespace<K, N>, ArrayList<V>> keyNamespaceArrayListMap = stateTable.getState();
+		KeyNamespace<K, N> keyNamespace = getCurrentKeyAndNamespace();
+		ArrayList<V> list = keyNamespaceArrayListMap.get(keyNamespace);
 
 		if (list == null) {
 			list = new ArrayList<>();
-			keyedMap.put(backend.<K>getCurrentKey(), list);
+			keyNamespaceArrayListMap.put(keyNamespace, list);
 		}
 		list.add(value);
 	}
@@ -116,15 +98,9 @@ public class HeapListState<K, N, V>
 		Preconditions.checkState(namespace != null, "No namespace given.");
 		Preconditions.checkState(key != null, "No key given.");
 
-		Map<N, Map<K, ArrayList<V>>> namespaceMap = stateTable.getState();
-
-		Map<K, ArrayList<V>> keyedMap = namespaceMap.get(currentNamespace);
-
-		if (keyedMap == null) {
-			return null;
-		}
-
-		ArrayList<V> result = keyedMap.get(key);
+		final Map<KeyNamespace<K, N>, ArrayList<V>> keyNamespaceArrayListMap = stateTable.getState();
+		KeyNamespace<K, N> keyNamespace = getCurrentKeyAndNamespace();
+		ArrayList<V> result = keyNamespaceArrayListMap.get(keyNamespace);
 
 		if (result == null) {
 			return null;

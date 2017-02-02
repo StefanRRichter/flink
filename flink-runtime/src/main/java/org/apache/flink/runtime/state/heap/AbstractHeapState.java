@@ -91,30 +91,8 @@ public abstract class AbstractHeapState<K, N, SV, S extends State, SD extends St
 		Preconditions.checkState(currentNamespace != null, "No namespace set.");
 		Preconditions.checkState(backend.getCurrentKey() != null, "No key set.");
 
-		Map<N, Map<K, SV>> namespaceMap =
-				stateTable.getState();
-
-		if (namespaceMap == null) {
-			return;
-		}
-
-		Map<K, SV> keyedMap = namespaceMap.get(currentNamespace);
-
-		if (keyedMap == null) {
-			return;
-		}
-
-		SV removed = keyedMap.remove(backend.getCurrentKey());
-
-		if (removed == null) {
-			return;
-		}
-
-		if (!keyedMap.isEmpty()) {
-			return;
-		}
-
-		namespaceMap.remove(currentNamespace);
+		Map<KeyNamespace<K, N>, SV> keyNamespaceSVMap = stateTable.getState();
+		keyNamespaceSVMap.remove(getCurrentKeyAndNamespace());
 	}
 
 	@Override
@@ -136,20 +114,9 @@ public abstract class AbstractHeapState<K, N, SV, S extends State, SD extends St
 		Preconditions.checkState(namespace != null, "No namespace given.");
 		Preconditions.checkState(key != null, "No key given.");
 
-		Map<N, Map<K, SV>> namespaceMap =
-				stateTable.getState();
 
-		if (namespaceMap == null) {
-			return null;
-		}
-
-		Map<K, SV> keyedMap = namespaceMap.get(currentNamespace);
-
-		if (keyedMap == null) {
-			return null;
-		}
-
-		SV result = keyedMap.get(key);
+		Map<KeyNamespace<K, N>, SV> keyNamespaceSVMap = stateTable.getState();
+		SV result = keyNamespaceSVMap.get(getCurrentKeyAndNamespace());
 
 		if (result == null) {
 			return null;
@@ -182,5 +149,9 @@ public abstract class AbstractHeapState<K, N, SV, S extends State, SD extends St
 	 */
 	public StateTable<K, N, SV> getStateTable() {
 		return stateTable;
+	}
+
+	protected KeyNamespace<K, N> getCurrentKeyAndNamespace() {
+		return new KeyNamespace<>(backend.getCurrentKey(), currentNamespace, 0);
 	}
 }

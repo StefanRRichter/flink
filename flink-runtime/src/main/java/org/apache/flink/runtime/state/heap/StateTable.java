@@ -29,28 +29,34 @@ import java.util.Map;
 public class StateTable<K, N, ST> {
 
 	/** Map for holding the actual state objects. */
-	private final Map<N, Map<K, ST>> state;
+	private final Map<KeyNamespace<K, N>, ST> state;
+
+	/** Key group range which goes to this backend */
 	private final KeyGroupRange keyGroupRange;
 
 	/** Combined meta information such as name and serializers for this state */
 	private RegisteredBackendStateMetaInfo<N, ST> metaInfo;
 
 	// ------------------------------------------------------------------------
-	public StateTable(Map<N, Map<K, ST>> state, RegisteredBackendStateMetaInfo<N, ST> metaInfo, KeyGroupRange keyGroupRange) {
+	public StateTable(
+			Map<KeyNamespace<K, N>, ST> state,
+			RegisteredBackendStateMetaInfo<N, ST> metaInfo,
+			KeyGroupRange keyGroupRange) {
+
 		this.metaInfo = metaInfo;
 		this.keyGroupRange = Preconditions.checkNotNull(keyGroupRange);
 		this.state = Preconditions.checkNotNull(state);
 	}
 
 	public StateTable(RegisteredBackendStateMetaInfo<N, ST> metaInfo, KeyGroupRange keyGroupRange) {
-		this(new HashMap<N, Map<K, ST>>(), metaInfo, keyGroupRange);
+		this(new HashMap<KeyNamespace<K, N>, ST>(), metaInfo, keyGroupRange);
 	}
 
 	// ------------------------------------------------------------------------
 	//  access to maps
 	// ------------------------------------------------------------------------
 
-	public Map<N, Map<K, ST>> getState() {
+	public Map<KeyNamespace<K, N>, ST> getState() {
 		return state;
 	}
 

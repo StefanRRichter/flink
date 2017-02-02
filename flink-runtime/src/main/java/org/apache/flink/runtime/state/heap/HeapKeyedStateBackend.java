@@ -272,30 +272,30 @@ public class HeapKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 			StateTable<K, N, S> stateTable,
 			int keyGroupIndex) throws IOException {
 
-		TypeSerializer<N> namespaceSerializer = stateTable.getNamespaceSerializer();
-		TypeSerializer<S> stateSerializer = stateTable.getStateSerializer();
-
-		Map<N, Map<K, S>> namespaceMap = stateTable.getState();
-		if (namespaceMap == null) {
-			outView.writeByte(0);
-		} else {
-			outView.writeByte(1);
-
-			// number of namespaces
-			outView.writeInt(namespaceMap.size());
-			for (Map.Entry<N, Map<K, S>> namespace : namespaceMap.entrySet()) {
-				namespaceSerializer.serialize(namespace.getKey(), outView);
-
-				Map<K, S> entryMap = namespace.getValue();
-
-				// number of entries
-				outView.writeInt(entryMap.size());
-				for (Map.Entry<K, S> entry : entryMap.entrySet()) {
-					keySerializer.serialize(entry.getKey(), outView);
-					stateSerializer.serialize(entry.getValue(), outView);
-				}
-			}
-		}
+//		TypeSerializer<N> namespaceSerializer = stateTable.getNamespaceSerializer();
+//		TypeSerializer<S> stateSerializer = stateTable.getStateSerializer();
+//
+//		Map<N, Map<K, S>> namespaceMap = stateTable.getState();
+//		if (namespaceMap == null) {
+//			outView.writeByte(0);
+//		} else {
+//			outView.writeByte(1);
+//
+//			// number of namespaces
+//			outView.writeInt(namespaceMap.size());
+//			for (Map.Entry<N, Map<K, S>> namespace : namespaceMap.entrySet()) {
+//				namespaceSerializer.serialize(namespace.getKey(), outView);
+//
+//				Map<K, S> entryMap = namespace.getValue();
+//
+//				// number of entries
+//				outView.writeInt(entryMap.size());
+//				for (Map.Entry<K, S> entry : entryMap.entrySet()) {
+//					keySerializer.serialize(entry.getKey(), outView);
+//					stateSerializer.serialize(entry.getValue(), outView);
+//				}
+//			}
+//		}
 	}
 
 	@SuppressWarnings({"unchecked"})
