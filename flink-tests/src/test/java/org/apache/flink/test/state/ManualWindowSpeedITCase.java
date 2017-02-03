@@ -55,14 +55,15 @@ public class ManualWindowSpeedITCase extends StreamingMultipleProgramsTestBase {
 		final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
 
 		env.setStreamTimeCharacteristic(TimeCharacteristic.IngestionTime);
-		env.setParallelism(1);
+		env.setMaxParallelism(4);
+		env.setParallelism(4);
 
 		String checkpoints = tempFolder.newFolder().toURI().toString();
 		env.setStateBackend(new FsStateBackend(checkpoints));
 
-		env.addSource(new InfiniteTupleSource(10_000))
+		env.addSource(new InfiniteTupleSource(10_000_000))
 				.keyBy(0)
-				.timeWindow(Time.seconds(3))
+				.timeWindow(Time.seconds(1))
 				.reduce(new ReduceFunction<Tuple2<String, Integer>>() {
 					private static final long serialVersionUID = 1L;
 
@@ -126,13 +127,14 @@ public class ManualWindowSpeedITCase extends StreamingMultipleProgramsTestBase {
 		final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
 
 		env.setStreamTimeCharacteristic(TimeCharacteristic.IngestionTime);
-		env.setParallelism(1);
+		env.setMaxParallelism(4);
+		env.setParallelism(4);
 		
 		env.setStateBackend(new RocksDBStateBackend(new MemoryStateBackend()));
 
-		env.addSource(new InfiniteTupleSource(10_000))
+		env.addSource(new InfiniteTupleSource(10_000_000))
 				.keyBy(0)
-				.timeWindow(Time.seconds(3))
+				.timeWindow(Time.seconds(1))
 				.reduce(new ReduceFunction<Tuple2<String, Integer>>() {
 					private static final long serialVersionUID = 1L;
 
@@ -243,7 +245,7 @@ public class ManualWindowSpeedITCase extends StreamingMultipleProgramsTestBase {
 		public void run(SourceContext<Tuple2<String, Integer>> out) throws Exception {
 			long index = 0;
 			while (running) {
-				Tuple2<String, Integer> tuple = new Tuple2<String, Integer>("Tuple " + (index % numKeys), 1);
+				Tuple2<String, Integer> tuple = new Tuple2<String, Integer>("Tuple " + (0), 1);
 				out.collect(tuple);
 				index++;
 			}
