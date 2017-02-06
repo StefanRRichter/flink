@@ -264,7 +264,7 @@ public class VersionedHashMap<K, N, S> { //extends AbstractMap<K, S> implements 
 		for (HashMapEntry<K, N, S> e = tab[hash & (tab.length - 1)]; e != null; e = e.next) {
 			K eKey = e.key;
 			N eNamespace = e.namespace;
-			if (eKey == key || (e.hash == hash && key.equals(eKey) && namespace.equals(eNamespace))) {
+			if ((e.hash == hash && key.equals(eKey) && namespace.equals(eNamespace))) {
 				if (e.version < globalVersion) {
 					e.version = globalVersion;
 					// CoW
@@ -289,7 +289,7 @@ public class VersionedHashMap<K, N, S> { //extends AbstractMap<K, S> implements 
 		for (HashMapEntry<K, N, S> e = tab[hash & (tab.length - 1)]; e != null; e = e.next) {
 			K eKey = e.key;
 			N eNamespace = e.namespace;
-			if (eKey == key || (e.hash == hash && key.equals(eKey) && namespace.equals(eNamespace))) {
+			if ((e.hash == hash && key.equals(eKey) && namespace.equals(eNamespace))) {
 				return true;
 			}
 		}
