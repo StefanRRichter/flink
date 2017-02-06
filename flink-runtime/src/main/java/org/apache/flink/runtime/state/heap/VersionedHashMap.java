@@ -231,17 +231,6 @@ public class VersionedHashMap<K, N, S> { //extends AbstractMap<K, S> implements 
 //		return result;
 //	}
 
-//	/**
-//	 * This method is called from the pseudo-constructors (clone and readObject)
-//	 * prior to invoking constructorPut/constructorPutAll, which invoke the
-//	 * overridden constructorNewEntry method. Normally it is a VERY bad idea to
-//	 * invoke an overridden method from a pseudo-constructor (Effective Java
-//	 * Item 17). In this case it is unavoidable, and the init method provides a
-//	 * workaround.
-//	 */
-//	void init() {
-//	}
-
 	/**
 	 * Returns whether this map is empty.
 	 *
@@ -270,16 +259,17 @@ public class VersionedHashMap<K, N, S> { //extends AbstractMap<K, S> implements 
 	 * if no mapping for the specified key is found.
 	 */
 	public S get(Object key, Object namespace) {
-//		if (key == null) {
-//			HashMapEntry<K, N, S> e = entryForNullKey;
-//			return e == null ? null : e.value;
-//		}
 		int hash = secondaryHash(key, namespace);
 		HashMapEntry<K, N, S>[] tab = table;
 		for (HashMapEntry<K, N, S> e = tab[hash & (tab.length - 1)]; e != null; e = e.next) {
 			K eKey = e.key;
 			N eNamespace = e.namespace;
 			if (eKey == key || (e.hash == hash && key.equals(eKey) && namespace.equals(eNamespace))) {
+				if (e.version < globalVersion) {
+					e.version = globalVersion;
+					// CoW
+					e.value = deepCopyState(e.value);
+				}
 				return e.value;
 			}
 		}
@@ -294,9 +284,6 @@ public class VersionedHashMap<K, N, S> { //extends AbstractMap<K, S> implements 
 	 * {@code false} otherwise.
 	 */
 	public boolean containsKey(Object key, Object namespace) {
-//		if (key == null) {
-//			return entryForNullKey != null;
-//		}
 		int hash = secondaryHash(key, namespace);
 		HashMapEntry<K, N, S>[] tab = table;
 		for (HashMapEntry<K, N, S> e = tab[hash & (tab.length - 1)]; e != null; e = e.next) {
@@ -307,6 +294,10 @@ public class VersionedHashMap<K, N, S> { //extends AbstractMap<K, S> implements 
 			}
 		}
 		return false;
+	}
+
+	private S deepCopyState(S state) {
+		return state; //TODO deep copy through serializer
 	}
 
 //	/**
@@ -349,9 +340,6 @@ public class VersionedHashMap<K, N, S> { //extends AbstractMap<K, S> implements 
 	 * {@code null} if there was no such mapping.
 	 */
 	public S put(K key, N namespace, S value) {
-//		if (key == null) {
-//			return putValueForNullKey(value);
-//		}
 		int hash = secondaryHash(key, namespace);
 		HashMapEntry<K, N, S>[] tab = table;
 		int index = hash & (tab.length - 1);
@@ -372,51 +360,27 @@ public class VersionedHashMap<K, N, S> { //extends AbstractMap<K, S> implements 
 		return null;
 	}
 
-//	private S putValueForNullKey(S value) {
-//		HashMapEntry<K, N, S> entry = entryForNullKey;
-//		if (entry == null) {
-//			addNewEntryForNullKey(value);
-//			size++;
-//			modCount++;
-//			return null;
-//		} else {
-//			S oldValue = entry.value;
-//			entry.value = value;
-//			return oldValue;
-//		}
-//	}
-
-	/**
-	 * This method is just like put, except that it doesn't do things that
-	 * are inappropriate or unnecessary for constructors and pseudo-constructors
-	 * (i.e., clone, readObject). In particular, this method does not check to
-	 * ensure that capacity is sufficient, and does not increment modCount.
-	 */
-	private void constructorPut(K key, N namespace, S value) {
-//		if (key == null) {
-//			HashMapEntry<K, N, S> entry = entryForNullKey;
-//			if (entry == null) {
-//				entryForNullKey = constructorNewEntry(null, value, 0, null);
-//				size++;
-//			} else {
-//				entry.value = value;
+//	/**
+//	 * This method is just like put, except that it doesn't do things that
+//	 * are inappropriate or unnecessary for constructors and pseudo-constructors
+//	 * (i.e., clone, readObject). In particular, this method does not check to
+//	 * ensure that capacity is sufficient, and does not increment modCount.
+//	 */
+//	private void constructorPut(K key, N namespace, S value) {
+//		int hash = secondaryHash(key, namespace);
+//		HashMapEntry<K, N, S>[] tab = table;
+//		int index = hash & (tab.length - 1);
+//		HashMapEntry<K, N, S> first = tab[index];
+//		for (HashMapEntry<K, N, S> e = first; e != null; e = e.next) {
+//			if (e.hash == hash && key.equals(e.key)) {
+//				e.value = value;
+//				return;
 //			}
-//			return;
 //		}
-		int hash = secondaryHash(key, namespace);
-		HashMapEntry<K, N, S>[] tab = table;
-		int index = hash & (tab.length - 1);
-		HashMapEntry<K, N, S> first = tab[index];
-		for (HashMapEntry<K, N, S> e = first; e != null; e = e.next) {
-			if (e.hash == hash && key.equals(e.key)) {
-				e.value = value;
-				return;
-			}
-		}
-		// No entry for (non-null) key is present; create one
-		tab[index] = constructorNewEntry(key, namespace, value, hash, first);
-		size++;
-	}
+//		// No entry for (non-null) key is present; create one
+//		tab[index] = constructorNewEntry(key, namespace, value, hash, first);
+//		size++;
+//	}
 
 	/**
 	 * Creates a new entry for the given key, value, hash, and index and
@@ -429,23 +393,14 @@ public class VersionedHashMap<K, N, S> { //extends AbstractMap<K, S> implements 
 	}
 
 //	/**
-//	 * Creates a new entry for the null key, and the given value and
-//	 * inserts it into the hash table. This method is called by put
-//	 * (and indirectly, putAll), and overridden by LinkedHashMap.
+//	 * Like newEntry, but does not perform any activity that would be
+//	 * unnecessary or inappropriate for constructors. In this class, the
+//	 * two methods behave identically; in LinkedHashMap, they differ.
 //	 */
-//	void addNewEntryForNullKey(S value) {
-//		entryForNullKey = new HashMapEntry<K, N, S>(null, null, value, 0, null);
+//	HashMapEntry<K, N, S> constructorNewEntry(
+//			K key, N namespace, S value, int hash, HashMapEntry<K, N, S> first) {
+//		return new HashMapEntry<>(key, namespace, value, hash, first, globalVersion);
 //	}
-
-	/**
-	 * Like newEntry, but does not perform any activity that would be
-	 * unnecessary or inappropriate for constructors. In this class, the
-	 * two methods behave identically; in LinkedHashMap, they differ.
-	 */
-	HashMapEntry<K, N, S> constructorNewEntry(
-			K key, N namespace, S value, int hash, HashMapEntry<K, N, S> first) {
-		return new HashMapEntry<>(key, namespace, value, hash, first, globalVersion);
-	}
 
 //	/**
 //	 * Copies all the mappings in the specified map to this map. These mappings
@@ -459,43 +414,43 @@ public class VersionedHashMap<K, N, S> { //extends AbstractMap<K, S> implements 
 //		super.putAll(map);
 //	}
 
-	/**
-	 * Ensures that the hash table has sufficient capacity to store the
-	 * specified number of mappings, with room to grow. If not, it increases the
-	 * capacity as appropriate. Like doubleCapacity, this method moves existing
-	 * entries to new buckets as appropriate. Unlike doubleCapacity, this method
-	 * can grow the table by factors of 2^n for n > 1. Hopefully, a single call
-	 * to this method will be faster than multiple calls to doubleCapacity.
-	 * <p>
-	 * <p>This method is called only by putAll.
-	 */
-	private void ensureCapacity(int numMappings) {
-		int newCapacity = MathUtils.roundUpToPowerOfTwo(capacityForInitSize(numMappings));
-		HashMapEntry<K, N, S>[] oldTable = table;
-		int oldCapacity = oldTable.length;
-		if (newCapacity <= oldCapacity) {
-			return;
-		}
-		if (newCapacity == oldCapacity * 2) {
-			doubleCapacity();
-			return;
-		}
-		// We're growing by at least 4x, rehash in the obvious way
-		HashMapEntry<K, N, S>[] newTable = makeTable(newCapacity);
-		if (size != 0) {
-			int newMask = newCapacity - 1;
-			for (int i = 0; i < oldCapacity; i++) {
-				for (HashMapEntry<K, N, S> e = oldTable[i]; e != null; ) {
-					HashMapEntry<K, N, S> oldNext = e.next;
-					int newIndex = e.hash & newMask;
-					HashMapEntry<K, N, S> newNext = newTable[newIndex];
-					newTable[newIndex] = e;
-					e.next = newNext;
-					e = oldNext;
-				}
-			}
-		}
-	}
+//	/**
+//	 * Ensures that the hash table has sufficient capacity to store the
+//	 * specified number of mappings, with room to grow. If not, it increases the
+//	 * capacity as appropriate. Like doubleCapacity, this method moves existing
+//	 * entries to new buckets as appropriate. Unlike doubleCapacity, this method
+//	 * can grow the table by factors of 2^n for n > 1. Hopefully, a single call
+//	 * to this method will be faster than multiple calls to doubleCapacity.
+//	 * <p>
+//	 * <p>This method is called only by putAll.
+//	 */
+//	private void ensureCapacity(int numMappings) {
+//		int newCapacity = MathUtils.roundUpToPowerOfTwo(capacityForInitSize(numMappings));
+//		HashMapEntry<K, N, S>[] oldTable = table;
+//		int oldCapacity = oldTable.length;
+//		if (newCapacity <= oldCapacity) {
+//			return;
+//		}
+//		if (newCapacity == oldCapacity * 2) {
+//			doubleCapacity();
+//			return;
+//		}
+//		// We're growing by at least 4x, rehash in the obvious way
+//		HashMapEntry<K, N, S>[] newTable = makeTable(newCapacity);
+//		if (size != 0) {
+//			int newMask = newCapacity - 1;
+//			for (int i = 0; i < oldCapacity; i++) {
+//				for (HashMapEntry<K, N, S> e = oldTable[i]; e != null; ) {
+//					HashMapEntry<K, N, S> oldNext = e.next;
+//					int newIndex = e.hash & newMask;
+//					HashMapEntry<K, N, S> newNext = newTable[newIndex];
+//					newTable[newIndex] = e;
+//					e.next = newNext;
+//					e = oldNext;
+//				}
+//			}
+//		}
+//	}
 
 	/**
 	 * Allocate a table of the given capacity and set the threshold accordingly.
@@ -542,16 +497,18 @@ public class VersionedHashMap<K, N, S> { //extends AbstractMap<K, S> implements 
 			for (HashMapEntry<K, N, S> n = e.next; n != null; e = n, n = n.next) {
 				int nextHighBit = n.hash & oldCapacity;
 				if (nextHighBit != highBit) {
-					if (broken == null)
+					if (broken == null) {
 						newTable[j | nextHighBit] = n;
-					else
+					} else {
 						broken.next = n;
+					}
 					broken = e;
 					highBit = nextHighBit;
 				}
 			}
-			if (broken != null)
+			if (broken != null) {
 				broken.next = null;
+			}
 		}
 		return newTable;
 	}
@@ -564,9 +521,6 @@ public class VersionedHashMap<K, N, S> { //extends AbstractMap<K, S> implements 
 	 * for the specified key was found.
 	 */
 	public S remove(Object key, Object namespace) {
-//		if (key == null) {
-//			return removeNullKey();
-//		}
 		int hash = secondaryHash(key, namespace);
 		HashMapEntry<K, N, S>[] tab = table;
 		int index = hash & (tab.length - 1);
@@ -584,17 +538,6 @@ public class VersionedHashMap<K, N, S> { //extends AbstractMap<K, S> implements 
 		}
 		return null;
 	}
-
-//	private S removeNullKey() {
-//		HashMapEntry<K, N, S> e = entryForNullKey;
-//		if (e == null) {
-//			return null;
-//		}
-//		entryForNullKey = null;
-//		modCount++;
-//		size--;
-//		return e.value;
-//	}
 
 	/**
 	 * Removes all mappings from this hash map, leaving it empty.
@@ -715,9 +658,9 @@ public class VersionedHashMap<K, N, S> { //extends AbstractMap<K, S> implements 
 				return false;
 			}
 			HashMapEntry<?, ?, ?> e = (HashMapEntry<?, ?, ?>) o;
-			return equal(e.getKey(), key)
-					&& equal(e.getNamespace(), namespace)
-					&& equal(e.getValue(), value);
+			return e.getKey().equals(key)
+					&& e.getNamespace().equals(namespace)
+					&& nullAwareEqual(e.getValue(), value);
 		}
 
 		@Override
@@ -1023,7 +966,7 @@ public class VersionedHashMap<K, N, S> { //extends AbstractMap<K, S> implements 
 		return h ^ (h >>> 16);
 	}
 
-	private static boolean equal(Object a, Object b) {
+	private static boolean nullAwareEqual(Object a, Object b) {
 		return a == b || (a != null && a.equals(b));
 	}
 }

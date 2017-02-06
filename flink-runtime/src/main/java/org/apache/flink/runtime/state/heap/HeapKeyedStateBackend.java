@@ -537,7 +537,7 @@ public class HeapKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 	public int numStateEntries() {
 		int sum = 0;
 		for (StateTable<K, ?, ?> stateTable : stateTables.values()) {
-			CoWHashMap<K, ?, ?> namespaceMap = stateTable.getState();
+			VersionedHashMap<K, ?, ?> namespaceMap = stateTable.getState();
 			if (namespaceMap == null) {
 				continue;
 			}
@@ -557,7 +557,7 @@ public class HeapKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 	public <N> int numStateEntries(N namespace) {
 		int sum = 0;
 		for (StateTable<K, ?, ?> stateTable : stateTables.values()) {
-			CoWHashMap namespaceMap  = stateTable.getState();
+			VersionedHashMap namespaceMap  = stateTable.getState();
 			Map<?, Map> typedMap = (Map<?, Map>) namespaceMap;
 			Map singleNamespace = typedMap.get(namespace);
 			if (singleNamespace != null) {

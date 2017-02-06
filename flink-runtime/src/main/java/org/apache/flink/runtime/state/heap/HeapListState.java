@@ -67,7 +67,7 @@ public class HeapListState<K, N, V>
 		Preconditions.checkState(currentNamespace != null, "No namespace set.");
 		Preconditions.checkState(backend.getCurrentKey() != null, "No key set.");
 
-		CoWHashMap<K, N, ArrayList<V>> namespaceMap = stateTable.getState();
+		VersionedHashMap<K, N, ArrayList<V>> namespaceMap = stateTable.getState();
 		return namespaceMap.get(backend.getCurrentKey(), currentNamespace);
 	}
 
@@ -84,7 +84,7 @@ public class HeapListState<K, N, V>
 		K key = backend.getCurrentKey();
 		N namespace = currentNamespace;
 
-		final CoWHashMap<K, N, ArrayList<V>> keyNamespaceArrayListMap = stateTable.getState();
+		final VersionedHashMap<K, N, ArrayList<V>> keyNamespaceArrayListMap = stateTable.getState();
 		ArrayList<V> list = keyNamespaceArrayListMap.get(key, namespace);
 
 		if (list == null) {
@@ -99,7 +99,7 @@ public class HeapListState<K, N, V>
 		Preconditions.checkState(namespace != null, "No namespace given.");
 		Preconditions.checkState(key != null, "No key given.");
 
-		final CoWHashMap<K, N, ArrayList<V>> keyNamespaceArrayListMap = stateTable.getState();
+		final VersionedHashMap<K, N, ArrayList<V>> keyNamespaceArrayListMap = stateTable.getState();
 		ArrayList<V> result = keyNamespaceArrayListMap.get(key, namespace);
 
 		if (result == null) {

@@ -70,7 +70,7 @@ public class HeapReducingState<K, N, V>
 		Preconditions.checkState(currentNamespace != null, "No namespace set.");
 		Preconditions.checkState(backend.getCurrentKey() != null, "No key set.");
 
-		CoWHashMap<K, N, V>  keyNamespaceVMap = stateTable.getState();
+		VersionedHashMap<K, N, V>  keyNamespaceVMap = stateTable.getState();
 		return keyNamespaceVMap.get(backend.getCurrentKey(), currentNamespace);
 	}
 
@@ -84,7 +84,7 @@ public class HeapReducingState<K, N, V>
 			return;
 		}
 
-		final CoWHashMap<K, N, V> keyNamespaceVMap = stateTable.getState();
+		final VersionedHashMap<K, N, V> keyNamespaceVMap = stateTable.getState();
 
 		final K key = backend.getCurrentKey();
 		final N namespace = currentNamespace;

@@ -59,7 +59,7 @@ public class HeapValueState<K, N, V>
 		Preconditions.checkState(currentNamespace != null, "No namespace set.");
 		Preconditions.checkState(backend.getCurrentKey() != null, "No key set.");
 
-		final CoWHashMap<K, N, V> keyNamespaceVMap = stateTable.getState();
+		final VersionedHashMap<K, N, V> keyNamespaceVMap = stateTable.getState();
 		final V result = keyNamespaceVMap.get(backend.getCurrentKey(), currentNamespace);
 
 		if (result == null) {
@@ -79,7 +79,7 @@ public class HeapValueState<K, N, V>
 			return;
 		}
 
-		final CoWHashMap<K, N, V> keyNamespaceVMap = stateTable.getState();
+		final VersionedHashMap<K, N, V> keyNamespaceVMap = stateTable.getState();
 		keyNamespaceVMap.put(backend.getCurrentKey(), currentNamespace, value);
 	}
 }

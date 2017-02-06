@@ -70,7 +70,7 @@ public abstract class AbstractHeapMergingState<K, N, IN, OUT, SV, S extends Stat
 		final K key = backend.getCurrentKey();
 		checkState(key != null, "No key set.");
 
-		CoWHashMap<K, N, SV> namespaceMap = stateTable.getState();
+		VersionedHashMap<K, N, SV> namespaceMap = stateTable.getState();
 
 		SV merged = null;
 

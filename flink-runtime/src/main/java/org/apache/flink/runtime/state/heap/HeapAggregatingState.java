@@ -80,7 +80,7 @@ public class HeapAggregatingState<K, N, IN, ACC, OUT>
 		checkState(currentNamespace != null, "No namespace set.");
 		checkState(key != null, "No key set.");
 
-		final CoWHashMap<K, N, ACC> keyNamespaceACCMap = stateTable.getState();
+		final VersionedHashMap<K, N, ACC> keyNamespaceACCMap = stateTable.getState();
 		final ACC accumulator = keyNamespaceACCMap.get(backend.getCurrentKey(), currentNamespace);
 		return aggFunction.getResult(accumulator);
 	}
@@ -98,7 +98,7 @@ public class HeapAggregatingState<K, N, IN, ACC, OUT>
 			return;
 		}
 
-		final CoWHashMap<K, N, ACC>  keyNamespaceACCMap = stateTable.getState();
+		final VersionedHashMap<K, N, ACC>  keyNamespaceACCMap = stateTable.getState();
 
 
 		// if this is the first value for the key, create a new accumulator

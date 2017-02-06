@@ -71,7 +71,7 @@ public class HeapFoldingState<K, N, T, ACC>
 		Preconditions.checkState(currentNamespace != null, "No namespace set.");
 		Preconditions.checkState(backend.getCurrentKey() != null, "No key set.");
 
-		CoWHashMap<K, N, ACC> namespaceMap = stateTable.getState();
+		VersionedHashMap<K, N, ACC> namespaceMap = stateTable.getState();
 		return namespaceMap.get(backend.getCurrentKey(), namespaceMap);
 	}
 
@@ -85,7 +85,7 @@ public class HeapFoldingState<K, N, T, ACC>
 			return;
 		}
 
-		final CoWHashMap<K, N, ACC> namespaceMap = stateTable.getState();
+		final VersionedHashMap<K, N, ACC> namespaceMap = stateTable.getState();
 		final K key = backend.getCurrentKey();
 		final N namespace = currentNamespace;
 		final ACC currentValue = namespaceMap.get(key, namespace);

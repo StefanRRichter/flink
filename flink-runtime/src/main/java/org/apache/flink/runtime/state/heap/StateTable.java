@@ -26,7 +26,7 @@ import org.apache.flink.util.Preconditions;
 public class StateTable<K, N, ST> {
 
 	/** Map for holding the actual state objects. */
-	private final CoWHashMap<K, N, ST> state;
+	private final VersionedHashMap<K, N, ST> state;
 
 	/** Key group range which goes to this backend */
 	private final KeyGroupRange keyGroupRange;
@@ -36,7 +36,7 @@ public class StateTable<K, N, ST> {
 
 	// ------------------------------------------------------------------------
 	public StateTable(
-			CoWHashMap<K, N, ST> state,
+			VersionedHashMap<K, N, ST> state,
 			RegisteredBackendStateMetaInfo<N, ST> metaInfo,
 			KeyGroupRange keyGroupRange) {
 
@@ -46,14 +46,14 @@ public class StateTable<K, N, ST> {
 	}
 
 	public StateTable(RegisteredBackendStateMetaInfo<N, ST> metaInfo, KeyGroupRange keyGroupRange) {
-		this(new CoWHashMap<K, N, ST>(), metaInfo, keyGroupRange);
+		this(new VersionedHashMap<K, N, ST>(), metaInfo, keyGroupRange);
 	}
 
 	// ------------------------------------------------------------------------
 	//  access to maps
 	// ------------------------------------------------------------------------
 
-	public CoWHashMap<K, N, ST> getState() {
+	public VersionedHashMap<K, N, ST> getState() {
 		return state;
 	}
 
