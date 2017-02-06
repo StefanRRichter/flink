@@ -18,10 +18,16 @@
 
 package org.apache.flink.runtime.state.heap;
 
+import org.apache.flink.api.common.typeutils.TypeSerializer;
+import org.apache.flink.api.java.tuple.Tuple3;
 import org.apache.flink.util.MathUtils;
+import org.apache.flink.util.Preconditions;
 
 import java.util.Arrays;
+import java.util.ConcurrentModificationException;
+import java.util.Iterator;
 import java.util.Map;
+import java.util.NoSuchElementException;
 
 /**
  * HashMap is an implementation of {@link Map}. All optional operations are supported.
@@ -45,7 +51,7 @@ import java.util.Map;
  * @param <K> the type of keys maintained by this map
  * @param <S> the type of mapped values
  */
-public class VersionedHashMap<K, N, S> { //extends AbstractMap<K, S> implements Cloneable, Serializable {
+public class VersionedHashMap<K, N, S> implements Iterable<StateMapEntry<K, N, S>> {
 	/**
 	 * Min capacity (other than zero) for a HashMap. Must be a power of two
 	 * greater than 1 (and less than 1 << 30).
@@ -93,8 +99,9 @@ public class VersionedHashMap<K, N, S> { //extends AbstractMap<K, S> implements 
 	 */
 	transient int modCount;
 
-
 	transient int globalVersion;
+
+	final TypeSerializer<S> stateTypeSerializer;
 
 	/**
 	 * The table is rehashed when its size exceeds this threshold.
@@ -108,14 +115,14 @@ public class VersionedHashMap<K, N, S> { //extends AbstractMap<K, S> implements 
 //	private transient Set<Entry<K, S>> entrySet;
 //	private transient Collection<S> values;
 
-	/**
-	 * Constructs a new empty {@code HashMap} instance.
-	 */
-	@SuppressWarnings("unchecked")
-	public VersionedHashMap() {
-		table = (HashMapEntry<K, N, S>[]) EMPTY_TABLE;
-		threshold = -1; // Forces first put invocation to replace EMPTY_TABLE
-	}
+//	/**
+//	 * Constructs a new empty {@code HashMap} instance.
+//	 */
+//	@SuppressWarnings("unchecked")
+//	public VersionedHashMap() {
+//		table = (HashMapEntry<K, N, S>[]) EMPTY_TABLE;
+//		threshold = -1; // Forces first put invocation to replace EMPTY_TABLE
+//	}
 
 	/**
 	 * Constructs a new {@code HashMap} instance with the specified capacity.
@@ -123,7 +130,11 @@ public class VersionedHashMap<K, N, S> { //extends AbstractMap<K, S> implements 
 	 * @param capacity the initial capacity of this hash map.
 	 * @throws IllegalArgumentException when the capacity is less than zero.
 	 */
-	public VersionedHashMap(int capacity) {
+	public VersionedHashMap(int capacity, TypeSerializer<S> stateTypeSerializer) {
+
+		this.stateTypeSerializer = Preconditions.checkNotNull(stateTypeSerializer);
+		this.globalVersion = 0;
+
 		if (capacity < 0) {
 			throw new IllegalArgumentException("Capacity: " + capacity);
 		}
@@ -153,8 +164,8 @@ public class VersionedHashMap<K, N, S> { //extends AbstractMap<K, S> implements 
 	 * @throws IllegalArgumentException when the capacity is less than zero or the load factor is
 	 *                                  less or equal to zero or NaN.
 	 */
-	public VersionedHashMap(int capacity, float loadFactor) {
-		this(capacity);
+	public VersionedHashMap(int capacity, float loadFactor, TypeSerializer<S> stateTypeSerializer) {
+		this(capacity, stateTypeSerializer);
 		if (loadFactor <= 0 || Float.isNaN(loadFactor)) {
 			throw new IllegalArgumentException("Load factor: " + loadFactor);
 		}
@@ -265,12 +276,12 @@ public class VersionedHashMap<K, N, S> { //extends AbstractMap<K, S> implements 
 			K eKey = e.key;
 			N eNamespace = e.namespace;
 			if ((e.hash == hash && key.equals(eKey) && namespace.equals(eNamespace))) {
-				if (e.version < globalVersion) {
+				// CoW
+				if (e.version != globalVersion) {
 					e.version = globalVersion;
-					// CoW
-					e.value = deepCopyState(e.value);
+					e.state = stateTypeSerializer.copy(e.state);
 				}
-				return e.value;
+				return e.state;
 			}
 		}
 		return null;
@@ -294,10 +305,6 @@ public class VersionedHashMap<K, N, S> { //extends AbstractMap<K, S> implements 
 			}
 		}
 		return false;
-	}
-
-	private S deepCopyState(S state) {
-		return state; //TODO deep copy through serializer
 	}
 
 //	/**
@@ -345,8 +352,8 @@ public class VersionedHashMap<K, N, S> { //extends AbstractMap<K, S> implements 
 		int index = hash & (tab.length - 1);
 		for (HashMapEntry<K, N, S> e = tab[index]; e != null; e = e.next) {
 			if (e.hash == hash && key.equals(e.key) && namespace.equals(e.namespace)) {
-				S oldValue = e.value;
-				e.value = value;
+				S oldValue = e.state;
+				e.state = value;
 				return oldValue;
 			}
 		}
@@ -483,8 +490,8 @@ public class VersionedHashMap<K, N, S> { //extends AbstractMap<K, S> implements 
 			return newTable;
 		}
 		for (int j = 0; j < oldCapacity; j++) {
-	        /*
-             * Rehash the bucket using the minimum number of field writes.
+		    /*
+		     * Rehash the bucket using the minimum number of field writes.
              * This is the most subtle and delicate code in the class.
              */
 			HashMapEntry<K, N, S> e = oldTable[j];
@@ -533,7 +540,7 @@ public class VersionedHashMap<K, N, S> { //extends AbstractMap<K, S> implements 
 				}
 				modCount++;
 				size--;
-				return e.value;
+				return e.state;
 			}
 		}
 		return null;
@@ -554,7 +561,28 @@ public class VersionedHashMap<K, N, S> { //extends AbstractMap<K, S> implements 
 		}
 	}
 
-//	/**
+	public Tuple3<K, N, S>[] snapshotDump() {
+
+		Tuple3<K, N, S>[] dump = new Tuple3[size()];
+		int pos = 0;
+
+		for (HashMapEntry<K, N, S> entry : table) {
+			while (null != entry) {
+				dump[pos++] = new Tuple3<>(entry.getKey(), entry.getNamespace(), entry.getState());
+				entry = entry.next;
+			}
+		}
+
+		++globalVersion;
+		return dump;
+	}
+
+	@Override
+	public Iterator<StateMapEntry<K, N, S>> iterator() {
+		return new HashIterator();
+	}
+
+	//	/**
 //	 * Returns a set of the keys contained in this map. The set is backed by
 //	 * this map so changes to one are reflected by the other. The set does not
 //	 * support adding.
@@ -605,38 +633,45 @@ public class VersionedHashMap<K, N, S> { //extends AbstractMap<K, S> implements 
 //		return (es != null) ? es : (entrySet = new EntrySet());
 //	}
 
-	static class HashMapEntry<K, N, S> {
+	static class HashMapEntry<K, N, S> implements StateMapEntry<K, N, S> {
+
 		final K key;
 		final N namespace;
-		S value;
+		S state;
+
 		final int hash;
+
 		int version;
+
 		HashMapEntry<K, N, S> next;
 
-		HashMapEntry(K key, N namespace, S value, int hash, HashMapEntry<K, N, S> next, int version) {
+		HashMapEntry(K key, N namespace, S state, int hash, HashMapEntry<K, N, S> next, int version) {
 			this.key = key;
 			this.namespace = namespace;
-			this.value = value;
+			this.state = state;
 			this.hash = hash;
 			this.next = next;
 			this.version = version;
 		}
 
+		@Override
 		public final K getKey() {
 			return key;
 		}
 
+		@Override
 		public N getNamespace() {
 			return namespace;
 		}
 
-		public final S getValue() {
-			return value;
+		@Override
+		public final S getState() {
+			return state;
 		}
 
-		public final S setValue(S value) {
-			S oldValue = this.value;
-			this.value = value;
+		public final S setState(S value) {
+			S oldValue = this.state;
+			this.state = value;
 			return oldValue;
 		}
 
@@ -660,67 +695,67 @@ public class VersionedHashMap<K, N, S> { //extends AbstractMap<K, S> implements 
 			HashMapEntry<?, ?, ?> e = (HashMapEntry<?, ?, ?>) o;
 			return e.getKey().equals(key)
 					&& e.getNamespace().equals(namespace)
-					&& nullAwareEqual(e.getValue(), value);
+					&& nullAwareEqual(e.getState(), state);
 		}
 
 		@Override
 		public final int hashCode() {
-			return (key.hashCode() ^ namespace.hashCode()) ^ (value == null ? 0 : value.hashCode());
+			return (key.hashCode() ^ namespace.hashCode()) ^ (state == null ? 0 : state.hashCode());
 		}
 
 		@Override
 		public final String toString() {
-			return "(" + key + "|" + namespace + ")=" + value;
+			return "(" + key + "|" + namespace + ")=" + state;
 		}
 	}
 
-//	private abstract class HashIterator {
-//		int nextIndex;
-//		HashMapEntry<K, N, S> nextEntry = entryForNullKey;
-//		HashMapEntry<K, N, S> lastEntryReturned;
-//		int expectedModCount = modCount;
-//
-//		HashIterator() {
-//			if (nextEntry == null) {
-//				HashMapEntry<K, N, S>[] tab = table;
-//				HashMapEntry<K, N, S> next = null;
-//				while (next == null && nextIndex < tab.length) {
-//					next = tab[nextIndex++];
-//				}
-//				nextEntry = next;
-//			}
-//		}
-//
-//		public boolean hasNext() {
-//			return nextEntry != null;
-//		}
-//
-//		HashMapEntry<K, N, S> nextEntry() {
-//			if (modCount != expectedModCount)
-//				throw new ConcurrentModificationException();
-//			if (nextEntry == null)
-//				throw new NoSuchElementException();
-//			HashMapEntry<K, N, S> entryToReturn = nextEntry;
-//			HashMapEntry<K, N, S>[] tab = table;
-//			HashMapEntry<K, N, S> next = entryToReturn.next;
-//			while (next == null && nextIndex < tab.length) {
-//				next = tab[nextIndex++];
-//			}
-//			nextEntry = next;
-//			return lastEntryReturned = entryToReturn;
-//		}
-//
-//		public void remove() {
-//			if (lastEntryReturned == null)
-//				throw new IllegalStateException();
-//			if (modCount != expectedModCount)
-//				throw new ConcurrentModificationException();
-//			VersionedHashMap.this.remove(lastEntryReturned.key);
-//			lastEntryReturned = null;
-//			expectedModCount = modCount;
-//		}
-//	}
-//
+	private class HashIterator implements Iterator<StateMapEntry<K, N, S>> {
+
+		int nextIndex;
+		HashMapEntry<K, N, S> nextEntry;
+		int expectedModCount = modCount;
+
+		HashIterator() {
+			this.expectedModCount = modCount;
+			this.nextIndex = 0;
+
+			HashMapEntry<K, N, S>[] tab = table;
+			HashMapEntry<K, N, S> next = null;
+			while (next == null && nextIndex < tab.length) {
+				next = tab[nextIndex++];
+			}
+			nextEntry = next;
+		}
+
+		@Override
+		public boolean hasNext() {
+			return nextEntry != null;
+		}
+
+		@Override
+		public HashMapEntry<K, N, S> next() {
+			if (modCount != expectedModCount) {
+				throw new ConcurrentModificationException();
+			}
+			if (nextEntry == null) {
+				throw new NoSuchElementException();
+			}
+			HashMapEntry<K, N, S> entryToReturn = nextEntry;
+			HashMapEntry<K, N, S>[] tab = table;
+			HashMapEntry<K, N, S> next = entryToReturn.next;
+			while (next == null && nextIndex < tab.length) {
+				next = tab[nextIndex++];
+			}
+			nextEntry = next;
+			return entryToReturn;
+		}
+
+		@Override
+		public void remove() {
+			throw new UnsupportedOperationException("Read-only iterator");
+		}
+	}
+
 //	private final class KeyIterator extends HashIterator
 //			implements Iterator<K> {
 //		public K next() {
@@ -734,14 +769,14 @@ public class VersionedHashMap<K, N, S> { //extends AbstractMap<K, S> implements 
 //			return nextEntry().value;
 //		}
 //	}
-//
+
 //	private final class EntryIterator extends HashIterator
 //			implements Iterator<Entry<K, S>> {
 //		public Entry<K, S> next() {
 //			return nextEntry();
 //		}
 //	}
-//
+
 //	/**
 //	 * Returns true if this map contains the specified mapping.
 //	 */
@@ -760,7 +795,7 @@ public class VersionedHashMap<K, N, S> { //extends AbstractMap<K, S> implements 
 //		}
 //		return false; // No entry for key
 //	}
-//
+
 //	/**
 //	 * Removes the mapping from key to value and returns true if this mapping
 //	 * exists; otherwise, returns does nothing and returns false.
@@ -952,18 +987,30 @@ public class VersionedHashMap<K, N, S> { //extends AbstractMap<K, S> implements 
 //	}
 
 	private static int secondaryHash(Object key, Object namespace) {
-		return secondaryHash(key.hashCode() ^ namespace.hashCode());
+		int h = (31 * key.hashCode() + namespace.hashCode());
+		return h ^ (h >>> 16);
 	}
 
-	private static int secondaryHash(int h) {
-		// Spread bits to regularize both segment and index locations,
-		// using variant of single-word Wang/Jenkins hash.
-		h += (h << 15) ^ 0xffffcd7d;
-		h ^= (h >>> 10);
-		h += (h << 3);
-		h ^= (h >>> 6);
-		h += (h << 2) + (h << 14);
-		return h ^ (h >>> 16);
+	@Override
+	public String toString() {
+		String initial = "VersionedHashMap{";
+		StringBuilder sb = new StringBuilder(initial);
+		boolean separatorRequired = false;
+		for (HashMapEntry<K, N, S> entry : table) {
+			while (null != entry) {
+
+				if (separatorRequired) {
+					sb.append(", ");
+				} else {
+					separatorRequired = true;
+				}
+
+				sb.append(entry.toString());
+				entry = entry.next;
+			}
+		}
+		sb.append('}');
+		return sb.toString();
 	}
 
 	private static boolean nullAwareEqual(Object a, Object b) {

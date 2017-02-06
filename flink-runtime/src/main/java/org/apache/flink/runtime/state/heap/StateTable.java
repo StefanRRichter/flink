@@ -46,7 +46,7 @@ public class StateTable<K, N, ST> {
 	}
 
 	public StateTable(RegisteredBackendStateMetaInfo<N, ST> metaInfo, KeyGroupRange keyGroupRange) {
-		this(new VersionedHashMap<K, N, ST>(), metaInfo, keyGroupRange);
+		this(new VersionedHashMap<K, N, ST>(128, metaInfo.getStateSerializer()), metaInfo, keyGroupRange);
 	}
 
 	// ------------------------------------------------------------------------
@@ -75,6 +75,16 @@ public class StateTable<K, N, ST> {
 
 	public void setMetaInfo(RegisteredBackendStateMetaInfo<N, ST> metaInfo) {
 		this.metaInfo = metaInfo;
+	}
+
+	public StateTableSnapshot<K, N, ST> createSnapshot(TypeSerializer<K> keySerializer, int totalKeyGroups) {
+		return new StateTableSnapshot<>(
+				state.snapshotDump(),
+				keySerializer,
+				metaInfo.getNamespaceSerializer(),
+				metaInfo.getStateSerializer(),
+				keyGroupRange,
+				totalKeyGroups);
 	}
 
 	// ------------------------------------------------------------------------

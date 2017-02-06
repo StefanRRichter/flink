@@ -76,13 +76,14 @@ public class HeapAggregatingState<K, N, IN, ACC, OUT>
 	@Override
 	public OUT get() {
 		final K key = backend.getCurrentKey();
+		final N namespace = currentNamespace;
 
-		checkState(currentNamespace != null, "No namespace set.");
+		checkState(namespace != null, "No namespace set.");
 		checkState(key != null, "No key set.");
 
 		final VersionedHashMap<K, N, ACC> keyNamespaceACCMap = stateTable.getState();
-		final ACC accumulator = keyNamespaceACCMap.get(backend.getCurrentKey(), currentNamespace);
-		return aggFunction.getResult(accumulator);
+		ACC accumulator = keyNamespaceACCMap.get(key, namespace);
+		return accumulator != null ? aggFunction.getResult(accumulator) : null;
 	}
 
 	@Override

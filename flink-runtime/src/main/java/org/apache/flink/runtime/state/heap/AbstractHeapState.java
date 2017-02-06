@@ -18,6 +18,7 @@
 
 package org.apache.flink.runtime.state.heap;
 
+import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.state.ListState;
 import org.apache.flink.api.common.state.State;
 import org.apache.flink.api.common.state.StateDescriptor;
@@ -27,10 +28,6 @@ import org.apache.flink.runtime.query.netty.message.KvStateRequestSerializer;
 import org.apache.flink.runtime.state.KeyedStateBackend;
 import org.apache.flink.runtime.state.internal.InternalKvState;
 import org.apache.flink.util.Preconditions;
-
-import java.util.HashMap;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Base class for partitioned {@link ListState} implementations that are backed by a regular
@@ -114,9 +111,8 @@ public abstract class AbstractHeapState<K, N, SV, S extends State, SD extends St
 		Preconditions.checkState(namespace != null, "No namespace given.");
 		Preconditions.checkState(key != null, "No key given.");
 
-
-		VersionedHashMap<K, N, SV> keyNamespaceSVMap = stateTable.getState();
-		SV result = keyNamespaceSVMap.get(backend.getCurrentKey(), currentNamespace);
+		VersionedHashMap<K, N, SV> map = stateTable.getState();
+		SV result = map.get(key, namespace);
 
 		if (result == null) {
 			return null;
@@ -124,34 +120,14 @@ public abstract class AbstractHeapState<K, N, SV, S extends State, SD extends St
 
 		@SuppressWarnings("unchecked,rawtypes")
 		TypeSerializer serializer = stateDesc.getSerializer();
-
 		return KvStateRequestSerializer.serializeValue(result, serializer);
-	}
-
-	/**
-	 * Creates a new map for use in Heap based state.
-	 *
-	 * <p>If the state queryable ({@link StateDescriptor#isQueryable()}, this
-	 * will create a concurrent hash map instead of a regular one.
-	 *
-	 * @return A new namespace map.
-	 */
-	protected <MK, MV> Map<MK, MV> createNewMap() {
-		if (stateDesc.isQueryable()) {
-			return new ConcurrentHashMap<>();
-		} else {
-			return new HashMap<>();
-		}
 	}
 
 	/**
 	 * This should only be used for testing.
 	 */
+	@VisibleForTesting
 	public StateTable<K, N, SV> getStateTable() {
 		return stateTable;
-	}
-
-	protected KeyNamespace<K, N> getCurrentKeyAndNamespace() {
-		return new KeyNamespace<>(backend.getCurrentKey(), currentNamespace, 0);
 	}
 }

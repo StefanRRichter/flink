@@ -72,7 +72,7 @@ public class HeapFoldingState<K, N, T, ACC>
 		Preconditions.checkState(backend.getCurrentKey() != null, "No key set.");
 
 		VersionedHashMap<K, N, ACC> namespaceMap = stateTable.getState();
-		return namespaceMap.get(backend.getCurrentKey(), namespaceMap);
+		return namespaceMap.get(backend.getCurrentKey(), currentNamespace);
 	}
 
 	@Override

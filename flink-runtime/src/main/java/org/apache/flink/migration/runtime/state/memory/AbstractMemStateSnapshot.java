@@ -22,11 +22,11 @@ import org.apache.flink.api.common.state.State;
 import org.apache.flink.api.common.state.StateDescriptor;
 import org.apache.flink.api.common.typeutils.TypeSerializer;
 import org.apache.flink.migration.runtime.state.KvStateSnapshot;
+import org.apache.flink.runtime.state.VoidNamespace;
+import org.apache.flink.runtime.state.heap.VersionedHashMap;
 import org.apache.flink.runtime.util.DataInputDeserializer;
 
 import java.io.IOException;
-import java.util.HashMap;
-import java.util.Map;
 
 @Deprecated
 public abstract class AbstractMemStateSnapshot<K, N, SV, S extends State, SD extends StateDescriptor<S, ?>> 
@@ -72,21 +72,22 @@ public abstract class AbstractMemStateSnapshot<K, N, SV, S extends State, SD ext
 		this.data = data;
 	}
 
-	public HashMap<N, Map<K, SV>> deserialize() throws IOException {
+	public VersionedHashMap<K, N, SV> deserialize() throws IOException {
 		DataInputDeserializer inView = new DataInputDeserializer(data, 0, data.length);
 
 		final int numKeys = inView.readInt();
-		HashMap<N, Map<K, SV>> stateMap = new HashMap<>(numKeys);
+		VersionedHashMap<K, N, SV> stateMap = new VersionedHashMap<>(128, stateSerializer);
 
 		for (int i = 0; i < numKeys && !closed; i++) {
 			N namespace = namespaceSerializer.deserialize(inView);
+			if (null == namespace) {
+				namespace = (N) VoidNamespace.INSTANCE;
+			}
 			final int numValues = inView.readInt();
-			Map<K, SV> namespaceMap = new HashMap<>(numValues);
-			stateMap.put(namespace, namespaceMap);
 			for (int j = 0; j < numValues; j++) {
 				K key = keySerializer.deserialize(inView);
 				SV value = stateSerializer.deserialize(inView);
-				namespaceMap.put(key, value);
+				stateMap.put(key, namespace, value);
 			}
 		}
 		return stateMap;

@@ -27,14 +27,15 @@ import org.apache.flink.api.common.state.ReducingStateDescriptor;
 import org.apache.flink.api.common.state.StateDescriptor;
 import org.apache.flink.api.common.state.ValueStateDescriptor;
 import org.apache.flink.api.common.typeutils.TypeSerializer;
+import org.apache.flink.api.common.typeutils.base.VoidSerializer;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.core.fs.FSDataInputStream;
 import org.apache.flink.core.fs.FileSystem;
 import org.apache.flink.core.memory.DataInputView;
 import org.apache.flink.core.memory.DataInputViewStreamWrapper;
-import org.apache.flink.core.memory.DataOutputView;
 import org.apache.flink.core.memory.DataOutputViewStreamWrapper;
 import org.apache.flink.migration.MigrationUtil;
+import org.apache.flink.migration.runtime.state.KvStateSnapshot;
 import org.apache.flink.migration.runtime.state.filesystem.AbstractFsStateSnapshot;
 import org.apache.flink.migration.runtime.state.memory.AbstractMemStateSnapshot;
 import org.apache.flink.runtime.query.TaskKvStateRegistry;
@@ -48,11 +49,14 @@ import org.apache.flink.runtime.state.KeyGroupsStateHandle;
 import org.apache.flink.runtime.state.KeyedBackendSerializationProxy;
 import org.apache.flink.runtime.state.RegisteredBackendStateMetaInfo;
 import org.apache.flink.runtime.state.StreamStateHandle;
+import org.apache.flink.runtime.state.VoidNamespace;
+import org.apache.flink.runtime.state.VoidNamespaceSerializer;
 import org.apache.flink.runtime.state.internal.InternalAggregatingState;
 import org.apache.flink.runtime.state.internal.InternalFoldingState;
 import org.apache.flink.runtime.state.internal.InternalListState;
 import org.apache.flink.runtime.state.internal.InternalReducingState;
 import org.apache.flink.runtime.state.internal.InternalValueState;
+import org.apache.flink.util.InstantiationUtil;
 import org.apache.flink.util.Preconditions;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -208,6 +212,8 @@ public class HeapKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 
 			Map<String, Integer> kVStateToId = new HashMap<>(stateTables.size());
 
+			List<StateTableSnapshot<K, ?, ?>> cowStateStableSnapshots = new ArrayList<>(stateTables.size());
+
 			for (Map.Entry<String, StateTable<K, ?, ?>> kvState : stateTables.entrySet()) {
 
 				RegisteredBackendStateMetaInfo<?, ?> metaInfo = kvState.getValue().getMetaInfo();
@@ -219,22 +225,30 @@ public class HeapKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 
 				metaInfoProxyList.add(metaInfoProxy);
 				kVStateToId.put(kvState.getKey(), kVStateToId.size());
+				cowStateStableSnapshots.add(kvState.getValue().createSnapshot(keySerializer, getNumberOfKeyGroups()));
 			}
 
 			KeyedBackendSerializationProxy serializationProxy =
 					new KeyedBackendSerializationProxy(keySerializer, metaInfoProxyList);
+
+			//--------------------------------------------------- this becomes the end of sync part
 
 			serializationProxy.write(outView);
 
 			int offsetCounter = 0;
 			long[] keyGroupRangeOffsets = new long[keyGroupRange.getNumberOfKeyGroups()];
 
-			for (int keyGroupIndex = keyGroupRange.getStartKeyGroup(); keyGroupIndex <= keyGroupRange.getEndKeyGroup(); keyGroupIndex++) {
+			for (int keyGroupPos = 0; keyGroupPos < keyGroupRange.getNumberOfKeyGroups(); ++keyGroupPos) {
+				int keyGroupId = keyGroupRange.getKeyGroupId(keyGroupPos);
 				keyGroupRangeOffsets[offsetCounter++] = stream.getPos();
-				outView.writeInt(keyGroupIndex);
+				outView.writeInt(keyGroupId);
+
+				int idx = 0;
+				//TODO copy metadata for async!
 				for (Map.Entry<String, StateTable<K, ?, ?>> kvState : stateTables.entrySet()) {
 					outView.writeShort(kVStateToId.get(kvState.getKey()));
-					writeStateTableForKeyGroup(outView, kvState.getValue(), keyGroupIndex);
+					cowStateStableSnapshots.get(idx).writeKeyGroupData(outView, keyGroupId);
+					++idx;
 				}
 			}
 
@@ -260,37 +274,6 @@ public class HeapKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 		} else {
 			restorePartitionedState(restoredState);
 		}
-	}
-
-	private <N, S> void writeStateTableForKeyGroup(
-			DataOutputView outView,
-			StateTable<K, N, S> stateTable,
-			int keyGroupIndex) throws IOException {
-
-//		TypeSerializer<N> namespaceSerializer = stateTable.getNamespaceSerializer();
-//		TypeSerializer<S> stateSerializer = stateTable.getStateSerializer();
-//
-//		Map<N, Map<K, S>> namespaceMap = stateTable.getState();
-//		if (namespaceMap == null) {
-//			outView.writeByte(0);
-//		} else {
-//			outView.writeByte(1);
-//
-//			// number of namespaces
-//			outView.writeInt(namespaceMap.size());
-//			for (Map.Entry<N, Map<K, S>> namespace : namespaceMap.entrySet()) {
-//				namespaceSerializer.serialize(namespace.getKey(), outView);
-//
-//				Map<K, S> entryMap = namespace.getValue();
-//
-//				// number of entries
-//				outView.writeInt(entryMap.size());
-//				for (Map.Entry<K, S> entry : entryMap.entrySet()) {
-//					keySerializer.serialize(entry.getKey(), outView);
-//					stateSerializer.serialize(entry.getValue(), outView);
-//				}
-//			}
-//		}
 	}
 
 	@SuppressWarnings({"unchecked"})
@@ -342,20 +325,15 @@ public class HeapKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 					fsDataInputStream.seek(offset);
 
 					int writtenKeyGroupIndex = inView.readInt();
-					assert writtenKeyGroupIndex == keyGroupIndex;
+
+					Preconditions.checkState(writtenKeyGroupIndex == keyGroupIndex,
+							"Unexpected keygroup in restore.");
 
 					for (int i = 0; i < metaInfoList.size(); i++) {
 						int kvStateId = inView.readShort();
-
-						byte isPresent = inView.readByte();
-						if (isPresent == 0) {
-							continue;
-						}
-
 						StateTable<K, ?, ?> stateTable = stateTables.get(kvStatesById.get(kvStateId));
 						Preconditions.checkNotNull(stateTable);
-
-						readStateTableForKeyGroup(inView, stateTable, keyGroupIndex);
+						readStateTableForKeyGroup(inView, stateTable);
 					}
 				}
 			} finally {
@@ -367,27 +345,18 @@ public class HeapKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 
 	private <N, S> void readStateTableForKeyGroup(
 			DataInputView inView,
-			StateTable<K, N, S> stateTable,
-			int keyGroupIndex) throws IOException {
+			StateTable<K, N, S> stateTable) throws IOException {
 
 		TypeSerializer<N> namespaceSerializer = stateTable.getNamespaceSerializer();
 		TypeSerializer<S> stateSerializer = stateTable.getStateSerializer();
 
-		Map<N, Map<K, S>> namespaceMap = new HashMap<>();
-		//stateTable.set(keyGroupIndex, namespaceMap);
-
-		int numNamespaces = inView.readInt();
-		for (int k = 0; k < numNamespaces; k++) {
+		VersionedHashMap<K, N, S> map = stateTable.getState();
+		int numKeys = inView.readInt();
+		for (int i = 0; i < numKeys; ++i) {
+			K key = keySerializer.deserialize(inView);
 			N namespace = namespaceSerializer.deserialize(inView);
-			Map<K, S> entryMap = new HashMap<>();
-			namespaceMap.put(namespace, entryMap);
-
-			int numEntries = inView.readInt();
-			for (int l = 0; l < numEntries; l++) {
-				K key = keySerializer.deserialize(inView);
-				S state = stateSerializer.deserialize(inView);
-				entryMap.put(key, state);
-			}
+			S state = stateSerializer.deserialize(inView);
+			map.put(key, namespace, state);
 		}
 	}
 
@@ -401,66 +370,60 @@ public class HeapKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 	private void restoreOldSavepointKeyedState(
 			Collection<KeyGroupsStateHandle> stateHandles) throws IOException, ClassNotFoundException {
 
-//		if (stateHandles.isEmpty()) {
-//			return;
-//		}
-//
-//		Preconditions.checkState(1 == stateHandles.size(), "Only one element expected here.");
-//
-//		HashMap<String, KvStateSnapshot<K, ?, ?, ?>> namedStates;
-//		try (FSDataInputStream inputStream = stateHandles.iterator().next().openInputStream()) {
-//			namedStates = InstantiationUtil.deserializeObject(inputStream, userCodeClassLoader);
-//		}
-//
-//		for (Map.Entry<String, KvStateSnapshot<K, ?, ?, ?>> nameToState : namedStates.entrySet()) {
-//
-//			KvStateSnapshot<K, ?, ?, ?> genericSnapshot = nameToState.getValue();
-//
-//			final RestoredState restoredState;
-//
-//			if (genericSnapshot instanceof AbstractMemStateSnapshot) {
-//
-//				AbstractMemStateSnapshot<K, ?, ?, ?, ?> stateSnapshot =
-//						(AbstractMemStateSnapshot<K, ?, ?, ?, ?>) nameToState.getValue();
-//
-//				restoredState = restoreHeapState(stateSnapshot);
-//
-//			} else if (genericSnapshot instanceof AbstractFsStateSnapshot) {
-//
-//				AbstractFsStateSnapshot<K, ?, ?, ?, ?> stateSnapshot =
-//						(AbstractFsStateSnapshot<K, ?, ?, ?, ?>) nameToState.getValue();
-//				restoredState = restoreFsState(stateSnapshot);
-//			} else {
-//				throw new IllegalStateException("Unknown state: " + genericSnapshot);
-//			}
-//
-//			Map rawResultMap = restoredState.getRawResultMap();
-//			TypeSerializer<?> namespaceSerializer = restoredState.getNamespaceSerializer();
-//			TypeSerializer<?> stateSerializer = restoredState.getStateSerializer();
-//
-//			if (namespaceSerializer instanceof VoidSerializer) {
-//				namespaceSerializer = VoidNamespaceSerializer.INSTANCE;
-//			}
-//
-//			Map nullNameSpaceFix = (Map) rawResultMap.remove(null);
-//
-//			if (null != nullNameSpaceFix) {
-//				rawResultMap.put(VoidNamespace.INSTANCE, nullNameSpaceFix);
-//			}
-//
-//			RegisteredBackendStateMetaInfo<?, ?> registeredBackendStateMetaInfo =
-//					new RegisteredBackendStateMetaInfo<>(
-//							StateDescriptor.Type.UNKNOWN,
-//							nameToState.getKey(),
-//							namespaceSerializer,
-//							stateSerializer);
-//
-//			StateTable<K, ?, ?> stateTable =
-//					new StateTable<>(rawResultMap, registeredBackendStateMetaInfo, keyGroupRange);
-//
-//			// add named state to the backend
-//			stateTables.put(registeredBackendStateMetaInfo.getName(), stateTable);
-//		}
+		if (stateHandles.isEmpty()) {
+			return;
+		}
+
+		Preconditions.checkState(1 == stateHandles.size(), "Only one element expected here.");
+
+		HashMap<String, KvStateSnapshot<K, ?, ?, ?>> namedStates;
+		try (FSDataInputStream inputStream = stateHandles.iterator().next().openInputStream()) {
+			namedStates = InstantiationUtil.deserializeObject(inputStream, userCodeClassLoader);
+		}
+
+		for (Map.Entry<String, KvStateSnapshot<K, ?, ?, ?>> nameToState : namedStates.entrySet()) {
+
+			KvStateSnapshot<K, ?, ?, ?> genericSnapshot = nameToState.getValue();
+
+			final RestoredState restoredState;
+
+			if (genericSnapshot instanceof AbstractMemStateSnapshot) {
+
+				AbstractMemStateSnapshot<K, ?, ?, ?, ?> stateSnapshot =
+						(AbstractMemStateSnapshot<K, ?, ?, ?, ?>) nameToState.getValue();
+
+				restoredState = restoreHeapState(stateSnapshot);
+
+			} else if (genericSnapshot instanceof AbstractFsStateSnapshot) {
+
+				AbstractFsStateSnapshot<K, ?, ?, ?, ?> stateSnapshot =
+						(AbstractFsStateSnapshot<K, ?, ?, ?, ?>) nameToState.getValue();
+				restoredState = restoreFsState(stateSnapshot);
+			} else {
+				throw new IllegalStateException("Unknown state: " + genericSnapshot);
+			}
+
+			VersionedHashMap rawResultMap = restoredState.getRawResultMap();
+			TypeSerializer<?> namespaceSerializer = restoredState.getNamespaceSerializer();
+			TypeSerializer<?> stateSerializer = restoredState.getStateSerializer();
+
+			if (namespaceSerializer instanceof VoidSerializer) {
+				namespaceSerializer = VoidNamespaceSerializer.INSTANCE;
+			}
+
+			RegisteredBackendStateMetaInfo<?, ?> registeredBackendStateMetaInfo =
+					new RegisteredBackendStateMetaInfo<>(
+							StateDescriptor.Type.UNKNOWN,
+							nameToState.getKey(),
+							namespaceSerializer,
+							stateSerializer);
+
+			StateTable<K, ?, ?> stateTable =
+					new StateTable<>(rawResultMap, registeredBackendStateMetaInfo, keyGroupRange);
+
+			// add named state to the backend
+			stateTables.put(registeredBackendStateMetaInfo.getName(), stateTable);
+		}
 	}
 
 	@SuppressWarnings("deprecation")
@@ -480,21 +443,25 @@ public class HeapKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 			DataInputViewStreamWrapper inView = new DataInputViewStreamWrapper(inStream);
 
 			final int numNamespaces = inView.readInt();
-			HashMap rawResultMap = new HashMap<>(numNamespaces);
-
 			TypeSerializer<K> keySerializer = stateSnapshot.getKeySerializer();
 			TypeSerializer<?> namespaceSerializer = stateSnapshot.getNamespaceSerializer();
 			TypeSerializer<?> stateSerializer = stateSnapshot.getStateSerializer();
 
+			VersionedHashMap rawResultMap = new VersionedHashMap(128, stateSerializer);
+
 			for (int i = 0; i < numNamespaces; i++) {
+
 				Object namespace = namespaceSerializer.deserialize(inView);
+
+				if (null == namespace) {
+					namespace = VoidNamespace.INSTANCE;
+				}
+
 				final int numKV = inView.readInt();
-				Map<K, Object> namespaceMap = new HashMap<>(numKV);
-				rawResultMap.put(namespace, namespaceMap);
 				for (int j = 0; j < numKV; j++) {
 					K key = keySerializer.deserialize(inView);
 					Object value = stateSerializer.deserialize(inView);
-					namespaceMap.put(key, value);
+					rawResultMap.put(key, namespace, value);
 				}
 			}
 			return new RestoredState(rawResultMap, namespaceSerializer, stateSerializer);
@@ -506,17 +473,21 @@ public class HeapKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 	@SuppressWarnings("rawtypes")
 	static final class RestoredState {
 
-		private final Map rawResultMap;
+		private final VersionedHashMap rawResultMap;
 		private final TypeSerializer<?> namespaceSerializer;
 		private final TypeSerializer<?> stateSerializer ;
 
-		public RestoredState(Map rawResultMap, TypeSerializer<?> namespaceSerializer, TypeSerializer<?> stateSerializer) {
+		public RestoredState(
+				VersionedHashMap rawResultMap,
+				TypeSerializer<?> namespaceSerializer,
+				TypeSerializer<?> stateSerializer) {
+
 			this.rawResultMap = rawResultMap;
 			this.namespaceSerializer = namespaceSerializer;
 			this.stateSerializer = stateSerializer;
 		}
 
-		public Map getRawResultMap() {
+		public VersionedHashMap getRawResultMap() {
 			return rawResultMap;
 		}
 
@@ -537,14 +508,9 @@ public class HeapKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 	public int numStateEntries() {
 		int sum = 0;
 		for (StateTable<K, ?, ?> stateTable : stateTables.values()) {
-			VersionedHashMap<K, ?, ?> namespaceMap = stateTable.getState();
-			if (namespaceMap == null) {
-				continue;
-			}
-			Map<?, Map> typedMap = (Map<?, Map>) namespaceMap;
-			for (Map entriesMap : typedMap.values()) {
-				sum += entriesMap.size();
-			}
+			VersionedHashMap<K, ?, ?> map = stateTable.getState();
+			sum += map.size();
+
 		}
 		return sum;
 	}
@@ -557,15 +523,13 @@ public class HeapKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 	public <N> int numStateEntries(N namespace) {
 		int sum = 0;
 		for (StateTable<K, ?, ?> stateTable : stateTables.values()) {
-			VersionedHashMap namespaceMap  = stateTable.getState();
-			Map<?, Map> typedMap = (Map<?, Map>) namespaceMap;
-			Map singleNamespace = typedMap.get(namespace);
-			if (singleNamespace != null) {
-				sum += singleNamespace.size();
+			VersionedHashMap<K, ?, ?> namespaceMap = stateTable.getState();
+			for (StateMapEntry<K, ?, ?> entry : namespaceMap) {
+				if (namespace.equals(entry.getNamespace())) {
+					++sum;
+				}
 			}
-
 		}
 		return sum;
 	}
-
 }
