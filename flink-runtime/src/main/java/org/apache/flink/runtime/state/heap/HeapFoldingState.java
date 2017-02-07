@@ -68,35 +68,39 @@ public class HeapFoldingState<K, N, T, ACC>
 
 	@Override
 	public ACC get() {
-		Preconditions.checkState(currentNamespace != null, "No namespace set.");
-		Preconditions.checkState(backend.getCurrentKey() != null, "No key set.");
+		final N namespace = currentNamespace;
+		final K key = backend.getCurrentKey();
 
-		VersionedHashMap<K, N, ACC> namespaceMap = stateTable.getState();
-		return namespaceMap.get(backend.getCurrentKey(), currentNamespace);
+		Preconditions.checkState(namespace != null, "No namespace set.");
+		Preconditions.checkState(key != null, "No key set.");
+
+		VersionedHashMap<K, N, ACC> map = stateTable.getState();
+		return map.get(key, namespace);
 	}
 
 	@Override
 	public void add(T value) throws IOException {
-		Preconditions.checkState(currentNamespace != null, "No namespace set.");
-		Preconditions.checkState(backend.getCurrentKey() != null, "No key set.");
+		final N namespace = currentNamespace;
+		final K key = backend.getCurrentKey();
+
+		Preconditions.checkState(namespace != null, "No namespace set.");
+		Preconditions.checkState(key != null, "No key set.");
 
 		if (value == null) {
 			clear();
 			return;
 		}
 
-		final VersionedHashMap<K, N, ACC> namespaceMap = stateTable.getState();
-		final K key = backend.getCurrentKey();
-		final N namespace = currentNamespace;
-		final ACC currentValue = namespaceMap.get(key, namespace);
+		final VersionedHashMap<K, N, ACC> map = stateTable.getState();
+		final ACC currentValue = map.get(key, namespace);
 
 		try {
 
 			if (currentValue == null) {
-				namespaceMap.put(key, namespace,
+				map.put(key, namespace,
 						foldFunction.fold(stateDesc.getDefaultValue(), value));
 			} else {
-				namespaceMap.put(key, namespace, foldFunction.fold(currentValue, value));
+				map.put(key, namespace, foldFunction.fold(currentValue, value));
 			}
 		} catch (Exception e) {
 			throw new RuntimeException("Could not add value to folding state.", e);

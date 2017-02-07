@@ -75,21 +75,21 @@ public class HeapAggregatingState<K, N, IN, ACC, OUT>
 
 	@Override
 	public OUT get() {
-		final K key = backend.getCurrentKey();
 		final N namespace = currentNamespace;
+		final K key = backend.getCurrentKey();
 
 		checkState(namespace != null, "No namespace set.");
 		checkState(key != null, "No key set.");
 
-		final VersionedHashMap<K, N, ACC> keyNamespaceACCMap = stateTable.getState();
-		ACC accumulator = keyNamespaceACCMap.get(key, namespace);
+		final VersionedHashMap<K, N, ACC> map = stateTable.getState();
+		ACC accumulator = map.get(key, namespace);
 		return accumulator != null ? aggFunction.getResult(accumulator) : null;
 	}
 
 	@Override
 	public void add(IN value) throws IOException {
-		final K key = backend.getCurrentKey();
 		final N namespace = currentNamespace;
+		final K key = backend.getCurrentKey();
 
 		checkState(namespace != null, "No namespace set.");
 		checkState(key != null, "No key set.");
@@ -99,14 +99,14 @@ public class HeapAggregatingState<K, N, IN, ACC, OUT>
 			return;
 		}
 
-		final VersionedHashMap<K, N, ACC>  keyNamespaceACCMap = stateTable.getState();
+		final VersionedHashMap<K, N, ACC>  map = stateTable.getState();
 
 
 		// if this is the first value for the key, create a new accumulator
-		ACC accumulator = keyNamespaceACCMap.get(key, namespace);
+		ACC accumulator = map.get(key, namespace);
 		if (accumulator == null) {
 			accumulator = aggFunction.createAccumulator();
-			keyNamespaceACCMap.put(key, namespace, accumulator);
+			map.put(key, namespace, accumulator);
 		}
 
 		aggFunction.add(value, accumulator);

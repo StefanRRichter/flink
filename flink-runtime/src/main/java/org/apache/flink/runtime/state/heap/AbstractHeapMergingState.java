@@ -70,7 +70,7 @@ public abstract class AbstractHeapMergingState<K, N, IN, OUT, SV, S extends Stat
 		final K key = backend.getCurrentKey();
 		checkState(key != null, "No key set.");
 
-		VersionedHashMap<K, N, SV> namespaceMap = stateTable.getState();
+		VersionedHashMap<K, N, SV> map = stateTable.getState();
 
 		SV merged = null;
 
@@ -78,7 +78,7 @@ public abstract class AbstractHeapMergingState<K, N, IN, OUT, SV, S extends Stat
 		for (N source : sources) {
 
 			// get and remove the next source per namespace/key
-			SV sourceState = namespaceMap.remove(key, source);
+			SV sourceState = map.remove(key, source);
 
 			if (merged != null && sourceState != null) {
 				merged = mergeState(merged, sourceState);
@@ -90,14 +90,14 @@ public abstract class AbstractHeapMergingState<K, N, IN, OUT, SV, S extends Stat
 		// merge into the target, if needed
 		if (merged != null) {
 
-			SV targetState = namespaceMap.get(key, target);
+			SV targetState = map.get(key, target);
 
 			if (targetState != null) {
 				targetState = mergeState(targetState, merged);
 			} else {
 				targetState = merged;
 			}
-			namespaceMap.put(key, target, targetState);
+			map.put(key, target, targetState);
 		}
 	}
 

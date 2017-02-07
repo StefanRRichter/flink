@@ -64,32 +64,35 @@ public class HeapListState<K, N, V>
 
 	@Override
 	public Iterable<V> get() {
-		Preconditions.checkState(currentNamespace != null, "No namespace set.");
-		Preconditions.checkState(backend.getCurrentKey() != null, "No key set.");
+		final N namespace = currentNamespace;
+		final K key = backend.getCurrentKey();
 
-		VersionedHashMap<K, N, ArrayList<V>> namespaceMap = stateTable.getState();
-		return namespaceMap.get(backend.getCurrentKey(), currentNamespace);
+		Preconditions.checkState(namespace != null, "No namespace set.");
+		Preconditions.checkState(key != null, "No key set.");
+
+		VersionedHashMap<K, N, ArrayList<V>> map = stateTable.getState();
+		return map.get(key, namespace);
 	}
 
 	@Override
 	public void add(V value) {
-		Preconditions.checkState(currentNamespace != null, "No namespace set.");
-		Preconditions.checkState(backend.getCurrentKey() != null, "No key set.");
+		final N namespace = currentNamespace;
+		final K key = backend.getCurrentKey();
+
+		Preconditions.checkState(namespace != null, "No namespace set.");
+		Preconditions.checkState(key != null, "No key set.");
 
 		if (value == null) {
 			clear();
 			return;
 		}
 
-		K key = backend.getCurrentKey();
-		N namespace = currentNamespace;
-
-		final VersionedHashMap<K, N, ArrayList<V>> keyNamespaceArrayListMap = stateTable.getState();
-		ArrayList<V> list = keyNamespaceArrayListMap.get(key, namespace);
+		final VersionedHashMap<K, N, ArrayList<V>> map = stateTable.getState();
+		ArrayList<V> list = map.get(key, namespace);
 
 		if (list == null) {
 			list = new ArrayList<>();
-			keyNamespaceArrayListMap.put(key, namespace, list);
+			map.put(key, namespace, list);
 		}
 		list.add(value);
 	}

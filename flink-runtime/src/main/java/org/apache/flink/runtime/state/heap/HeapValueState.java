@@ -56,11 +56,14 @@ public class HeapValueState<K, N, V>
 
 	@Override
 	public V value() {
-		Preconditions.checkState(currentNamespace != null, "No namespace set.");
-		Preconditions.checkState(backend.getCurrentKey() != null, "No key set.");
+		final N namespace = currentNamespace;
+		final K key = backend.getCurrentKey();
 
-		final VersionedHashMap<K, N, V> keyNamespaceVMap = stateTable.getState();
-		final V result = keyNamespaceVMap.get(backend.getCurrentKey(), currentNamespace);
+		Preconditions.checkState(namespace != null, "No namespace set.");
+		Preconditions.checkState(key != null, "No key set.");
+
+		final VersionedHashMap<K, N, V> map = stateTable.getState();
+		final V result = map.get(key, namespace);
 
 		if (result == null) {
 			return stateDesc.getDefaultValue();
@@ -71,15 +74,18 @@ public class HeapValueState<K, N, V>
 
 	@Override
 	public void update(V value) {
-		Preconditions.checkState(currentNamespace != null, "No namespace set.");
-		Preconditions.checkState(backend.getCurrentKey() != null, "No key set.");
+		final N namespace = currentNamespace;
+		final K key = backend.getCurrentKey();
+
+		Preconditions.checkState(namespace != null, "No namespace set.");
+		Preconditions.checkState(key != null, "No key set.");
 
 		if (value == null) {
 			clear();
 			return;
 		}
 
-		final VersionedHashMap<K, N, V> keyNamespaceVMap = stateTable.getState();
-		keyNamespaceVMap.put(backend.getCurrentKey(), currentNamespace, value);
+		final VersionedHashMap<K, N, V> map = stateTable.getState();
+		map.put(key, namespace, value);
 	}
 }
