@@ -38,6 +38,8 @@ import org.apache.flink.migration.MigrationUtil;
 import org.apache.flink.migration.runtime.state.KvStateSnapshot;
 import org.apache.flink.migration.runtime.state.filesystem.AbstractFsStateSnapshot;
 import org.apache.flink.migration.runtime.state.memory.AbstractMemStateSnapshot;
+import org.apache.flink.runtime.io.async.AbstractAsyncIOCallable;
+import org.apache.flink.runtime.io.async.AsyncStoppableTaskWithCallback;
 import org.apache.flink.runtime.query.TaskKvStateRegistry;
 import org.apache.flink.runtime.state.AbstractKeyedStateBackend;
 import org.apache.flink.runtime.state.ArrayListSerializer;
@@ -68,6 +70,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.RunnableFuture;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * A {@link AbstractKeyedStateBackend} that keeps state on the Java Heap and will serialize state to
@@ -98,7 +101,6 @@ public class HeapKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 			KeyGroupRange keyGroupRange) {
 
 		super(kvStateRegistry, keySerializer, userCodeClassLoader, numberOfKeyGroups, keyGroupRange);
-
 		LOG.info("Initializing heap keyed state backend with stream factory.");
 	}
 
@@ -191,73 +193,116 @@ public class HeapKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 	@Override
 	@SuppressWarnings("unchecked")
 	public RunnableFuture<KeyGroupsStateHandle> snapshot(
-			long checkpointId,
-			long timestamp,
-			CheckpointStreamFactory streamFactory) throws Exception {
+			final long checkpointId,
+			final long timestamp,
+			final CheckpointStreamFactory streamFactory) throws Exception {
 
 		if (stateTables.isEmpty()) {
 			return new DoneFuture<>(null);
 		}
 
-		try (CheckpointStreamFactory.CheckpointStateOutputStream stream = streamFactory.
-				createCheckpointStateOutputStream(checkpointId, timestamp)) {
+		long syncStartTime = System.currentTimeMillis();
 
-			DataOutputViewStreamWrapper outView = new DataOutputViewStreamWrapper(stream);
+		Preconditions.checkState(stateTables.size() <= Short.MAX_VALUE,
+				"Too many KV-States: " + stateTables.size() +
+						". Currently at most " + Short.MAX_VALUE + " states are supported");
 
-			Preconditions.checkState(stateTables.size() <= Short.MAX_VALUE,
-					"Too many KV-States: " + stateTables.size() +
-							". Currently at most " + Short.MAX_VALUE + " states are supported");
+		List<KeyedBackendSerializationProxy.StateMetaInfo<?, ?>> metaInfoProxyList = new ArrayList<>(stateTables.size());
 
-			List<KeyedBackendSerializationProxy.StateMetaInfo<?, ?>> metaInfoProxyList = new ArrayList<>(stateTables.size());
+		final Map<String, Integer> kVStateToId = new HashMap<>(stateTables.size());
 
-			Map<String, Integer> kVStateToId = new HashMap<>(stateTables.size());
+		final List<StateTableSnapshot<K, ?, ?>> cowStateStableSnapshots = new ArrayList<>(stateTables.size());
 
-			List<StateTableSnapshot<K, ?, ?>> cowStateStableSnapshots = new ArrayList<>(stateTables.size());
+		for (Map.Entry<String, StateTable<K, ?, ?>> kvState : stateTables.entrySet()) {
+			RegisteredBackendStateMetaInfo<?, ?> metaInfo = kvState.getValue().getMetaInfo();
+			KeyedBackendSerializationProxy.StateMetaInfo<?, ?> metaInfoProxy = new KeyedBackendSerializationProxy.StateMetaInfo(
+					metaInfo.getStateType(),
+					metaInfo.getName(),
+					metaInfo.getNamespaceSerializer(),
+					metaInfo.getStateSerializer());
 
-			for (Map.Entry<String, StateTable<K, ?, ?>> kvState : stateTables.entrySet()) {
-
-				RegisteredBackendStateMetaInfo<?, ?> metaInfo = kvState.getValue().getMetaInfo();
-				KeyedBackendSerializationProxy.StateMetaInfo<?, ?> metaInfoProxy = new KeyedBackendSerializationProxy.StateMetaInfo(
-						metaInfo.getStateType(),
-						metaInfo.getName(),
-						metaInfo.getNamespaceSerializer(),
-						metaInfo.getStateSerializer());
-
-				metaInfoProxyList.add(metaInfoProxy);
-				kVStateToId.put(kvState.getKey(), kVStateToId.size());
-				cowStateStableSnapshots.add(kvState.getValue().createSnapshot(keySerializer, getNumberOfKeyGroups()));
-			}
-
-			KeyedBackendSerializationProxy serializationProxy =
-					new KeyedBackendSerializationProxy(keySerializer, metaInfoProxyList);
-
-			//--------------------------------------------------- this becomes the end of sync part
-
-			serializationProxy.write(outView);
-
-			int offsetCounter = 0;
-			long[] keyGroupRangeOffsets = new long[keyGroupRange.getNumberOfKeyGroups()];
-
-			for (int keyGroupPos = 0; keyGroupPos < keyGroupRange.getNumberOfKeyGroups(); ++keyGroupPos) {
-				int keyGroupId = keyGroupRange.getKeyGroupId(keyGroupPos);
-				keyGroupRangeOffsets[offsetCounter++] = stream.getPos();
-				outView.writeInt(keyGroupId);
-
-				int idx = 0;
-				//TODO copy metadata for async!
-				for (Map.Entry<String, StateTable<K, ?, ?>> kvState : stateTables.entrySet()) {
-					outView.writeShort(kVStateToId.get(kvState.getKey()));
-					cowStateStableSnapshots.get(idx).writeKeyGroupData(outView, keyGroupId);
-					++idx;
-				}
-			}
-
-			StreamStateHandle streamStateHandle = stream.closeAndGetHandle();
-
-			KeyGroupRangeOffsets offsets = new KeyGroupRangeOffsets(keyGroupRange, keyGroupRangeOffsets);
-			final KeyGroupsStateHandle keyGroupsStateHandle = new KeyGroupsStateHandle(offsets, streamStateHandle);
-			return new DoneFuture<>(keyGroupsStateHandle);
+			metaInfoProxyList.add(metaInfoProxy);
+			kVStateToId.put(kvState.getKey(), kVStateToId.size());
+			cowStateStableSnapshots.add(kvState.getValue().createSnapshot(keySerializer, getNumberOfKeyGroups()));
 		}
+
+		final KeyedBackendSerializationProxy serializationProxy =
+				new KeyedBackendSerializationProxy(keySerializer, metaInfoProxyList);
+
+		//--------------------------------------------------- this becomes the end of sync part
+
+		// implementation of the async IO operation, based on FutureTask
+		final AbstractAsyncIOCallable<KeyGroupsStateHandle, CheckpointStreamFactory.CheckpointStateOutputStream> ioCallable =
+				new AbstractAsyncIOCallable<KeyGroupsStateHandle, CheckpointStreamFactory.CheckpointStateOutputStream>() {
+
+					AtomicBoolean open = new AtomicBoolean(false);
+
+					@Override
+					public CheckpointStreamFactory.CheckpointStateOutputStream openIOHandle() throws Exception {
+						if (open.compareAndSet(false, true)) {
+							CheckpointStreamFactory.CheckpointStateOutputStream stream =
+									streamFactory.createCheckpointStateOutputStream(checkpointId, timestamp);
+							try {
+								cancelStreamRegistry.registerClosable(stream);
+								return stream;
+							} catch (Exception ex) {
+								open.set(false);
+								throw ex;
+							}
+						} else {
+							throw new IOException("Operation already opened.");
+						}
+					}
+
+					@Override
+					public KeyGroupsStateHandle performOperation() throws Exception {
+						long asyncStartTime = System.currentTimeMillis();
+						CheckpointStreamFactory.CheckpointStateOutputStream stream = getIoHandle();
+						DataOutputViewStreamWrapper outView = new DataOutputViewStreamWrapper(stream);
+						serializationProxy.write(outView);
+
+						int offsetCounter = 0;
+						long[] keyGroupRangeOffsets = new long[keyGroupRange.getNumberOfKeyGroups()];
+
+						for (int keyGroupPos = 0; keyGroupPos < keyGroupRange.getNumberOfKeyGroups(); ++keyGroupPos) {
+							int keyGroupId = keyGroupRange.getKeyGroupId(keyGroupPos);
+							keyGroupRangeOffsets[offsetCounter++] = stream.getPos();
+							outView.writeInt(keyGroupId);
+
+							int idx = 0;
+							for (Map.Entry<String, StateTable<K, ?, ?>> kvState : stateTables.entrySet()) {
+								outView.writeShort(kVStateToId.get(kvState.getKey()));
+								cowStateStableSnapshots.get(idx).writeKeyGroupData(outView, keyGroupId);
+								++idx;
+							}
+						}
+
+						StreamStateHandle streamStateHandle = stream.closeAndGetHandle();
+						open.set(false);
+						KeyGroupRangeOffsets offsets = new KeyGroupRangeOffsets(keyGroupRange, keyGroupRangeOffsets);
+						final KeyGroupsStateHandle keyGroupsStateHandle = new KeyGroupsStateHandle(offsets, streamStateHandle);
+						LOG.info("Asynchronous heap backend  snapshot ({}, asynchronous part) in thread {} took {} ms.",
+								streamFactory, Thread.currentThread(), (System.currentTimeMillis() - asyncStartTime));
+
+						return keyGroupsStateHandle;
+					}
+
+					@Override
+					public void done(boolean canceled) {
+						if (open.compareAndSet(true, false)) {
+							CheckpointStreamFactory.CheckpointStateOutputStream stream = getIoHandle();
+							if (null != stream) {
+								cancelStreamRegistry.unregisterClosable(stream);
+								IOUtils.closeQuietly(stream);
+							}
+						}
+					}
+				};
+
+		LOG.info("Asynchronous heap backend snapshot (" + streamFactory + ", synchronous part) in thread " +
+				Thread.currentThread() + " took " + (System.currentTimeMillis() - syncStartTime) + " ms.");
+
+		return AsyncStoppableTaskWithCallback.from(ioCallable);
 	}
 
 	@SuppressWarnings("deprecation")
@@ -281,6 +326,7 @@ public class HeapKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 
 		int numRegisteredKvStates = 0;
 		Map<Integer, String> kvStatesById = new HashMap<>();
+		stateTables.clear();
 
 		for (KeyGroupsStateHandle keyGroupsHandle : state) {
 
