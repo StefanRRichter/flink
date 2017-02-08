@@ -73,8 +73,7 @@ public class HeapReducingState<K, N, V>
 		Preconditions.checkState(namespace != null, "No namespace set.");
 		Preconditions.checkState(key != null, "No key set.");
 
-		VersionedHashMap<K, N, V>  map = stateTable.getState();
-		return map.get(key, namespace);
+		return stateTable.get(key, namespace);
 	}
 
 	@Override
@@ -90,7 +89,7 @@ public class HeapReducingState<K, N, V>
 			return;
 		}
 
-		final VersionedHashMap<K, N, V> map = stateTable.getState();
+		final StateTable<K, N, V> map = stateTable;
 		final V currentValue = map.put(key, namespace, value);
 
 		if (currentValue != null) {

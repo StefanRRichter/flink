@@ -18,10 +18,13 @@
 
 package org.apache.flink.runtime.state.heap;
 
+import org.apache.flink.api.common.state.StateDescriptor;
 import org.apache.flink.api.common.typeutils.base.IntSerializer;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.api.java.tuple.Tuple3;
 import org.apache.flink.runtime.state.ArrayListSerializer;
+import org.apache.flink.runtime.state.KeyGroupRange;
+import org.apache.flink.runtime.state.RegisteredBackendStateMetaInfo;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -37,8 +40,16 @@ public class TestVersionedHashMap {
 
 	@Test
 	public void testCopyOnWrite() {
-		VersionedHashMap<Integer, Integer, ArrayList<Integer>> map =
-				new VersionedHashMap<>(16, new ArrayListSerializer<>(IntSerializer.INSTANCE));
+
+		RegisteredBackendStateMetaInfo<Integer, ArrayList<Integer>> metaInfo =
+				new RegisteredBackendStateMetaInfo<>(
+						StateDescriptor.Type.UNKNOWN,
+						"test",
+						IntSerializer.INSTANCE,
+						new ArrayListSerializer<>(IntSerializer.INSTANCE));
+
+		StateTable<Integer, Integer, ArrayList<Integer>> map =
+				new StateTable<>(16, metaInfo , new KeyGroupRange(0, 0), 1);
 
 		HashMap<Tuple2<Integer, Integer>, ArrayList<Integer>> referenceMap = new HashMap<>();
 

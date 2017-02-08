@@ -70,7 +70,7 @@ public abstract class AbstractHeapMergingState<K, N, IN, OUT, SV, S extends Stat
 		final K key = backend.getCurrentKey();
 		checkState(key != null, "No key set.");
 
-		VersionedHashMap<K, N, SV> map = stateTable.getState();
+		final StateTable<K, N, SV> map = stateTable;
 
 		SV merged = null;
 

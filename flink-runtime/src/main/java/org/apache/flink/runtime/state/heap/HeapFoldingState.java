@@ -74,8 +74,7 @@ public class HeapFoldingState<K, N, T, ACC>
 		Preconditions.checkState(namespace != null, "No namespace set.");
 		Preconditions.checkState(key != null, "No key set.");
 
-		VersionedHashMap<K, N, ACC> map = stateTable.getState();
-		return map.get(key, namespace);
+		return stateTable.get(key, namespace);
 	}
 
 	@Override
@@ -91,7 +90,7 @@ public class HeapFoldingState<K, N, T, ACC>
 			return;
 		}
 
-		final VersionedHashMap<K, N, ACC> map = stateTable.getState();
+		final StateTable<K, N, ACC> map = stateTable;
 		final ACC currentValue = map.get(key, namespace);
 
 		try {

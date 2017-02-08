@@ -70,8 +70,7 @@ public class HeapListState<K, N, V>
 		Preconditions.checkState(namespace != null, "No namespace set.");
 		Preconditions.checkState(key != null, "No key set.");
 
-		VersionedHashMap<K, N, ArrayList<V>> map = stateTable.getState();
-		return map.get(key, namespace);
+		return stateTable.get(key, namespace);
 	}
 
 	@Override
@@ -87,7 +86,7 @@ public class HeapListState<K, N, V>
 			return;
 		}
 
-		final VersionedHashMap<K, N, ArrayList<V>> map = stateTable.getState();
+		final StateTable<K, N, ArrayList<V>> map = stateTable;
 		ArrayList<V> list = map.get(key, namespace);
 
 		if (list == null) {
@@ -102,8 +101,7 @@ public class HeapListState<K, N, V>
 		Preconditions.checkState(namespace != null, "No namespace given.");
 		Preconditions.checkState(key != null, "No key given.");
 
-		final VersionedHashMap<K, N, ArrayList<V>> keyNamespaceArrayListMap = stateTable.getState();
-		ArrayList<V> result = keyNamespaceArrayListMap.get(key, namespace);
+		ArrayList<V> result = stateTable.get(key, namespace);
 
 		if (result == null) {
 			return null;

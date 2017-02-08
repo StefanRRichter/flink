@@ -1270,7 +1270,7 @@ public abstract class StateBackendTestBase<B extends AbstractStateBackend> exten
 
 			int keyGroupIndex = KeyGroupRangeAssignment.assignToKeyGroup(1, numberOfKeyGroups);
 			StateTable stateTable = ((AbstractHeapState) kvState).getStateTable();
-			assertNotNull("State not set", stateTable.getState());
+			assertNotNull("State not set", stateTable);
 			//TODO
 //			assertTrue(stateTable.getState() instanceof ConcurrentHashMap);
 //			assertTrue(stateTable.getState().get(VoidNamespace.INSTANCE) instanceof ConcurrentHashMap);
@@ -1297,7 +1297,7 @@ public abstract class StateBackendTestBase<B extends AbstractStateBackend> exten
 
 			int keyGroupIndex = KeyGroupRangeAssignment.assignToKeyGroup(1, numberOfKeyGroups);
 			StateTable stateTable = ((AbstractHeapState) kvState).getStateTable();
-			assertNotNull("State not set", stateTable.getState());
+			assertNotNull("State not set", stateTable);
 			//TODO
 //			assertTrue(stateTable.getState() instanceof ConcurrentHashMap);
 //			assertTrue(stateTable.getState().get(VoidNamespace.INSTANCE) instanceof ConcurrentHashMap);
@@ -1329,7 +1329,7 @@ public abstract class StateBackendTestBase<B extends AbstractStateBackend> exten
 
 			int keyGroupIndex = KeyGroupRangeAssignment.assignToKeyGroup(1, numberOfKeyGroups);
 			StateTable stateTable = ((AbstractHeapState) kvState).getStateTable();
-			assertNotNull("State not set", stateTable.getState());
+			assertNotNull("State not set", stateTable);
 			//TODO
 //			assertTrue(stateTable.getState() instanceof ConcurrentHashMap);
 //			assertTrue(stateTable.getState().get(VoidNamespace.INSTANCE) instanceof ConcurrentHashMap);
@@ -1361,7 +1361,7 @@ public abstract class StateBackendTestBase<B extends AbstractStateBackend> exten
 
 			int keyGroupIndex = KeyGroupRangeAssignment.assignToKeyGroup(1, numberOfKeyGroups);
 			StateTable stateTable = ((AbstractHeapState) kvState).getStateTable();
-			assertNotNull("State not set", stateTable.getState());
+			assertNotNull("State not set", stateTable);
 			//TODO
 //			assertTrue(stateTable.getState() instanceof ConcurrentHashMap);
 //			assertTrue(stateTable.getState().get(VoidNamespace.INSTANCE) instanceof ConcurrentHashMap);

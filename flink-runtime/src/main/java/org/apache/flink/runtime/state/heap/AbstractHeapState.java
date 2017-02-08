@@ -88,8 +88,7 @@ public abstract class AbstractHeapState<K, N, SV, S extends State, SD extends St
 		Preconditions.checkState(currentNamespace != null, "No namespace set.");
 		Preconditions.checkState(backend.getCurrentKey() != null, "No key set.");
 
-		VersionedHashMap<K, N, SV> keyNamespaceSVMap = stateTable.getState();
-		keyNamespaceSVMap.remove(backend.getCurrentKey(), currentNamespace);
+		stateTable.remove(backend.getCurrentKey(), currentNamespace);
 	}
 
 	@Override
@@ -111,8 +110,7 @@ public abstract class AbstractHeapState<K, N, SV, S extends State, SD extends St
 		Preconditions.checkState(namespace != null, "No namespace given.");
 		Preconditions.checkState(key != null, "No key given.");
 
-		VersionedHashMap<K, N, SV> map = stateTable.getState();
-		SV result = map.get(key, namespace);
+		SV result = stateTable.get(key, namespace);
 
 		if (result == null) {
 			return null;

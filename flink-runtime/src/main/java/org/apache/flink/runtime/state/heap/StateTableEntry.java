@@ -18,7 +18,7 @@
 
 package org.apache.flink.runtime.state.heap;
 
-public interface StateMapEntry<K, N, S> {
+public interface StateTableEntry<K, N, S> {
 
 	K getKey();
 

@@ -62,8 +62,7 @@ public class HeapValueState<K, N, V>
 		Preconditions.checkState(namespace != null, "No namespace set.");
 		Preconditions.checkState(key != null, "No key set.");
 
-		final VersionedHashMap<K, N, V> map = stateTable.getState();
-		final V result = map.get(key, namespace);
+		final V result = stateTable.get(key, namespace);
 
 		if (result == null) {
 			return stateDesc.getDefaultValue();
@@ -85,7 +84,6 @@ public class HeapValueState<K, N, V>
 			return;
 		}
 
-		final VersionedHashMap<K, N, V> map = stateTable.getState();
-		map.put(key, namespace, value);
+		stateTable.put(key, namespace, value);
 	}
 }

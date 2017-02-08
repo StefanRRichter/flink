@@ -81,8 +81,7 @@ public class HeapAggregatingState<K, N, IN, ACC, OUT>
 		checkState(namespace != null, "No namespace set.");
 		checkState(key != null, "No key set.");
 
-		final VersionedHashMap<K, N, ACC> map = stateTable.getState();
-		ACC accumulator = map.get(key, namespace);
+		ACC accumulator = stateTable.get(key, namespace);
 		return accumulator != null ? aggFunction.getResult(accumulator) : null;
 	}
 
@@ -99,8 +98,7 @@ public class HeapAggregatingState<K, N, IN, ACC, OUT>
 			return;
 		}
 
-		final VersionedHashMap<K, N, ACC>  map = stateTable.getState();
-
+		final StateTable<K, N, ACC> map = stateTable;
 
 		// if this is the first value for the key, create a new accumulator
 		ACC accumulator = map.get(key, namespace);
