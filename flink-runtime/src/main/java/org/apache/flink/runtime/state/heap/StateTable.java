@@ -74,11 +74,6 @@ public class StateTable<K, N, S> implements Iterable<StateTableEntry<K, N, S>> {
 	HashMapEntry<K, N, S>[] table;
 
 	/**
-	 * Caching the last looked up entry to improve some of Flink's access pattern.
-	 */
-	HashMapEntry<K, N, S> previousLookupCache;
-
-	/**
 	 * The number of mappings in this hash map.
 	 */
 	int size;
@@ -142,7 +137,6 @@ public class StateTable<K, N, S> implements Iterable<StateTableEntry<K, N, S>> {
 		this.metaInfo = Preconditions.checkNotNull(metaInfo);
 		this.keyGroupRange = Preconditions.checkNotNull(keyGroupRange);
 		this.totalNumberOfKeyGroups = totalNumberOfKeyGroups;
-		this.previousLookupCache = new HashMapEntry<>();
 		this.mapVersion = 0;
 
 		if (capacity < 0) {
@@ -224,21 +218,12 @@ public class StateTable<K, N, S> implements Iterable<StateTableEntry<K, N, S>> {
 
 		assert (null != key && null != namespace);
 
-		HashMapEntry<K, N, S> cached = previousLookupCache;
-
-		// consider cache first
-		if (cached.key == key && cached.namespace == namespace) {
-			// copy-on-access if we are on an old version
-			return cached.getStateCopyOnAccess(mapVersion, getStateSerializer());
-		}
-
 		int hash = secondaryHash(key, namespace);
 		HashMapEntry<K, N, S>[] tab = table;
 		for (HashMapEntry<K, N, S> e = tab[hash & (tab.length - 1)]; e != null; e = e.next) {
 			K eKey = e.key;
 			N eNamespace = e.namespace;
 			if ((e.hash == hash && key.equals(eKey) && namespace.equals(eNamespace))) {
-				previousLookupCache = e;
 				// copy-on-access if we are on an old version
 				return e.getStateCopyOnAccess(mapVersion, getStateSerializer());
 			}
@@ -283,19 +268,11 @@ public class StateTable<K, N, S> implements Iterable<StateTableEntry<K, N, S>> {
 
 		assert (null != key && null != namespace);
 
-		HashMapEntry<K, N, S> cached = previousLookupCache;
-
-		// consider cache first
-		if (cached.key == key && cached.namespace == namespace) {
-			return cached.setState(value, mapVersion);
-		}
-
 		int hash = secondaryHash(key, namespace);
 		HashMapEntry<K, N, S>[] tab = table;
 		int index = hash & (tab.length - 1);
 		for (HashMapEntry<K, N, S> e = tab[index]; e != null; e = e.next) {
 			if (e.hash == hash && key.equals(e.key) && namespace.equals(e.namespace)) {
-				previousLookupCache = e;
 				return e.setState(value, mapVersion);
 			}
 		}
