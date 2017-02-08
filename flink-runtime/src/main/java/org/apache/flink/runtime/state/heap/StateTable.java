@@ -478,8 +478,10 @@ public class StateTable<K, N, S> implements Iterable<StateTableEntry<K, N, S>> {
 		public final S setState(S value, int mapVersion) {
 			S oldValue = this.state;
 			this.state = value;
-			// we can update the version every time this is replaced by a new object
-			version = (value == oldValue) ? version : mapVersion;
+			// we can update the version every time we replace the state with a new object anyways
+			if (value != oldValue) {
+				version = mapVersion;
+			}
 			return oldValue;
 		}
 
