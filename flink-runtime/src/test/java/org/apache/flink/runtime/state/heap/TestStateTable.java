@@ -36,7 +36,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Random;
 
-public class TestVersionedHashMap {
+public class TestStateTable {
 
 	@Test
 	public void testCopyOnWrite() {

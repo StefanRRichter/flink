@@ -56,7 +56,7 @@ public class ManualWindowSpeedITCase extends StreamingMultipleProgramsTestBase {
 
 		env.setStreamTimeCharacteristic(TimeCharacteristic.IngestionTime);
 //		env.setMaxParallelism(1);
-		env.setParallelism(4);
+		env.setParallelism(1);
 
 		String checkpoints = tempFolder.newFolder().toURI().toString();
 		env.setStateBackend(new FsStateBackend(checkpoints));
