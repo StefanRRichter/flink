@@ -103,40 +103,32 @@ public class StateTable<K, N, S> implements Iterable<StateTableEntry<K, N, S>> {
 	private int threshold;
 
 	/**
-	 * Key group range which goes to this backend
-	 */
-	final KeyGroupRange keyGroupRange;
-
-	/**
 	 * Combined meta information such as name and serializers for this state
 	 */
 	RegisteredBackendStateMetaInfo<N, S> metaInfo;
 
-	final int totalNumberOfKeyGroups;
-
+	/**
+	 * Constructs a new {@code StateTable} with default capacity of 128.
+	 *
+	 * @param metaInfo the meta information, including the type serializer for state copy-on-write.
+	 */
 	public StateTable(
-			RegisteredBackendStateMetaInfo<N, S> metaInfo,
-			KeyGroupRange keyGroupRange,
-			int totalNumberOfKeyGroups) {
-		this(128, metaInfo, keyGroupRange, totalNumberOfKeyGroups);
+			RegisteredBackendStateMetaInfo<N, S> metaInfo) {
+		this(128, metaInfo);
 	}
 
 	/**
-	 * Constructs a new {@code HashMap} instance with the specified capacity.
+	 * Constructs a new {@code StateTable} instance with the specified capacity.
 	 *
 	 * @param capacity the initial capacity of this hash map.
-	 * @param stateTypeSerializer the type serializer for state copy-on-write.
+	 * @param metaInfo the meta information, including the type serializer for state copy-on-write.
 	 * @throws IllegalArgumentException when the capacity is less than zero.
 	 */
 	public StateTable(
 			int capacity,
-			RegisteredBackendStateMetaInfo<N, S> metaInfo,
-			KeyGroupRange keyGroupRange,
-			int totalNumberOfKeyGroups) {
+			RegisteredBackendStateMetaInfo<N, S> metaInfo) {
 
 		this.metaInfo = Preconditions.checkNotNull(metaInfo);
-		this.keyGroupRange = Preconditions.checkNotNull(keyGroupRange);
-		this.totalNumberOfKeyGroups = totalNumberOfKeyGroups;
 		this.mapVersion = 0;
 
 		if (capacity < 0) {
@@ -160,22 +152,21 @@ public class StateTable<K, N, S> implements Iterable<StateTableEntry<K, N, S>> {
 	}
 
 	/**
-	 * Constructs a new {@code HashMap} instance with the specified capacity and
+	 * Constructs a new {@code StateTable}} instance with the specified capacity and
 	 * load factor.
 	 *
 	 * @param capacity   the initial capacity of this hash map.
 	 * @param loadFactor the initial load factor.
-	 * @param stateTypeSerializer the type serializer for state copy-on-write.
+	 * @param metaInfo the meta information, including the type serializer for state copy-on-write.
 	 * @throws IllegalArgumentException when the capacity is less than zero or the load factor is
 	 *                                  less or equal to zero or NaN.
 	 */
 	public StateTable(
 			int capacity,
 			float loadFactor,
-			RegisteredBackendStateMetaInfo<N, S> metaInfo,
-			KeyGroupRange keyGroupRange,
-			int totalNumberOfKeyGroups) {
-		this(capacity, metaInfo, keyGroupRange, totalNumberOfKeyGroups);
+			RegisteredBackendStateMetaInfo<N, S> metaInfo) {
+
+		this(capacity, metaInfo);
 		if (loadFactor <= 0 || Float.isNaN(loadFactor)) {
 			throw new IllegalArgumentException("Load factor: " + loadFactor);
 		}
@@ -646,7 +637,11 @@ public class StateTable<K, N, S> implements Iterable<StateTableEntry<K, N, S>> {
 		this.metaInfo = metaInfo;
 	}
 
-	public StateTableSnapshot<K, N, S> createSnapshot(TypeSerializer<K> keySerializer, int totalKeyGroups) {
+	public StateTableSnapshot<K, N, S> createSnapshot(
+			TypeSerializer<K> keySerializer,
+			KeyGroupRange keyGroupRange,
+			int totalKeyGroups) {
+
 		return new StateTableSnapshot<>(
 				snapshotDump(),
 				keySerializer,

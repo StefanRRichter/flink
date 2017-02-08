@@ -128,8 +128,7 @@ public abstract class AbstractFsStateSnapshot<K, N, SV, S extends State, SD exte
 							patchedNamespaceSerializer,
 							stateSerializer);
 
-			StateTable<K, N, SV> stateMap =
-					new StateTable<>(registeredBackendStateMetaInfo, keyGroupRange, totalNumberOfKeyGroups);
+			StateTable<K, N, SV> stateMap = new StateTable<>(registeredBackendStateMetaInfo);
 
 			for (int i = 0; i < numNamespaces; i++) {
 

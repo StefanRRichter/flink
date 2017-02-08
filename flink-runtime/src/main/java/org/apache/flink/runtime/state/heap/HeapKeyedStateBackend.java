@@ -120,7 +120,7 @@ public class HeapKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 			StateTable<K, N, V> stateTable, RegisteredBackendStateMetaInfo<N, V> newMetaInfo) {
 
 		if (stateTable == null) {
-			stateTable = new StateTable<>(newMetaInfo, keyGroupRange, numberOfKeyGroups);
+			stateTable = new StateTable<>(newMetaInfo);
 			stateTables.put(newMetaInfo.getName(), stateTable);
 		} else {
 			if (!newMetaInfo.isCompatibleWith(stateTable.getMetaInfo())) {
@@ -218,7 +218,7 @@ public class HeapKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 
 			metaInfoProxyList.add(metaInfoProxy);
 			kVStateToId.put(kvState.getKey(), kVStateToId.size());
-			cowStateStableSnapshots.add(kvState.getValue().createSnapshot(keySerializer, getNumberOfKeyGroups()));
+			cowStateStableSnapshots.add(kvState.getValue().createSnapshot(keySerializer, keyGroupRange, getNumberOfKeyGroups()));
 		}
 
 		final KeyedBackendSerializationProxy serializationProxy =
@@ -256,12 +256,11 @@ public class HeapKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 						DataOutputViewStreamWrapper outView = new DataOutputViewStreamWrapper(stream);
 						serializationProxy.write(outView);
 
-						int offsetCounter = 0;
 						long[] keyGroupRangeOffsets = new long[keyGroupRange.getNumberOfKeyGroups()];
 
 						for (int keyGroupPos = 0; keyGroupPos < keyGroupRange.getNumberOfKeyGroups(); ++keyGroupPos) {
 							int keyGroupId = keyGroupRange.getKeyGroupId(keyGroupPos);
-							keyGroupRangeOffsets[offsetCounter++] = stream.getPos();
+							keyGroupRangeOffsets[keyGroupPos] = stream.getPos();
 							outView.writeInt(keyGroupId);
 
 							int idx = 0;
@@ -353,7 +352,7 @@ public class HeapKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 						RegisteredBackendStateMetaInfo<?, ?> registeredBackendStateMetaInfo =
 								new RegisteredBackendStateMetaInfo<>(metaInfoSerializationProxy);
 
-						stateTable = new StateTable<>(registeredBackendStateMetaInfo, keyGroupRange, numberOfKeyGroups);
+						stateTable = new StateTable<>(registeredBackendStateMetaInfo);
 						stateTables.put(metaInfoSerializationProxy.getStateName(), stateTable);
 						kvStatesById.put(numRegisteredKvStates, metaInfoSerializationProxy.getStateName());
 						++numRegisteredKvStates;

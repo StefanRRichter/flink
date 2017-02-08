@@ -105,7 +105,7 @@ public abstract class AbstractMemStateSnapshot<K, N, SV, S extends State, SD ext
 						stateSerializer);
 
 		StateTable<K, N, SV> stateMap =
-				new StateTable<>(registeredBackendStateMetaInfo, keyGroupRange, totalNumberOfKeyGroups);
+				new StateTable<>(registeredBackendStateMetaInfo);
 
 		for (int i = 0; i < numKeys && !closed; i++) {
 			N namespace = namespaceSerializer.deserialize(inView);

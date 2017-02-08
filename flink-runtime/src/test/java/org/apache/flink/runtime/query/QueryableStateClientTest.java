@@ -280,7 +280,7 @@ public class QueryableStateClientTest {
 				HeapValueState<Integer, VoidNamespace, Integer> kvState = new HeapValueState<>(
 						keyedStateBackend,
 						descriptor,
-						new StateTable<Integer, VoidNamespace, Integer>(registeredBackendStateMetaInfo, new KeyGroupRange(0, 1), 2),
+						new StateTable<Integer, VoidNamespace, Integer>(registeredBackendStateMetaInfo),
 						IntSerializer.INSTANCE,
 						VoidNamespaceSerializer.INSTANCE);
 

@@ -23,7 +23,6 @@ import org.apache.flink.api.common.typeutils.base.IntSerializer;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.api.java.tuple.Tuple3;
 import org.apache.flink.runtime.state.ArrayListSerializer;
-import org.apache.flink.runtime.state.KeyGroupRange;
 import org.apache.flink.runtime.state.RegisteredBackendStateMetaInfo;
 import org.junit.Assert;
 import org.junit.Test;
@@ -49,7 +48,7 @@ public class TestStateTable {
 						new ArrayListSerializer<>(IntSerializer.INSTANCE));
 
 		StateTable<Integer, Integer, ArrayList<Integer>> map =
-				new StateTable<>(16, metaInfo , new KeyGroupRange(0, 0), 1);
+				new StateTable<>(16, metaInfo);
 
 		HashMap<Tuple2<Integer, Integer>, ArrayList<Integer>> referenceMap = new HashMap<>();
 
