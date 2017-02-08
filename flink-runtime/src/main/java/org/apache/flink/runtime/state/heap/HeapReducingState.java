@@ -90,7 +90,7 @@ public class HeapReducingState<K, N, V>
 		}
 
 		final StateTable<K, N, V> map = stateTable;
-		final V currentValue = map.put(key, namespace, value);
+		final V currentValue = map.putAndGetOld(key, namespace, value);
 
 		if (currentValue != null) {
 			V reducedValue;

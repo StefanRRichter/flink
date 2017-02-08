@@ -264,7 +264,7 @@ public class StateTable<K, N, S> implements Iterable<StateTableEntry<K, N, S>> {
 	 * @return the value of any previous mapping with the specified key or
 	 * {@code null} if there was no such mapping.
 	 */
-	public S put(K key, N namespace, S value) {
+	public void put(K key, N namespace, S value) {
 
 		assert (null != key && null != namespace);
 
@@ -273,7 +273,39 @@ public class StateTable<K, N, S> implements Iterable<StateTableEntry<K, N, S>> {
 		int index = hash & (tab.length - 1);
 		for (HashMapEntry<K, N, S> e = tab[index]; e != null; e = e.next) {
 			if (e.hash == hash && key.equals(e.key) && namespace.equals(e.namespace)) {
-				return e.setState(value, mapVersion);
+				e.setState(value, mapVersion);
+				return;
+			}
+		}
+		modCount++;
+		if (size++ > threshold) {
+			tab = doubleCapacity();
+			index = hash & (tab.length - 1);
+		}
+		addNewEntry(key, namespace, value, hash, index);
+	}
+
+	/**
+	 * Maps the specified key/namespace composite key to the specified value.
+	 *
+	 * @param key the key.
+	 * @param namespace the namespace.
+	 * @param value the value.
+	 * @return the value of any previous mapping with the specified key or
+	 * {@code null} if there was no such mapping.
+	 */
+	public S putAndGetOld(K key, N namespace, S value) {
+
+		assert (null != key && null != namespace);
+
+		int hash = secondaryHash(key, namespace);
+		HashMapEntry<K, N, S>[] tab = table;
+		int index = hash & (tab.length - 1);
+		for (HashMapEntry<K, N, S> e = tab[index]; e != null; e = e.next) {
+			if (e.hash == hash && key.equals(e.key) && namespace.equals(e.namespace)) {
+				S oldState = e.getStateCopyOnAccess(mapVersion, getStateSerializer());
+				e.state = value;
+				return oldState;
 			}
 		}
 		modCount++;
@@ -475,14 +507,12 @@ public class StateTable<K, N, S> implements Iterable<StateTableEntry<K, N, S>> {
 			return state;
 		}
 
-		public final S setState(S value, int mapVersion) {
-			S oldValue = this.state;
-			this.state = value;
+		public final void setState(S value, int mapVersion) {
 			// we can update the version every time we replace the state with a new object anyways
-			if (value != oldValue) {
-				version = mapVersion;
+			if (value != state) {
+				this.state = value;
+				this.version = mapVersion;
 			}
-			return oldValue;
 		}
 
 		public int getVersion() {
