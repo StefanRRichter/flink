@@ -89,11 +89,6 @@ public class StateTable<K, N, S> implements Iterable<StateTableEntry<K, N, S>> {
 	 */
 	int mapVersion;
 
-//	/**
-//	 * This type serializer is used for copy-on-write of the mutable state objects.
-//	 */
-//	final TypeSerializer<S> stateTypeSerializer;
-
 	/**
 	 * The table is rehashed when its size exceeds this threshold.
 	 * The value of this field is generally .75 * capacity, except when
@@ -106,6 +101,11 @@ public class StateTable<K, N, S> implements Iterable<StateTableEntry<K, N, S>> {
 	 * Combined meta information such as name and serializers for this state
 	 */
 	RegisteredBackendStateMetaInfo<N, S> metaInfo;
+
+	/**
+	 * Last namespace that was actually inserted. this is a small optimization to decrease duplicate namespace objects.
+	 */
+	N lastNamespace;
 
 	/**
 	 * Constructs a new {@code StateTable} with default capacity of 128.
@@ -309,6 +309,14 @@ public class StateTable<K, N, S> implements Iterable<StateTableEntry<K, N, S>> {
 	}
 
 	void addNewEntry(K key, N namespace, S value, int hash, int index) {
+
+		// small optimization that aims to avoid holding references on duplicate namespace objects
+		if (namespace.equals(lastNamespace)) {
+			namespace = lastNamespace;
+		} else {
+			lastNamespace = namespace;
+		}
+
 		table[index] = new HashMapEntry<>(key, namespace, value, hash, table[index], mapVersion);
 	}
 
