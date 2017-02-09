@@ -78,7 +78,7 @@ public abstract class AbstractHeapMergingState<K, N, IN, OUT, SV, S extends Stat
 		for (N source : sources) {
 
 			// get and remove the next source per namespace/key
-			SV sourceState = map.remove(key, source);
+			SV sourceState = map.removeAndGetOld(key, source);
 
 			if (merged != null && sourceState != null) {
 				merged = mergeState(merged, sourceState);

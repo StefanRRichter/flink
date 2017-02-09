@@ -389,7 +389,7 @@ public class StateTable<K, N, S> implements Iterable<StateTableEntry<K, N, S>> {
 	 * @return the value of the removed mapping or {@code null} if no mapping
 	 * for the specified key was found.
 	 */
-	public S remove(Object key, Object namespace) {
+	public void remove(Object key, Object namespace) {
 
 		assert (null != key && null != namespace);
 
@@ -405,7 +405,35 @@ public class StateTable<K, N, S> implements Iterable<StateTableEntry<K, N, S>> {
 				}
 				modCount++;
 				size--;
-				return e.state;
+			}
+		}
+	}
+
+	/**
+	 * Removes the mapping with the specified key/namespace composite key from this map.
+	 *
+	 * @param key       the key of the mapping to remove.
+	 * @param namespace the namespace of the mapping to remove.
+	 * @return the value of the removed mapping or {@code null} if no mapping
+	 * for the specified key was found.
+	 */
+	public S removeAndGetOld(Object key, Object namespace) {
+
+		assert (null != key && null != namespace);
+
+		int hash = secondaryHash(key, namespace);
+		HashMapEntry<K, N, S>[] tab = table;
+		int index = hash & (tab.length - 1);
+		for (HashMapEntry<K, N, S> e = tab[index], prev = null; e != null; prev = e, e = e.next) {
+			if (e.hash == hash && key.equals(e.key) && namespace.equals(e.namespace)) {
+				if (prev == null) {
+					tab[index] = e.next;
+				} else {
+					prev.next = e.next;
+				}
+				modCount++;
+				size--;
+				return e.getStateCopyOnAccess(mapVersion, getStateSerializer());
 			}
 		}
 		return null;
