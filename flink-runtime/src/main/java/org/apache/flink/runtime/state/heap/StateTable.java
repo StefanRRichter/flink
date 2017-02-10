@@ -41,6 +41,7 @@ import java.util.NoSuchElementException;
  * @param <S> type of value
  */
 public class StateTable<K, N, S> implements Iterable<StateTableEntry<K, N, S>> {
+
 	/**
 	 * Min capacity (other than zero) for a HashMap. Must be a power of two
 	 * greater than 1 (and less than 1 << 30).
@@ -224,6 +225,7 @@ public class StateTable<K, N, S> implements Iterable<StateTableEntry<K, N, S>> {
 			incrementalRehash();
 		}
 
+		final int globalVersion = sna;
 		HashMapEntry<K, N, S>[] tab = tables[0];
 		int hash = secondaryHash(key, namespace);
 		int index = hash & (tab.length - 1);
@@ -237,12 +239,54 @@ public class StateTable<K, N, S> implements Iterable<StateTableEntry<K, N, S>> {
 			K eKey = e.key;
 			N eNamespace = e.namespace;
 			if ((e.hash == hash && key.equals(eKey) && namespace.equals(eNamespace))) {
+
 				// copy-on-access if we are on an old version
-				return e.getStateCopyOnAccess(highestRequiredSnapshotVersion, getStateSerializer());
+				if (e.stateVersion < globalVersion) {
+					if (e.entryVersion < globalVersion) {
+						e = handleEntryChainMultiVersioning(hash & (tab.length - 1), e);
+					}
+					e.stateVersion = mapVersion;
+					e.state = getStateSerializer().copy(e.state);
+				}
+
+				return e.state;
 			}
 		}
 
 		return null;
+	}
+
+	private HashMapEntry<K, N, S> handleEntryChainMultiVersioning(int tableIdx, HashMapEntry<K, N, S> untilEntry) {
+
+		final int globalVersion = mapVersion;
+		final HashMapEntry<K, N, S>[] tab = table;
+
+		HashMapEntry<K, N, S> current = tab[tableIdx];
+		HashMapEntry<K, N, S> copy;
+
+		if (current.entryVersion != globalVersion) {
+			copy = new HashMapEntry<>(current, globalVersion);
+			tab[tableIdx] = copy;
+		} else {
+			// nothing to do, just advance copy to current
+			copy = current;
+		}
+
+		while (current != untilEntry) {
+
+			//advance current
+			current = current.next;
+
+			if (current.entryVersion != globalVersion) {
+				// copy and advance the current's copy
+				copy.next = new HashMapEntry<>(current, globalVersion);
+				copy = copy.next;
+			} else {
+				// nothing to do, just advance copy to current
+				copy = current;
+			}
+		}
+		return copy;
 	}
 
 	/**
@@ -309,9 +353,17 @@ public class StateTable<K, N, S> implements Iterable<StateTableEntry<K, N, S>> {
 			index = hash & (tab.length - 1);
 		}
 
+		int globalVersion = highestRequiredSnapshotVersion;
+
 		for (HashMapEntry<K, N, S> e = tab[index]; e != null; e = e.next) {
 			if (e.hash == hash && key.equals(e.key) && namespace.equals(e.namespace)) {
-				e.setState(value, mapVersion);
+
+				if (e.entryVersion < globalVersion) {
+					e = handleEntryChainMultiVersioning(index, e);
+				}
+
+				e.state = value;
+				e.stateVersion = mapVersion;
 				return;
 			}
 		}
@@ -351,9 +403,25 @@ public class StateTable<K, N, S> implements Iterable<StateTableEntry<K, N, S>> {
 			index = hash & (tab.length - 1);
 		}
 
+		int globalVersion = highestRequiredSnapshotVersion;
+
 		for (HashMapEntry<K, N, S> e = tab[index]; e != null; e = e.next) {
 			if (e.hash == hash && key.equals(e.key) && namespace.equals(e.namespace)) {
-				S oldState = e.getStateCopyOnAccess(highestRequiredSnapshotVersion, getStateSerializer());
+
+				S oldState;
+
+				if (e.entryVersion < globalVersion) {
+					e = handleEntryChainMultiVersioning(index, e);
+				}
+
+				if (e.stateVersion < globalVersion) {
+					oldState = getStateSerializer().copy(e.state);
+					e.stateVersion = mapVersion;
+				} else {
+					oldState = e.state;
+				}
+
+
 				e.state = value;
 				return oldState;
 			}
@@ -379,7 +447,7 @@ public class StateTable<K, N, S> implements Iterable<StateTableEntry<K, N, S>> {
 
 		HashMapEntry<K, N, S>[] insertTable = tables[tabIdx];
 		int index = hash & (insertTable.length - 1);
-		insertTable[index] = new HashMapEntry<>(key, namespace, value, hash, insertTable[index], mapVersion);
+		insertTable[index] = new HashMapEntry<>(key, namespace, value, hash, insertTable[index], mapVersion, mapVersion);
 
 		++size[tabIdx];
 	}
@@ -455,6 +523,9 @@ public class StateTable<K, N, S> implements Iterable<StateTableEntry<K, N, S>> {
 				if (prev == null) {
 					tab[index] = e.next;
 				} else {
+					if (prev.entryVersion != mapVersion) {
+						prev = handleEntryChainMultiVersioning(index, prev);
+					}
 					prev.next = e.next;
 				}
 				++modCount;
@@ -492,16 +563,20 @@ public class StateTable<K, N, S> implements Iterable<StateTableEntry<K, N, S>> {
 			index = hash & (tab.length - 1);
 		}
 
+		int globalVersion = mapVersion;
 		for (HashMapEntry<K, N, S> e = tab[index], prev = null; e != null; prev = e, e = e.next) {
 			if (e.hash == hash && key.equals(e.key) && namespace.equals(e.namespace)) {
 				if (prev == null) {
 					tab[index] = e.next;
 				} else {
+					if (prev.entryVersion != globalVersion) {
+						prev = handleEntryChainMultiVersioning(index, prev);
+					}
 					prev.next = e.next;
 				}
 				++modCount;
 				--size[removeTableIdx];
-				return e.getStateCopyOnAccess(highestRequiredSnapshotVersion, getStateSerializer());
+				return e.stateVersion == globalVersion ? e.state : getStateSerializer().copy(e.state);
 			}
 		}
 
@@ -570,6 +645,11 @@ public class StateTable<K, N, S> implements Iterable<StateTableEntry<K, N, S>> {
 		rehashPos = j;
 	}
 
+	public HashMapEntry<K, N, S> [] snapshotTable() {
+		++mapVersion;
+		return Arrays.copyOf(table, table.length);
+	}
+
 	/**
 	 * Creates a dense snapshot of the hashmap
 	 *
@@ -619,24 +699,30 @@ public class StateTable<K, N, S> implements Iterable<StateTableEntry<K, N, S>> {
 		final K key;
 		final N namespace;
 		S state;
+		HashMapEntry<K, N, S> next;
 
 		final int hash;
 
-		int version;
+		int entryVersion;
+		int stateVersion;
 
-		HashMapEntry<K, N, S> next;
 
 		HashMapEntry() {
-			this(null, null, null, 0, null, 0);
+			this(null, null, null, 0, null, 0, 0);
 		}
 
-		HashMapEntry(K key, N namespace, S state, int hash, HashMapEntry<K, N, S> next, int version) {
+		HashMapEntry(HashMapEntry<K, N, S> other, int entryVersion) {
+			this(other.key, other.namespace, other.state, other.hash, other.next, entryVersion, other.stateVersion);
+		}
+
+		HashMapEntry(K key, N namespace, S state, int hash, HashMapEntry<K, N, S> next, int entryVersion, int stateVersion) {
 			this.key = key;
 			this.namespace = namespace;
 			this.state = state;
 			this.hash = hash;
 			this.next = next;
-			this.version = version;
+			this.entryVersion = entryVersion;
+			this.stateVersion = stateVersion;
 		}
 
 		@Override
@@ -667,20 +753,29 @@ public class StateTable<K, N, S> implements Iterable<StateTableEntry<K, N, S>> {
 			// we can update the version every time we replace the state with a new object anyways
 			if (value != state) {
 				this.state = value;
-				this.version = mapVersion;
+				this.stateVersion = mapVersion;
 			}
 		}
 
-		public int getVersion() {
-			return version;
+
+		public int getStateVersion() {
+			return stateVersion;
 		}
 
-		public void setVersion(int version) {
-			this.version = version;
+		public void setStateVersion(int stateVersion) {
+			this.stateVersion = stateVersion;
+		}
+
+		public int getEntryVersion() {
+			return entryVersion;
+		}
+
+		public void setEntryVersion(int entryVersion) {
+			this.entryVersion = entryVersion;
 		}
 
 		public void incrementVersion() {
-			++this.version;
+			++this.entryVersion;
 		}
 
 		@Override
@@ -838,7 +933,8 @@ public class StateTable<K, N, S> implements Iterable<StateTableEntry<K, N, S>> {
 			int totalKeyGroups) {
 
 		return new StateTableSnapshot<>(
-				snapshotDump(),
+				snapshotTable(),
+				size(),
 				keySerializer,
 				metaInfo.getNamespaceSerializer(),
 				metaInfo.getStateSerializer(),
