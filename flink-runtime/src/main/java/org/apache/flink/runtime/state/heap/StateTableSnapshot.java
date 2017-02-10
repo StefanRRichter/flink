@@ -19,7 +19,6 @@
 package org.apache.flink.runtime.state.heap;
 
 import org.apache.flink.api.common.typeutils.TypeSerializer;
-import org.apache.flink.api.java.tuple.Tuple3;
 import org.apache.flink.core.memory.DataOutputView;
 import org.apache.flink.runtime.state.KeyGroupRange;
 import org.apache.flink.runtime.state.KeyGroupRangeAssignment;
@@ -29,7 +28,8 @@ import java.io.IOException;
 
 public class StateTableSnapshot<K, N, S> {
 
-	private Tuple3<K, N, S>[] snapshotData;
+	private StateTable.HashMapEntry<K, N, S>[] snapshotData;
+	private int mapSize;
 
 	private final KeyGroupRange keyGroupRange;
 	private final int totalNumberOfKeyGroups;
@@ -41,7 +41,8 @@ public class StateTableSnapshot<K, N, S> {
 	private int[] keyGroupOffsets;
 
 	public StateTableSnapshot(
-			Tuple3<K, N, S>[] ungroupedDump,
+			StateTable.HashMapEntry<K, N, S>[] ungroupedDump,
+			int mapSize,
 			TypeSerializer<K> keySerializer,
 			TypeSerializer<N> namespaceSerializer,
 			TypeSerializer<S> stateSerializer,
@@ -54,7 +55,7 @@ public class StateTableSnapshot<K, N, S> {
 		this.stateSerializer = Preconditions.checkNotNull(stateSerializer);
 		this.keyGroupRange = Preconditions.checkNotNull(keyGroupRange);
 		this.totalNumberOfKeyGroups = totalNumberOfKeyGroups;
-
+		this.mapSize = mapSize;
 		this.keyGroupOffsets = null;
 	}
 
@@ -64,17 +65,26 @@ public class StateTableSnapshot<K, N, S> {
 			return;
 		}
 
+		StateTable.HashMapEntry<K, N, S>[] unfold = new StateTable.HashMapEntry[mapSize];
+		int pos = 0;
+
+		for (StateTable.HashMapEntry<K, N, S> entry : snapshotData) {
+			while (null != entry) {
+				unfold[pos++] = entry;
+				entry = entry.next;
+			}
+		}
+
 		final int totalKeyGroups = totalNumberOfKeyGroups;
 
-		Tuple3<K, N, S>[] ungroupedIn = snapshotData;
-		Tuple3<K, N, S>[] groupedOut = new Tuple3[ungroupedIn.length];
+		StateTable.HashMapEntry<K, N, S>[] groupedOut = snapshotData;
 
 		int baseKgIdx = keyGroupRange.getStartKeyGroup();
 		int[] histogram = new int[keyGroupRange.getNumberOfKeyGroups() + 1];
 
-		for (Tuple3<K, N, S> t : ungroupedIn) {
+		for (StateTable.HashMapEntry<K, N, S> t : unfold) {
 			int effectiveKgIdx =
-					KeyGroupRangeAssignment.computeKeyGroupForKeyHash(t.f0.hashCode(), totalKeyGroups) - baseKgIdx + 1;
+					KeyGroupRangeAssignment.computeKeyGroupForKeyHash(t.key.hashCode(), totalKeyGroups) - baseKgIdx + 1;
 			++histogram[effectiveKgIdx];
 		}
 
@@ -82,14 +92,13 @@ public class StateTableSnapshot<K, N, S> {
 			histogram[i] += histogram[i - 1];
 		}
 
-		for (Tuple3<K, N, S> t : ungroupedIn) {
+		for (StateTable.HashMapEntry<K, N, S> t : unfold) {
 			int effectiveKgIdx =
-					KeyGroupRangeAssignment.computeKeyGroupForKeyHash(t.f0.hashCode(), totalKeyGroups) - baseKgIdx;
+					KeyGroupRangeAssignment.computeKeyGroupForKeyHash(t.key.hashCode(), totalKeyGroups) - baseKgIdx;
 			groupedOut[histogram[effectiveKgIdx]++] = t;
 		}
 
 		this.keyGroupOffsets = histogram;
-		this.snapshotData = groupedOut;
 	}
 
 	public void writeKeyGroupData(
@@ -100,6 +109,8 @@ public class StateTableSnapshot<K, N, S> {
 			partitionByKeyGroup();
 		}
 
+		final StateTable.HashMapEntry<K, N, S>[] groupedOut = snapshotData;
+
 		int keyGroupOffsetIdx = keyGroupId - keyGroupRange.getStartKeyGroup() - 1;
 		int startOffset = keyGroupOffsetIdx < 0 ? 0 : keyGroupOffsets[keyGroupOffsetIdx];
 		int endOffset = keyGroupOffsets[keyGroupOffsetIdx + 1];
@@ -109,10 +120,10 @@ public class StateTableSnapshot<K, N, S> {
 
 		// write elements
 		for (int i = startOffset; i < endOffset; ++i) {
-			Tuple3<K, N, S> toWrite = snapshotData[i];
-			keySerializer.serialize(toWrite.f0, dov);
-			namespaceSerializer.serialize(toWrite.f1, dov);
-			stateSerializer.serialize(toWrite.f2, dov);
+			StateTable.HashMapEntry<K, N, S> toWrite = groupedOut[i];
+			keySerializer.serialize(toWrite.key, dov);
+			namespaceSerializer.serialize(toWrite.namespace, dov);
+			stateSerializer.serialize(toWrite.state, dov);
 		}
 	}
 }
