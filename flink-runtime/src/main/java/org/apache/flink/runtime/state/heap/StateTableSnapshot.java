@@ -68,25 +68,21 @@ public class StateTableSnapshot<K, N, S> {
 		StateTable.HashMapEntry<K, N, S>[] unfold = new StateTable.HashMapEntry[mapSize];
 		int pos = 0;
 
+		final int totalKeyGroups = totalNumberOfKeyGroups;
+		final int baseKgIdx = keyGroupRange.getStartKeyGroup();
+		final int[] histogram = new int[keyGroupRange.getNumberOfKeyGroups() + 1];
+
 		for (StateTable.HashMapEntry<K, N, S> entry : snapshotData) {
 			while (null != entry) {
+				int effectiveKgIdx =
+						KeyGroupRangeAssignment.computeKeyGroupForKeyHash(entry.key.hashCode(), totalKeyGroups) - baseKgIdx + 1;
+				++histogram[effectiveKgIdx];
 				unfold[pos++] = entry;
 				entry = entry.next;
 			}
 		}
 
-		final int totalKeyGroups = totalNumberOfKeyGroups;
-
 		StateTable.HashMapEntry<K, N, S>[] groupedOut = snapshotData;
-
-		int baseKgIdx = keyGroupRange.getStartKeyGroup();
-		int[] histogram = new int[keyGroupRange.getNumberOfKeyGroups() + 1];
-
-		for (StateTable.HashMapEntry<K, N, S> t : unfold) {
-			int effectiveKgIdx =
-					KeyGroupRangeAssignment.computeKeyGroupForKeyHash(t.key.hashCode(), totalKeyGroups) - baseKgIdx + 1;
-			++histogram[effectiveKgIdx];
-		}
 
 		for (int i = 1; i < histogram.length; ++i) {
 			histogram[i] += histogram[i - 1];
