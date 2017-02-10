@@ -59,28 +59,88 @@ public class TestStateTable {
 		Tuple3<Integer, Integer, ArrayList<Integer>>[] prevSnapshot = null;
 		Tuple3<Integer, Integer, ArrayList<Integer>>[] prevReference = null;
 
+		int val = 0;
+
 		for (int i = 0; i < 100_000; ++i) {
 			int key = rand.nextInt(1000);
 			int namespace = rand.nextInt(10);
-			int val = rand.nextInt();
-
-			ArrayList<Integer> list = map.get(key, namespace);
 			Tuple2<Integer, Integer> compositeKey = new Tuple2<>(key, namespace);
-			ArrayList<Integer> referenceList = referenceMap.get(compositeKey);
-			if (null == list) {
-				Assert.assertNull(referenceList);
-				list = new ArrayList<>();
-				referenceList = new ArrayList<>();
-				map.put(key, namespace, list);
-				referenceMap.put(compositeKey, referenceList);
+
+			int op = rand.nextInt(6);
+
+			if(key == 725 && namespace == 0) {
+				System.out.println();
 			}
-			list.add(val);
-			referenceList.add(val);
 
-			if (i % 5_000 == 0) {
+			ArrayList<Integer> state = null;
+			ArrayList<Integer> ref = null;
+			switch (op) {
+				case 0:
+				case 1: {
+//					System.out.println("get "+compositeKey);
+					state = map.get(key, namespace);
+					ref = referenceMap.get(compositeKey);
+					if (null == state) {
+						state = new ArrayList<>();
+						map.put(key, namespace, state);
+					}
+					if (null == ref) {
+						ref = new ArrayList<>();
+						referenceMap.put(compositeKey, ref);
+					}
+					break;
+				}
+				case 2: {
+//					System.out.println("put "+compositeKey);
+					map.put(key, namespace, new ArrayList<Integer>());
+					referenceMap.put(compositeKey, new ArrayList<Integer>());
+					break;
+				}
+				case 3: {
+//					System.out.println("put & get "+compositeKey);
+					state = map.putAndGetOld(key, namespace, new ArrayList<Integer>());
+					ref = referenceMap.put(compositeKey, new ArrayList<Integer>());
+					break;
+				}
+				case 4: {
+//					System.out.println("remove "+compositeKey);
+					map.remove(key, namespace);
+					referenceMap.remove(compositeKey);
+					break;
+				}
+				case 5: {
+//					System.out.println("remove & get "+compositeKey);
+					state = map.removeAndGetOld(key, namespace);
+					ref = referenceMap.remove(compositeKey);
+					break;
+				}
+				default:
+					throw new IllegalStateException();
+			}
 
-				Assert.assertTrue(deepCompare(snapshot, reference));
-				Assert.assertTrue(deepCompare(prevSnapshot, prevReference));
+			if (state != null) {
+				if(state.size() != ref.size()) {
+					System.out.println(ref+ " vs "+state);
+					throw new IllegalStateException();
+				}
+				if (rand.nextBoolean() && !state.isEmpty()) {
+					state.remove(state.size() - 1);
+					ref.remove(ref.size() - 1);
+				} else {
+					state.add(val);
+					ref.add(val);
+					++val;
+				}
+			}
+
+			if (i > 0 && i % 1_000 == 0) {
+
+				if(snapshot != null) {
+					Assert.assertTrue(deepCompare(snapshot, reference));
+				}
+				if(prevSnapshot != null) {
+					Assert.assertTrue(deepCompare(prevSnapshot, prevReference));
+				}
 
 				prevSnapshot = snapshot;
 				prevReference = reference;
