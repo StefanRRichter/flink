@@ -345,6 +345,7 @@ public class StateTable<K, N, S> implements Iterable<StateTableEntry<K, N, S>> {
 		if (oldCapacity == MAXIMUM_CAPACITY) {
 			return oldTable;
 		}
+
 		int newCapacity = oldCapacity * 2;
 		HashMapEntry<K, N, S>[] newTable = makeTable(newCapacity);
 		if (size == 0) {
@@ -624,8 +625,13 @@ public class StateTable<K, N, S> implements Iterable<StateTableEntry<K, N, S>> {
 	}
 
 	private static int secondaryHash(Object key, Object namespace) {
-		int h = (31 * key.hashCode() + namespace.hashCode());
-		return h ^ (h >>> 16);
+		int code = key.hashCode();
+		code ^= code >>> 16;
+		code *= 0x85ebca6b;
+		code ^= code >>> 13;
+		code *= 0xc2b2ae35;
+		code ^= code >>> 16;
+		return code ^ namespace.hashCode();
 	}
 
 	@Override
