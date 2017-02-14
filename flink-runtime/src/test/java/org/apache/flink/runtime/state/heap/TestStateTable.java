@@ -68,10 +68,6 @@ public class TestStateTable {
 
 			int op = rand.nextInt(6);
 
-			if(key == 725 && namespace == 0) {
-				System.out.println();
-			}
-
 			ArrayList<Integer> state = null;
 			ArrayList<Integer> ref = null;
 			switch (op) {
@@ -81,10 +77,11 @@ public class TestStateTable {
 					state = map.get(key, namespace);
 					ref = referenceMap.get(compositeKey);
 					if (null == state) {
+						if (null != ref) {
+							throw new IllegalStateException();
+						}
 						state = new ArrayList<>();
 						map.put(key, namespace, state);
-					}
-					if (null == ref) {
 						ref = new ArrayList<>();
 						referenceMap.put(compositeKey, ref);
 					}
@@ -116,6 +113,10 @@ public class TestStateTable {
 				}
 				default:
 					throw new IllegalStateException();
+			}
+
+			if(map.size() != referenceMap.size()) {
+				throw new IllegalStateException();
 			}
 
 			if (state != null) {

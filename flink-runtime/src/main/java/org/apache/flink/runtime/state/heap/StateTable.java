@@ -33,7 +33,7 @@ import java.util.NoSuchElementException;
 /**
  * Basis for Flink's in-memory state tables with copy-on-write support. This map does not support null values for
  * key or namespace.
- *
+ * <p>
  * This class was originally based on the {@link java.util.HashMap} implementation of the Android JDK.
  *
  * @param <K> type of key
@@ -71,12 +71,12 @@ public class StateTable<K, N, S> implements Iterable<StateTableEntry<K, N, S>> {
 	/**
 	 * The hash table.
 	 */
-	HashMapEntry<K, N, S>[] table;
+	final HashMapEntry<K, N, S>[][] tables;
 
 	/**
 	 * The number of mappings in this hash map.
 	 */
-	int size;
+	final int[] size;
 
 	/**
 	 * Incremented by "structural modifications" to allow (best effort)
@@ -130,14 +130,13 @@ public class StateTable<K, N, S> implements Iterable<StateTableEntry<K, N, S>> {
 
 		this.metaInfo = Preconditions.checkNotNull(metaInfo);
 		this.mapVersion = 0;
+		this.tables = new HashMapEntry[][]{EMPTY_TABLE, EMPTY_TABLE};
+		this.size = new int[2];
 
 		if (capacity < 0) {
 			throw new IllegalArgumentException("Capacity: " + capacity);
 		}
 		if (capacity == 0) {
-			@SuppressWarnings("unchecked")
-			HashMapEntry<K, N, S>[] tab = (HashMapEntry<K, N, S>[]) EMPTY_TABLE;
-			table = tab;
 			threshold = -1; // Forces first put() to replace EMPTY_TABLE
 			return;
 		}
@@ -148,7 +147,7 @@ public class StateTable<K, N, S> implements Iterable<StateTableEntry<K, N, S>> {
 		} else {
 			capacity = MathUtils.roundUpToPowerOfTwo(capacity);
 		}
-		makeTable(capacity);
+		makeTable(capacity, 0);
 	}
 
 	/**
@@ -157,7 +156,7 @@ public class StateTable<K, N, S> implements Iterable<StateTableEntry<K, N, S>> {
 	 *
 	 * @param capacity   the initial capacity of this hash map.
 	 * @param loadFactor the initial load factor.
-	 * @param metaInfo the meta information, including the type serializer for state copy-on-write.
+	 * @param metaInfo   the meta information, including the type serializer for state copy-on-write.
 	 * @throws IllegalArgumentException when the capacity is less than zero or the load factor is
 	 *                                  less or equal to zero or NaN.
 	 */
@@ -185,7 +184,7 @@ public class StateTable<K, N, S> implements Iterable<StateTableEntry<K, N, S>> {
 	 * @see #size()
 	 */
 	public boolean isEmpty() {
-		return size == 0;
+		return size() == 0;
 	}
 
 	/**
@@ -194,13 +193,13 @@ public class StateTable<K, N, S> implements Iterable<StateTableEntry<K, N, S>> {
 	 * @return the number of elements in this map.
 	 */
 	public int size() {
-		return size;
+		return size[0] + size[1];
 	}
 
 	/**
 	 * Returns the value of the mapping with the specified key/namespace composite key.
 	 *
-	 * @param key the key.
+	 * @param key       the key.
 	 * @param namespace the namespace.
 	 * @return the value of the mapping with the specified key/namespace composite key, or {@code null}
 	 * if no mapping for the specified key is found.
@@ -210,13 +209,15 @@ public class StateTable<K, N, S> implements Iterable<StateTableEntry<K, N, S>> {
 		assert (null != key && null != namespace);
 
 		int hash = secondaryHash(key, namespace);
-		HashMapEntry<K, N, S>[] tab = table;
-		for (HashMapEntry<K, N, S> e = tab[hash & (tab.length - 1)]; e != null; e = e.next) {
-			K eKey = e.key;
-			N eNamespace = e.namespace;
-			if ((e.hash == hash && key.equals(eKey) && namespace.equals(eNamespace))) {
-				// copy-on-access if we are on an old version
-				return e.getStateCopyOnAccess(mapVersion, getStateSerializer());
+		for (int i = 0; i <= 1; ++i) {
+			HashMapEntry<K, N, S>[] tab = tables[i];
+			for (HashMapEntry<K, N, S> e = tab[hash & (tab.length - 1)]; e != null; e = e.next) {
+				K eKey = e.key;
+				N eNamespace = e.namespace;
+				if ((e.hash == hash && key.equals(eKey) && namespace.equals(eNamespace))) {
+					// copy-on-access if we are on an old version
+					return e.getStateCopyOnAccess(mapVersion, getStateSerializer());
+				}
 			}
 		}
 		return null;
@@ -225,7 +226,7 @@ public class StateTable<K, N, S> implements Iterable<StateTableEntry<K, N, S>> {
 	/**
 	 * Returns whether this map contains the specified key/namespace composite key.
 	 *
-	 * @param key the key in the composite key to search for.
+	 * @param key       the key in the composite key to search for.
 	 * @param namespace the namespace in the composite key to search for.
 	 * @return {@code true} if this map contains the specified key/namespace composite key,
 	 * {@code false} otherwise.
@@ -234,13 +235,19 @@ public class StateTable<K, N, S> implements Iterable<StateTableEntry<K, N, S>> {
 
 		assert (null != key && null != namespace);
 
+		if (isRehashing()) {
+			incrementalRehash();
+		}
+
 		int hash = secondaryHash(key, namespace);
-		HashMapEntry<K, N, S>[] tab = table;
-		for (HashMapEntry<K, N, S> e = tab[hash & (tab.length - 1)]; e != null; e = e.next) {
-			K eKey = e.key;
-			N eNamespace = e.namespace;
-			if ((e.hash == hash && key.equals(eKey) && namespace.equals(eNamespace))) {
-				return true;
+		for (int i = 0; i <= 1; ++i) {
+			HashMapEntry<K, N, S>[] tab = tables[i];
+			for (HashMapEntry<K, N, S> e = tab[hash & (tab.length - 1)]; e != null; e = e.next) {
+				K eKey = e.key;
+				N eNamespace = e.namespace;
+				if ((e.hash == hash && key.equals(eKey) && namespace.equals(eNamespace))) {
+					return true;
+				}
 			}
 		}
 		return false;
@@ -249,9 +256,9 @@ public class StateTable<K, N, S> implements Iterable<StateTableEntry<K, N, S>> {
 	/**
 	 * Maps the specified key/namespace composite key to the specified value.
 	 *
-	 * @param key the key.
+	 * @param key       the key.
 	 * @param namespace the namespace.
-	 * @param value the value.
+	 * @param value     the value.
 	 * @return the value of any previous mapping with the specified key or
 	 * {@code null} if there was no such mapping.
 	 */
@@ -259,29 +266,35 @@ public class StateTable<K, N, S> implements Iterable<StateTableEntry<K, N, S>> {
 
 		assert (null != key && null != namespace);
 
+		if (isRehashing()) {
+			incrementalRehash();
+		}
+
 		int hash = secondaryHash(key, namespace);
-		HashMapEntry<K, N, S>[] tab = table;
-		int index = hash & (tab.length - 1);
-		for (HashMapEntry<K, N, S> e = tab[index]; e != null; e = e.next) {
-			if (e.hash == hash && key.equals(e.key) && namespace.equals(e.namespace)) {
-				e.setState(value, mapVersion);
-				return;
+		for (int i = 0; i <= 1; ++i) {
+			HashMapEntry<K, N, S>[] tab = tables[i];
+			int index = hash & (tab.length - 1);
+			for (HashMapEntry<K, N, S> e = tab[index]; e != null; e = e.next) {
+				if (e.hash == hash && key.equals(e.key) && namespace.equals(e.namespace)) {
+					e.setState(value, mapVersion);
+					return;
+				}
 			}
 		}
-		modCount++;
-		if (size++ > threshold) {
-			tab = doubleCapacity();
-			index = hash & (tab.length - 1);
+		++modCount;
+		if (size() > threshold) { //TODO size of master table is actually enough if we ensure no rehash during a rehash
+			doubleCapacity();
 		}
-		addNewEntry(key, namespace, value, hash, index);
+		int insertTabIdx = !isRehashing() ? 0 : 1;
+		addNewEntry(insertTabIdx, key, namespace, value, hash);
 	}
 
 	/**
 	 * Maps the specified key/namespace composite key to the specified value.
 	 *
-	 * @param key the key.
+	 * @param key       the key.
 	 * @param namespace the namespace.
-	 * @param value the value.
+	 * @param value     the value.
 	 * @return the value of any previous mapping with the specified key or
 	 * {@code null} if there was no such mapping.
 	 */
@@ -289,26 +302,33 @@ public class StateTable<K, N, S> implements Iterable<StateTableEntry<K, N, S>> {
 
 		assert (null != key && null != namespace);
 
+		if (isRehashing()) {
+			incrementalRehash();
+		}
+
 		int hash = secondaryHash(key, namespace);
-		HashMapEntry<K, N, S>[] tab = table;
-		int index = hash & (tab.length - 1);
-		for (HashMapEntry<K, N, S> e = tab[index]; e != null; e = e.next) {
-			if (e.hash == hash && key.equals(e.key) && namespace.equals(e.namespace)) {
-				S oldState = e.getStateCopyOnAccess(mapVersion, getStateSerializer());
-				e.state = value;
-				return oldState;
+
+		for (int i = 0; i <= 1; ++i) {
+			HashMapEntry<K, N, S>[] tab = tables[i];
+			int index = hash & (tab.length - 1);
+			for (HashMapEntry<K, N, S> e = tab[index]; e != null; e = e.next) {
+				if (e.hash == hash && key.equals(e.key) && namespace.equals(e.namespace)) {
+					S oldState = e.getStateCopyOnAccess(mapVersion, getStateSerializer());
+					e.state = value;
+					return oldState;
+				}
 			}
 		}
-		modCount++;
-		if (size++ > threshold) {
-			tab = doubleCapacity();
-			index = hash & (tab.length - 1);
+		++modCount;
+		if (size() > threshold) { //TODO size of master table is actually enough if we ensure no rehash during a rehash
+			doubleCapacity();
 		}
-		addNewEntry(key, namespace, value, hash, index);
+		int insertTabIdx = !isRehashing() ? 0 : 1;
+		addNewEntry(insertTabIdx, key, namespace, value, hash);
 		return null;
 	}
 
-	void addNewEntry(K key, N namespace, S value, int hash, int index) {
+	void addNewEntry(int tabIdx, K key, N namespace, S value, int hash) {
 
 		// small optimization that aims to avoid holding references on duplicate namespace objects
 		if (namespace.equals(lastNamespace)) {
@@ -317,7 +337,11 @@ public class StateTable<K, N, S> implements Iterable<StateTableEntry<K, N, S>> {
 			lastNamespace = namespace;
 		}
 
-		table[index] = new HashMapEntry<>(key, namespace, value, hash, table[index], mapVersion);
+		HashMapEntry<K, N, S>[] insertTable = tables[tabIdx];
+		int index = hash & (insertTable.length - 1);
+		insertTable[index] = new HashMapEntry<>(key, namespace, value, hash, insertTable[index], mapVersion);
+
+		++size[tabIdx];
 	}
 
 	/**
@@ -325,12 +349,11 @@ public class StateTable<K, N, S> implements Iterable<StateTableEntry<K, N, S>> {
 	 *
 	 * @param newCapacity must be a power of two
 	 */
-	private HashMapEntry<K, N, S>[] makeTable(int newCapacity) {
+	private void makeTable(int newCapacity, int tableIdx) {
 		@SuppressWarnings("unchecked") HashMapEntry<K, N, S>[] newTable
 				= (HashMapEntry<K, N, S>[]) new HashMapEntry[newCapacity];
-		table = newTable;
+		tables[tableIdx] = newTable;
 		threshold = (newCapacity >> 1) + (newCapacity >> 2); // 3/4 capacity
-		return newTable;
 	}
 
 	/**
@@ -339,53 +362,63 @@ public class StateTable<K, N, S> implements Iterable<StateTableEntry<K, N, S>> {
 	 * MAXIMUM_CAPACITY, this method is a no-op. Returns the table, which
 	 * will be new unless we were already at MAXIMUM_CAPACITY.
 	 */
-	private HashMapEntry<K, N, S>[] doubleCapacity() {
-		HashMapEntry<K, N, S>[] oldTable = table;
+	private void doubleCapacity() {
+
+		Preconditions.checkState(!isRehashing());
+
+		HashMapEntry<K, N, S>[] oldTable = tables[0];
+
 		int oldCapacity = oldTable.length;
+
 		if (oldCapacity == MAXIMUM_CAPACITY) {
-			return oldTable;
+			return;
 		}
 
 		int newCapacity = oldCapacity * 2;
-		HashMapEntry<K, N, S>[] newTable = makeTable(newCapacity);
-		if (size == 0) {
-			return newTable;
-		}
-		for (int j = 0; j < oldCapacity; j++) {
-			/*
-			* Rehash the bucket using the minimum number of field writes.
-			* This is the most subtle and delicate code in the class.
-			*/
-			HashMapEntry<K, N, S> e = oldTable[j];
-			if (e == null) {
-				continue;
-			}
-			int highBit = e.hash & oldCapacity;
-			HashMapEntry<K, N, S> broken = null;
-			newTable[j | highBit] = e;
-			for (HashMapEntry<K, N, S> n = e.next; n != null; e = n, n = n.next) {
-				int nextHighBit = n.hash & oldCapacity;
-				if (nextHighBit != highBit) {
-					if (broken == null) {
-						newTable[j | nextHighBit] = n;
-					} else {
-						broken.next = n;
-					}
-					broken = e;
-					highBit = nextHighBit;
-				}
-			}
-			if (broken != null) {
-				broken.next = null;
-			}
-		}
-		return newTable;
+		makeTable(newCapacity, 1);
+//		if (size() == 0) {
+//			return newTable;
+//		}
+//		for (int j = 0; j < oldCapacity; j++) {
+//			/*
+//			* Rehash the bucket using the minimum number of field writes.
+//			* This is the most subtle and delicate code in the class.
+//			*/
+//			HashMapEntry<K, N, S> e = oldTable[j];
+//			if (e == null) {
+//				continue;
+//			}
+//			int highBit = e.hash & oldCapacity;
+//			HashMapEntry<K, N, S> broken = null;
+//			newTable[j | highBit] = e;
+//			for (HashMapEntry<K, N, S> n = e.next; n != null; e = n, n = n.next) {
+//				int nextHighBit = n.hash & oldCapacity;
+//				if (nextHighBit != highBit) {
+//					if (broken == null) {
+//						newTable[j | nextHighBit] = n;
+//					} else {
+//						broken.next = n;
+//					}
+//					broken = e;
+//					highBit = nextHighBit;
+//				}
+//			}
+//			if (broken != null) {
+//				broken.next = null;
+//			}
+//		}
+//		return newTable;
+	}
+
+	private boolean isRehashing() {
+		// if we rehash, the secondary table is not empty
+		return tables[1] != EMPTY_TABLE;
 	}
 
 	/**
 	 * Removes the mapping with the specified key/namespace composite key from this map.
 	 *
-	 * @param key the key of the mapping to remove.
+	 * @param key       the key of the mapping to remove.
 	 * @param namespace the namespace of the mapping to remove.
 	 * @return the value of the removed mapping or {@code null} if no mapping
 	 * for the specified key was found.
@@ -394,18 +427,25 @@ public class StateTable<K, N, S> implements Iterable<StateTableEntry<K, N, S>> {
 
 		assert (null != key && null != namespace);
 
+		if (isRehashing()) {
+			incrementalRehash();
+		}
+
 		int hash = secondaryHash(key, namespace);
-		HashMapEntry<K, N, S>[] tab = table;
-		int index = hash & (tab.length - 1);
-		for (HashMapEntry<K, N, S> e = tab[index], prev = null; e != null; prev = e, e = e.next) {
-			if (e.hash == hash && key.equals(e.key) && namespace.equals(e.namespace)) {
-				if (prev == null) {
-					tab[index] = e.next;
-				} else {
-					prev.next = e.next;
+		for (int i = 0; i <= 1; ++i) {
+			HashMapEntry<K, N, S>[] tab = tables[i];
+			int index = hash & (tab.length - 1);
+			for (HashMapEntry<K, N, S> e = tab[index], prev = null; e != null; prev = e, e = e.next) {
+				if (e.hash == hash && key.equals(e.key) && namespace.equals(e.namespace)) {
+					if (prev == null) {
+						tab[index] = e.next;
+					} else {
+						prev.next = e.next;
+					}
+					++modCount;
+					--size[i];
+					return;
 				}
-				modCount++;
-				size--;
 			}
 		}
 	}
@@ -422,19 +462,25 @@ public class StateTable<K, N, S> implements Iterable<StateTableEntry<K, N, S>> {
 
 		assert (null != key && null != namespace);
 
+		if (isRehashing()) {
+			incrementalRehash();
+		}
+
 		int hash = secondaryHash(key, namespace);
-		HashMapEntry<K, N, S>[] tab = table;
-		int index = hash & (tab.length - 1);
-		for (HashMapEntry<K, N, S> e = tab[index], prev = null; e != null; prev = e, e = e.next) {
-			if (e.hash == hash && key.equals(e.key) && namespace.equals(e.namespace)) {
-				if (prev == null) {
-					tab[index] = e.next;
-				} else {
-					prev.next = e.next;
+		for (int i = 0; i <= 1; ++i) {
+			HashMapEntry<K, N, S>[] tab = tables[i];
+			int index = hash & (tab.length - 1);
+			for (HashMapEntry<K, N, S> e = tab[index], prev = null; e != null; prev = e, e = e.next) {
+				if (e.hash == hash && key.equals(e.key) && namespace.equals(e.namespace)) {
+					if (prev == null) {
+						tab[index] = e.next;
+					} else {
+						prev.next = e.next;
+					}
+					++modCount;
+					--size[i];
+					return e.getStateCopyOnAccess(mapVersion, getStateSerializer());
 				}
-				modCount++;
-				size--;
-				return e.getStateCopyOnAccess(mapVersion, getStateSerializer());
 			}
 		}
 		return null;
@@ -447,15 +493,65 @@ public class StateTable<K, N, S> implements Iterable<StateTableEntry<K, N, S>> {
 	 * @see #size
 	 */
 	public void clear() {
-		if (size != 0) {
-			Arrays.fill(table, null);
-			modCount++;
-			size = 0;
+
+		if (size[0] != 0) {
+			size[0] = 0;
+			Arrays.fill(tables[0], null);
 		}
+
+		tables[1] = EMPTY_TABLE;
+		size[1] = 0;
+
+		++modCount;
+	}
+
+	int rehashPos = 0;
+
+	private void incrementalRehash() {
+
+		HashMapEntry<K, N, S>[] oldTable = tables[0];
+		HashMapEntry<K, N, S>[] newTable = tables[1];
+
+		int oldCapacity = oldTable.length;
+		int newMask = newTable.length - 1;
+
+		int j = rehashPos;
+		int transfered = 0;
+		while (transfered < 8) {
+			/*
+			* Rehash the bucket using the minimum number of field writes.
+			* This is the most subtle and delicate code in the class.
+			*/
+			HashMapEntry<K, N, S> e = oldTable[j];
+			oldTable[j] = null; //TODO just let it be there for faster find?
+
+			while (e != null) {
+				HashMapEntry<K, N, S> n = e.next;
+				int pos = e.hash & newMask;
+				e.next = newTable[pos];
+				newTable[pos] = e;
+				e = n;
+				++transfered;
+			}
+
+			if (++j == oldCapacity) {
+				tables[0] = newTable;
+				tables[1] = EMPTY_TABLE;
+				size[0] += size[1];
+				size[1] = 0;
+				rehashPos = 0;
+				return;
+			}
+		}
+
+		size[0] -= transfered;
+		size[1] += transfered;
+		rehashPos = j;
 	}
 
 	/**
 	 * Creates a dense snapshot of the hashmap
+	 *
 	 * @return a dense snapshot of the hashmap
 	 */
 	public Tuple3<K, N, S>[] snapshotDump() {
@@ -463,10 +559,13 @@ public class StateTable<K, N, S> implements Iterable<StateTableEntry<K, N, S>> {
 		Tuple3<K, N, S>[] dump = new Tuple3[size()];
 		int pos = 0;
 
-		for (HashMapEntry<K, N, S> entry : table) {
-			while (null != entry) {
-				dump[pos++] = new Tuple3<>(entry.getKey(), entry.getNamespace(), entry.getState());
-				entry = entry.next;
+		for (int i = 0; i <= 1; ++i) {
+			HashMapEntry<K, N, S>[] tab = tables[i];
+			for (HashMapEntry<K, N, S> entry : tab) {
+				while (null != entry) {
+					dump[pos++] = new Tuple3<>(entry.getKey(), entry.getNamespace(), entry.getState());
+					entry = entry.next;
+				}
 			}
 		}
 
@@ -579,6 +678,7 @@ public class StateTable<K, N, S> implements Iterable<StateTableEntry<K, N, S>> {
 
 	private class HashIterator implements Iterator<StateTableEntry<K, N, S>> {
 
+		int tabIdx;
 		int nextIndex;
 		HashMapEntry<K, N, S> nextEntry;
 		int expectedModCount = modCount;
@@ -586,12 +686,24 @@ public class StateTable<K, N, S> implements Iterable<StateTableEntry<K, N, S>> {
 		HashIterator() {
 			this.expectedModCount = modCount;
 			this.nextIndex = 0;
+			this.tabIdx = 0;
 
-			HashMapEntry<K, N, S>[] tab = table;
+			HashMapEntry<K, N, S>[] tab = tables[0];
 			HashMapEntry<K, N, S> next = null;
+
 			while (next == null && nextIndex < tab.length) {
 				next = tab[nextIndex++];
 			}
+
+			if (next == null) {
+				tabIdx = 1;
+				tab = tables[1];
+				nextIndex = 0;
+				while (next == null && nextIndex < tab.length) {
+					next = tab[nextIndex++];
+				}
+			}
+
 			nextEntry = next;
 		}
 
@@ -609,9 +721,18 @@ public class StateTable<K, N, S> implements Iterable<StateTableEntry<K, N, S>> {
 				throw new NoSuchElementException();
 			}
 			HashMapEntry<K, N, S> entryToReturn = nextEntry;
-			HashMapEntry<K, N, S>[] tab = table;
+			HashMapEntry<K, N, S>[] tab = tables[tabIdx];
 			HashMapEntry<K, N, S> next = entryToReturn.next;
-			while (next == null && nextIndex < tab.length) {
+			while (next == null) {
+				if (nextIndex < tab.length) {
+					if (tabIdx < 1) {
+						tabIdx = 1;
+						tab = tables[1];
+						nextIndex = 0;
+					} else {
+						break;
+					}
+				}
 				next = tab[nextIndex++];
 			}
 			nextEntry = next;
@@ -639,17 +760,20 @@ public class StateTable<K, N, S> implements Iterable<StateTableEntry<K, N, S>> {
 		String initial = "VersionedHashMap{";
 		StringBuilder sb = new StringBuilder(initial);
 		boolean separatorRequired = false;
-		for (HashMapEntry<K, N, S> entry : table) {
-			while (null != entry) {
+		for (int i = 0; i <= 1; ++i) {
+			HashMapEntry<K, N, S>[] tab = tables[i];
+			for (HashMapEntry<K, N, S> entry : tab) {
+				while (null != entry) {
 
-				if (separatorRequired) {
-					sb.append(", ");
-				} else {
-					separatorRequired = true;
+					if (separatorRequired) {
+						sb.append(", ");
+					} else {
+						separatorRequired = true;
+					}
+
+					sb.append(entry.toString());
+					entry = entry.next;
 				}
-
-				sb.append(entry.toString());
-				entry = entry.next;
 			}
 		}
 		sb.append('}');
