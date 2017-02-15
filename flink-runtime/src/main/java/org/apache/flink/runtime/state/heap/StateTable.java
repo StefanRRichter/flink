@@ -90,6 +90,11 @@ public class StateTable<K, N, S> implements Iterable<StateTableEntry<K, N, S>> {
 	int mapVersion;
 
 	/**
+	 * The highest version of this map that is still required by a snapshot.
+	 */
+	int highestRequiredSnapshotVersion;
+
+	/**
 	 * The table is rehashed when its size exceeds this threshold.
 	 * The value of this field is generally .75 * capacity, except when
 	 * the capacity is zero, as described in the EMPTY_TABLE declaration
@@ -130,6 +135,7 @@ public class StateTable<K, N, S> implements Iterable<StateTableEntry<K, N, S>> {
 
 		this.metaInfo = Preconditions.checkNotNull(metaInfo);
 		this.mapVersion = 0;
+		this.highestRequiredSnapshotVersion = mapVersion;
 		this.tables = new HashMapEntry[][]{EMPTY_TABLE, EMPTY_TABLE};
 		this.size = new int[2];
 
@@ -216,7 +222,7 @@ public class StateTable<K, N, S> implements Iterable<StateTableEntry<K, N, S>> {
 				N eNamespace = e.namespace;
 				if ((e.hash == hash && key.equals(eKey) && namespace.equals(eNamespace))) {
 					// copy-on-access if we are on an old version
-					return e.getStateCopyOnAccess(mapVersion, getStateSerializer());
+					return e.getStateCopyOnAccess(highestRequiredSnapshotVersion, getStateSerializer());
 				}
 			}
 		}
@@ -313,7 +319,7 @@ public class StateTable<K, N, S> implements Iterable<StateTableEntry<K, N, S>> {
 			int index = hash & (tab.length - 1);
 			for (HashMapEntry<K, N, S> e = tab[index]; e != null; e = e.next) {
 				if (e.hash == hash && key.equals(e.key) && namespace.equals(e.namespace)) {
-					S oldState = e.getStateCopyOnAccess(mapVersion, getStateSerializer());
+					S oldState = e.getStateCopyOnAccess(highestRequiredSnapshotVersion, getStateSerializer());
 					e.state = value;
 					return oldState;
 				}
@@ -376,38 +382,6 @@ public class StateTable<K, N, S> implements Iterable<StateTableEntry<K, N, S>> {
 
 		int newCapacity = oldCapacity * 2;
 		makeTable(newCapacity, 1);
-//		if (size() == 0) {
-//			return newTable;
-//		}
-//		for (int j = 0; j < oldCapacity; j++) {
-//			/*
-//			* Rehash the bucket using the minimum number of field writes.
-//			* This is the most subtle and delicate code in the class.
-//			*/
-//			HashMapEntry<K, N, S> e = oldTable[j];
-//			if (e == null) {
-//				continue;
-//			}
-//			int highBit = e.hash & oldCapacity;
-//			HashMapEntry<K, N, S> broken = null;
-//			newTable[j | highBit] = e;
-//			for (HashMapEntry<K, N, S> n = e.next; n != null; e = n, n = n.next) {
-//				int nextHighBit = n.hash & oldCapacity;
-//				if (nextHighBit != highBit) {
-//					if (broken == null) {
-//						newTable[j | nextHighBit] = n;
-//					} else {
-//						broken.next = n;
-//					}
-//					broken = e;
-//					highBit = nextHighBit;
-//				}
-//			}
-//			if (broken != null) {
-//				broken.next = null;
-//			}
-//		}
-//		return newTable;
 	}
 
 	private boolean isRehashing() {
@@ -479,7 +453,7 @@ public class StateTable<K, N, S> implements Iterable<StateTableEntry<K, N, S>> {
 					}
 					++modCount;
 					--size[i];
-					return e.getStateCopyOnAccess(mapVersion, getStateSerializer());
+					return e.getStateCopyOnAccess(highestRequiredSnapshotVersion, getStateSerializer());
 				}
 			}
 		}
@@ -516,14 +490,14 @@ public class StateTable<K, N, S> implements Iterable<StateTableEntry<K, N, S>> {
 		int newMask = newTable.length - 1;
 
 		int j = rehashPos;
-		int transfered = 0;
-		while (transfered < 8) {
+		int transferred = 0;
+		while (transferred < 8) {
 			/*
 			* Rehash the bucket using the minimum number of field writes.
 			* This is the most subtle and delicate code in the class.
 			*/
 			HashMapEntry<K, N, S> e = oldTable[j];
-			oldTable[j] = null; //TODO just let it be there for faster find?
+			oldTable[j] = null;
 
 			while (e != null) {
 				HashMapEntry<K, N, S> n = e.next;
@@ -531,10 +505,11 @@ public class StateTable<K, N, S> implements Iterable<StateTableEntry<K, N, S>> {
 				e.next = newTable[pos];
 				newTable[pos] = e;
 				e = n;
-				++transfered;
+				++transferred;
 			}
 
 			if (++j == oldCapacity) {
+				//rehash complete
 				tables[0] = newTable;
 				tables[1] = EMPTY_TABLE;
 				size[0] += size[1];
@@ -544,8 +519,8 @@ public class StateTable<K, N, S> implements Iterable<StateTableEntry<K, N, S>> {
 			}
 		}
 
-		size[0] -= transfered;
-		size[1] += transfered;
+		size[0] -= transferred;
+		size[1] += transferred;
 		rehashPos = j;
 	}
 
@@ -554,7 +529,7 @@ public class StateTable<K, N, S> implements Iterable<StateTableEntry<K, N, S>> {
 	 *
 	 * @return a dense snapshot of the hashmap
 	 */
-	public Tuple3<K, N, S>[] snapshotDump() {
+	public Tuple3<K, N, S>[] snapshotDump() {//TODO return snapshot version
 
 		Tuple3<K, N, S>[] dump = new Tuple3[size()];
 		int pos = 0;
@@ -571,7 +546,14 @@ public class StateTable<K, N, S> implements Iterable<StateTableEntry<K, N, S>> {
 
 		// increase the map version for CoW
 		++mapVersion;
+		highestRequiredSnapshotVersion = mapVersion;
 		return dump;
+	}
+
+	public void releaseSnapshot(int snapshotVersion) {
+		if (snapshotVersion == highestRequiredSnapshotVersion) {
+			highestRequiredSnapshotVersion = 0;
+		}
 	}
 
 	@Override
@@ -621,9 +603,10 @@ public class StateTable<K, N, S> implements Iterable<StateTableEntry<K, N, S>> {
 			return namespace;
 		}
 
-		public final S getStateCopyOnAccess(int mapVersion, TypeSerializer<S> copySerializer) {
-			if (version != mapVersion) {
-				version = mapVersion;
+		public final S getStateCopyOnAccess(int expectedVersion, TypeSerializer<S> copySerializer) {
+			if (version < expectedVersion) {
+				// if our version does not meet the required version, we perform a copy and bump the version
+				version = expectedVersion;
 				state = copySerializer.copy(state);
 			}
 			return state;
@@ -746,13 +729,13 @@ public class StateTable<K, N, S> implements Iterable<StateTableEntry<K, N, S>> {
 	}
 
 	private static int secondaryHash(Object key, Object namespace) {
-		int code = key.hashCode();
+		int code = key.hashCode() ^ namespace.hashCode();
 		code ^= code >>> 16;
 		code *= 0x85ebca6b;
 		code ^= code >>> 13;
 		code *= 0xc2b2ae35;
 		code ^= code >>> 16;
-		return code ^ namespace.hashCode();
+		return code;
 	}
 
 	@Override

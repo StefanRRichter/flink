@@ -56,12 +56,13 @@ public class TestStateTable {
 
 		Tuple3<Integer, Integer, ArrayList<Integer>>[] snapshot = null;
 		Tuple3<Integer, Integer, ArrayList<Integer>>[] reference = null;
-		Tuple3<Integer, Integer, ArrayList<Integer>>[] prevSnapshot = null;
-		Tuple3<Integer, Integer, ArrayList<Integer>>[] prevReference = null;
+//		Tuple3<Integer, Integer, ArrayList<Integer>>[] prevSnapshot = null;
+//		Tuple3<Integer, Integer, ArrayList<Integer>>[] prevReference = null;
 
 		int val = 0;
+		int snapshotId = 0;
 
-		for (int i = 0; i < 100_000; ++i) {
+		for (int i = 0; i < 500_000; ++i) {
 			int key = rand.nextInt(1000);
 			int namespace = rand.nextInt(10);
 			Tuple2<Integer, Integer> compositeKey = new Tuple2<>(key, namespace);
@@ -135,19 +136,16 @@ public class TestStateTable {
 			}
 
 			if (i > 0 && i % 1_000 == 0) {
-
-				if(snapshot != null) {
+				if (snapshot != null) {
 					Assert.assertTrue(deepCompare(snapshot, reference));
+					snapshot = null;
+					reference = null;
+					map.releaseSnapshot(snapshotId);
+				} else {
+					++snapshotId;
+					snapshot = map.snapshotDump();
+					reference = manualDeepDump(referenceMap);
 				}
-				if(prevSnapshot != null) {
-					Assert.assertTrue(deepCompare(prevSnapshot, prevReference));
-				}
-
-				prevSnapshot = snapshot;
-				prevReference = reference;
-
-				snapshot = map.snapshotDump();
-				reference = manualDeepDump(referenceMap);
 			}
 		}
 	}
