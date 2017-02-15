@@ -19,7 +19,6 @@
 package org.apache.flink.runtime.state.heap;
 
 import org.apache.flink.api.common.typeutils.TypeSerializer;
-import org.apache.flink.api.java.tuple.Tuple3;
 import org.apache.flink.runtime.state.KeyGroupRange;
 import org.apache.flink.runtime.state.RegisteredBackendStateMetaInfo;
 import org.apache.flink.util.MathUtils;
@@ -225,7 +224,7 @@ public class StateTable<K, N, S> implements Iterable<StateTableEntry<K, N, S>> {
 			incrementalRehash();
 		}
 
-		final int globalVersion = sna;
+		final int globalVersion = highestRequiredSnapshotVersion;
 		HashMapEntry<K, N, S>[] tab = tables[0];
 		int hash = secondaryHash(key, namespace);
 		int index = hash & (tab.length - 1);
@@ -243,7 +242,7 @@ public class StateTable<K, N, S> implements Iterable<StateTableEntry<K, N, S>> {
 				// copy-on-access if we are on an old version
 				if (e.stateVersion < globalVersion) {
 					if (e.entryVersion < globalVersion) {
-						e = handleEntryChainMultiVersioning(hash & (tab.length - 1), e);
+						e = handleEntryChainMultiVersioning(tab, hash & (tab.length - 1), e);
 					}
 					e.stateVersion = mapVersion;
 					e.state = getStateSerializer().copy(e.state);
@@ -256,16 +255,15 @@ public class StateTable<K, N, S> implements Iterable<StateTableEntry<K, N, S>> {
 		return null;
 	}
 
-	private HashMapEntry<K, N, S> handleEntryChainMultiVersioning(int tableIdx, HashMapEntry<K, N, S> untilEntry) {
+	private HashMapEntry<K, N, S> handleEntryChainMultiVersioning(HashMapEntry<K, N, S>[] tab, int tableIdx, HashMapEntry<K, N, S> untilEntry) {
 
-		final int globalVersion = mapVersion;
-		final HashMapEntry<K, N, S>[] tab = table;
+		final int required = highestRequiredSnapshotVersion;
 
 		HashMapEntry<K, N, S> current = tab[tableIdx];
 		HashMapEntry<K, N, S> copy;
 
-		if (current.entryVersion != globalVersion) {
-			copy = new HashMapEntry<>(current, globalVersion);
+		if (current.entryVersion < required) {
+			copy = new HashMapEntry<>(current, mapVersion);
 			tab[tableIdx] = copy;
 		} else {
 			// nothing to do, just advance copy to current
@@ -277,9 +275,9 @@ public class StateTable<K, N, S> implements Iterable<StateTableEntry<K, N, S>> {
 			//advance current
 			current = current.next;
 
-			if (current.entryVersion != globalVersion) {
+			if (current.entryVersion < required) {
 				// copy and advance the current's copy
-				copy.next = new HashMapEntry<>(current, globalVersion);
+				copy.next = new HashMapEntry<>(current, mapVersion);
 				copy = copy.next;
 			} else {
 				// nothing to do, just advance copy to current
@@ -359,7 +357,7 @@ public class StateTable<K, N, S> implements Iterable<StateTableEntry<K, N, S>> {
 			if (e.hash == hash && key.equals(e.key) && namespace.equals(e.namespace)) {
 
 				if (e.entryVersion < globalVersion) {
-					e = handleEntryChainMultiVersioning(index, e);
+					e = handleEntryChainMultiVersioning(tab, index, e);
 				}
 
 				e.state = value;
@@ -411,7 +409,7 @@ public class StateTable<K, N, S> implements Iterable<StateTableEntry<K, N, S>> {
 				S oldState;
 
 				if (e.entryVersion < globalVersion) {
-					e = handleEntryChainMultiVersioning(index, e);
+					e = handleEntryChainMultiVersioning(tab, index, e);
 				}
 
 				if (e.stateVersion < globalVersion) {
@@ -524,7 +522,7 @@ public class StateTable<K, N, S> implements Iterable<StateTableEntry<K, N, S>> {
 					tab[index] = e.next;
 				} else {
 					if (prev.entryVersion != mapVersion) {
-						prev = handleEntryChainMultiVersioning(index, prev);
+						prev = handleEntryChainMultiVersioning(tab, index, prev);
 					}
 					prev.next = e.next;
 				}
@@ -570,7 +568,7 @@ public class StateTable<K, N, S> implements Iterable<StateTableEntry<K, N, S>> {
 					tab[index] = e.next;
 				} else {
 					if (prev.entryVersion != globalVersion) {
-						prev = handleEntryChainMultiVersioning(index, prev);
+						prev = handleEntryChainMultiVersioning(tab, index, prev);
 					}
 					prev.next = e.next;
 				}
@@ -583,24 +581,24 @@ public class StateTable<K, N, S> implements Iterable<StateTableEntry<K, N, S>> {
 		return null;
 	}
 
-	/**
-	 * Removes all mappings from this hash map, leaving it empty.
-	 *
-	 * @see #isEmpty
-	 * @see #size
-	 */
-	public void clear() {
-
-		if (size[0] != 0) {
-			size[0] = 0;
-			Arrays.fill(tables[0], null);
-		}
-
-		tables[1] = EMPTY_TABLE;
-		size[1] = 0;
-
-		++modCount;
-	}
+//	/**
+//	 * Removes all mappings from this hash map, leaving it empty.
+//	 *
+//	 * @see #isEmpty
+//	 * @see #size
+//	 */
+//	public void clear() {
+//
+//		if (size[0] != 0) {
+//			size[0] = 0;
+//			Arrays.fill(tables[0], null);
+//		}
+//
+//		tables[1] = EMPTY_TABLE;
+//		size[1] = 0;
+//
+//		++modCount;
+//	}
 
 	private void incrementalRehash() {
 
@@ -609,18 +607,17 @@ public class StateTable<K, N, S> implements Iterable<StateTableEntry<K, N, S>> {
 
 		int oldCapacity = oldTable.length;
 		int newMask = newTable.length - 1;
-
+		int requiredVersion = highestRequiredSnapshotVersion;
 		int j = rehashPos;
 		int transferred = 0;
 		while (transferred < 8) {
-			/*
-			* Rehash the bucket using the minimum number of field writes.
-			* This is the most subtle and delicate code in the class.
-			*/
+
 			HashMapEntry<K, N, S> e = oldTable[j];
-			oldTable[j] = null;
 
 			while (e != null) {
+				if (e.entryVersion < requiredVersion) {
+					e = new HashMapEntry<>(e, mapVersion);
+				}
 				HashMapEntry<K, N, S> n = e.next;
 				int pos = e.hash & newMask;
 				e.next = newTable[pos];
@@ -629,6 +626,7 @@ public class StateTable<K, N, S> implements Iterable<StateTableEntry<K, N, S>> {
 				++transferred;
 			}
 
+			oldTable[j] = null;
 			if (++j == oldCapacity) {
 				//rehash complete
 				tables[0] = newTable;
@@ -645,36 +643,50 @@ public class StateTable<K, N, S> implements Iterable<StateTableEntry<K, N, S>> {
 		rehashPos = j;
 	}
 
-	public HashMapEntry<K, N, S> [] snapshotTable() {
-		++mapVersion;
-		return Arrays.copyOf(table, table.length);
-	}
-
-	/**
-	 * Creates a dense snapshot of the hashmap
-	 *
-	 * @return a dense snapshot of the hashmap
-	 */
-	public Tuple3<K, N, S>[] snapshotDump() {//TODO return snapshot version
-
-		Tuple3<K, N, S>[] dump = new Tuple3[size()];
-		int pos = 0;
-
-		for (int i = 0; i <= 1; ++i) {
-			HashMapEntry<K, N, S>[] tab = tables[i];
-			for (HashMapEntry<K, N, S> entry : tab) {
-				while (null != entry) {
-					dump[pos++] = new Tuple3<>(entry.getKey(), entry.getNamespace(), entry.getState());
-					entry = entry.next;
-				}
-			}
-		}
-
+	public HashMapEntry<K, N, S>[] snapshotTable() {
 		// increase the map version for CoW
 		++mapVersion;
 		highestRequiredSnapshotVersion = mapVersion;
-		return dump;
+		HashMapEntry<K, N, S>[] table = tables[0];
+		if (isRehashing()) {
+			int rhp = rehashPos;
+			HashMapEntry<K, N, S>[] copy = new HashMapEntry[rhp + table.length];
+			int len = table.length - rhp;
+			System.arraycopy(table, rhp, copy, 0, len);
+			table = tables[1];
+			System.arraycopy(table, 0, copy, len, rhp);
+			System.arraycopy(table, table.length >>> 1, copy, len + rhp, rhp);
+			return copy;
+		} else {
+			return Arrays.copyOf(table, table.length);
+		}
 	}
+
+//	/**
+//	 * Creates a dense snapshot of the hashmap
+//	 *
+//	 * @return a dense snapshot of the hashmap
+//	 */
+//	public Tuple3<K, N, S>[] snapshotDump() {//TODO return snapshot version
+//
+//		Tuple3<K, N, S>[] dump = new Tuple3[size()];
+//		int pos = 0;
+//
+//		for (int i = 0; i <= 1; ++i) {
+//			HashMapEntry<K, N, S>[] tab = tables[i];
+//			for (HashMapEntry<K, N, S> entry : tab) {
+//				while (null != entry) {
+//					dump[pos++] = new Tuple3<>(entry.getKey(), entry.getNamespace(), entry.getState());
+//					entry = entry.next;
+//				}
+//			}
+//		}
+//
+//		// increase the map version for CoW
+//		++mapVersion;
+//		highestRequiredSnapshotVersion = mapVersion;
+//		return dump;
+//	}
 
 	public void releaseSnapshot(int snapshotVersion) {
 		if (snapshotVersion == highestRequiredSnapshotVersion) {
@@ -735,14 +747,14 @@ public class StateTable<K, N, S> implements Iterable<StateTableEntry<K, N, S>> {
 			return namespace;
 		}
 
-		public final S getStateCopyOnAccess(int expectedVersion, TypeSerializer<S> copySerializer) {
-			if (version < expectedVersion) {
-				// if our version does not meet the required version, we perform a copy and bump the version
-				version = expectedVersion;
-				state = copySerializer.copy(state);
-			}
-			return state;
-		}
+//		public final S getStateCopyOnAccess(int expectedVersion, TypeSerializer<S> copySerializer) {
+//			if (version < expectedVersion) {
+//				// if our version does not meet the required version, we perform a copy and bump the version
+//				version = expectedVersion;
+//				state = copySerializer.copy(state);
+//			}
+//			return state;
+//		}
 
 		@Override
 		public final S getState() {

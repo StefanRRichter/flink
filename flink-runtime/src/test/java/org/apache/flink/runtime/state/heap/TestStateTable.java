@@ -24,6 +24,7 @@ import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.api.java.tuple.Tuple3;
 import org.apache.flink.runtime.state.ArrayListSerializer;
 import org.apache.flink.runtime.state.RegisteredBackendStateMetaInfo;
+import org.apache.flink.util.Preconditions;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -54,10 +55,9 @@ public class TestStateTable {
 
 		Random rand = new Random(42);
 
-		Tuple3<Integer, Integer, ArrayList<Integer>>[] snapshot = null;
+		StateTable.HashMapEntry<Integer, Integer, ArrayList<Integer>>[] snapshot = null;
+		int snapshotSize = 0;
 		Tuple3<Integer, Integer, ArrayList<Integer>>[] reference = null;
-//		Tuple3<Integer, Integer, ArrayList<Integer>>[] prevSnapshot = null;
-//		Tuple3<Integer, Integer, ArrayList<Integer>>[] prevReference = null;
 
 		int val = 0;
 		int snapshotId = 0;
@@ -74,7 +74,6 @@ public class TestStateTable {
 			switch (op) {
 				case 0:
 				case 1: {
-//					System.out.println("get "+compositeKey);
 					state = map.get(key, namespace);
 					ref = referenceMap.get(compositeKey);
 					if (null == state) {
@@ -89,25 +88,21 @@ public class TestStateTable {
 					break;
 				}
 				case 2: {
-//					System.out.println("put "+compositeKey);
 					map.put(key, namespace, new ArrayList<Integer>());
 					referenceMap.put(compositeKey, new ArrayList<Integer>());
 					break;
 				}
 				case 3: {
-//					System.out.println("put & get "+compositeKey);
 					state = map.putAndGetOld(key, namespace, new ArrayList<Integer>());
 					ref = referenceMap.put(compositeKey, new ArrayList<Integer>());
 					break;
 				}
 				case 4: {
-//					System.out.println("remove "+compositeKey);
 					map.remove(key, namespace);
 					referenceMap.remove(compositeKey);
 					break;
 				}
 				case 5: {
-//					System.out.println("remove & get "+compositeKey);
 					state = map.removeAndGetOld(key, namespace);
 					ref = referenceMap.remove(compositeKey);
 					break;
@@ -135,19 +130,36 @@ public class TestStateTable {
 				}
 			}
 
-			if (i > 0 && i % 1_000 == 0) {
+			if (i > 0 && i % 500 == 0) {
 				if (snapshot != null) {
-					Assert.assertTrue(deepCompare(snapshot, reference));
-					snapshot = null;
-					reference = null;
-					map.releaseSnapshot(snapshotId);
+					Assert.assertTrue(deepCompare(convert(snapshot, snapshotSize), reference));
+					if(i % 5_000 == 0) {
+						snapshot = null;
+						reference = null;
+						snapshotSize = 0;
+						map.releaseSnapshot(snapshotId);
+					}
 				} else {
 					++snapshotId;
-					snapshot = map.snapshotDump();
+					snapshot = map.snapshotTable();
+					snapshotSize = map.size();
 					reference = manualDeepDump(referenceMap);
 				}
 			}
 		}
+	}
+
+	public static <K, N, S> Tuple3<K, N, S>[] convert(StateTable.HashMapEntry<K, N, S>[] snapshot, int mapSize) {
+		Tuple3<K, N, S>[] result = new Tuple3[mapSize];
+		int pos = 0;
+		for (StateTable.HashMapEntry<K, N, S> entry : snapshot) {
+			while (null != entry) {
+				result[pos++] = new Tuple3<>(entry.getKey(), entry.getNamespace(), entry.getState());
+				entry = entry.next;
+			}
+		}
+		Preconditions.checkState(pos == mapSize, mapSize+" "+pos);
+		return result;
 	}
 
 //	@Test
