@@ -27,7 +27,6 @@ import org.apache.flink.runtime.state.internal.InternalFoldingState;
 import org.apache.flink.util.Preconditions;
 
 import java.io.IOException;
-import java.util.Map;
 
 /**
  * Heap-backed partitioned {@link FoldingState} that is
@@ -69,59 +68,38 @@ public class HeapFoldingState<K, N, T, ACC>
 
 	@Override
 	public ACC get() {
-		Preconditions.checkState(currentNamespace != null, "No namespace set.");
-		Preconditions.checkState(backend.getCurrentKey() != null, "No key set.");
+		final N namespace = currentNamespace;
+		final K key = backend.getCurrentKey();
 
-		Map<N, Map<K, ACC>> namespaceMap =
-				stateTable.get(backend.getCurrentKeyGroupIndex());
+		Preconditions.checkState(namespace != null, "No namespace set.");
+		Preconditions.checkState(key != null, "No key set.");
 
-		if (namespaceMap == null) {
-			return null;
-		}
-
-		Map<K, ACC> keyedMap = namespaceMap.get(currentNamespace);
-
-		if (keyedMap == null) {
-			return null;
-		}
-
-		return keyedMap.get(backend.<K>getCurrentKey());
+		return stateTable.get(key, namespace);
 	}
 
 	@Override
 	public void add(T value) throws IOException {
-		Preconditions.checkState(currentNamespace != null, "No namespace set.");
-		Preconditions.checkState(backend.getCurrentKey() != null, "No key set.");
+		final N namespace = currentNamespace;
+		final K key = backend.getCurrentKey();
+
+		Preconditions.checkState(namespace != null, "No namespace set.");
+		Preconditions.checkState(key != null, "No key set.");
 
 		if (value == null) {
 			clear();
 			return;
 		}
 
-		Map<N, Map<K, ACC>> namespaceMap =
-				stateTable.get(backend.getCurrentKeyGroupIndex());
-
-		if (namespaceMap == null) {
-			namespaceMap = createNewMap();
-			stateTable.set(backend.getCurrentKeyGroupIndex(), namespaceMap);
-		}
-
-		Map<K, ACC> keyedMap = namespaceMap.get(currentNamespace);
-
-		if (keyedMap == null) {
-			keyedMap = createNewMap();
-			namespaceMap.put(currentNamespace, keyedMap);
-		}
-
-		ACC currentValue = keyedMap.get(backend.<K>getCurrentKey());
+		final StateTable<K, N, ACC> map = stateTable;
+		final ACC currentValue = map.get(key, namespace);
 
 		try {
 
 			if (currentValue == null) {
-				keyedMap.put(backend.<K>getCurrentKey(),
+				map.put(key, namespace,
 						foldFunction.fold(stateDesc.getDefaultValue(), value));
 			} else {
-				keyedMap.put(backend.<K>getCurrentKey(), foldFunction.fold(currentValue, value));
+				map.put(key, namespace, foldFunction.fold(currentValue, value));
 			}
 		} catch (Exception e) {
 			throw new RuntimeException("Could not add value to folding state.", e);

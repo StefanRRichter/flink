@@ -17,14 +17,14 @@
  */
 package org.apache.flink.runtime.state.heap;
 
-import org.apache.flink.annotation.VisibleForTesting;
-import org.apache.flink.api.common.typeutils.TypeSerializer;
-import org.apache.flink.runtime.state.RegisteredBackendStateMetaInfo;
 import org.apache.flink.runtime.state.KeyGroupRange;
+import org.apache.flink.runtime.state.RegisteredBackendStateMetaInfo;
 
+import java.util.HashMap;
+import java.util.Iterator;
 import java.util.Map;
 
-public class StateTable<K, N, ST> {
+public class StateTable<K, N, ST> extends AbstractStateTable<K, N, ST> {
 
 	/** Map for holding the actual state objects. */
 	private final Map<N, Map<K, ST>>[] state;
@@ -32,12 +32,9 @@ public class StateTable<K, N, ST> {
 	/** The offset to the contiguous key groups */
 	private final int keyGroupOffset;
 
-	/** Combined meta information such as name and serializers for this state */
-	private RegisteredBackendStateMetaInfo<N, ST> metaInfo;
-
 	// ------------------------------------------------------------------------
 	public StateTable(RegisteredBackendStateMetaInfo<N, ST> metaInfo, KeyGroupRange keyGroupRange) {
-		this.metaInfo = metaInfo;
+		super(metaInfo);
 		this.keyGroupOffset = keyGroupRange.getStartKeyGroup();
 
 		@SuppressWarnings("unchecked")
@@ -77,39 +74,119 @@ public class StateTable<K, N, ST> {
 	}
 
 	// ------------------------------------------------------------------------
-	//  metadata
-	// ------------------------------------------------------------------------
-	
-	public TypeSerializer<ST> getStateSerializer() {
-		return metaInfo.getStateSerializer();
-	}
 
-	public TypeSerializer<N> getNamespaceSerializer() {
-		return metaInfo.getNamespaceSerializer();
-	}
-
-	public RegisteredBackendStateMetaInfo<N, ST> getMetaInfo() {
-		return metaInfo;
-	}
-
-	public void setMetaInfo(RegisteredBackendStateMetaInfo<N, ST> metaInfo) {
-		this.metaInfo = metaInfo;
-	}
-
-	// ------------------------------------------------------------------------
-	//  for testing
-	// ------------------------------------------------------------------------
-
-	@VisibleForTesting
-	boolean isEmpty() {
-		for (Map<N, Map<K, ST>> map : state) {
-			if (map != null) {
-				if (!map.isEmpty()) {
-					return false;
+	@Override
+	public int size() {
+		int count = 0;
+		for (Map<N, Map<K, ST>> namespaceMap : state) {
+			if (null != namespaceMap) {
+				for (Map<K, ST> keyMap : namespaceMap.values()) {
+					if (null != keyMap) {
+						count += keyMap.size();
+					}
 				}
 			}
 		}
+		return count;
+	}
 
-		return true;
+	@Override
+	public boolean containsKey(Object key, Object namespace) {
+		final int keyGroupIndex = backend.getCurrentKeyGroupIndex();
+
+		Map<N, Map<K, ST>> namespaceMap = get(keyGroupIndex);
+
+		if (namespaceMap == null) {
+			return false;
+		}
+
+		Map<K, ST> keyedMap = namespaceMap.get(namespace);
+
+		if (keyedMap == null) {
+			return false;
+		}
+
+		return keyedMap.containsKey(key);
+	}
+
+	@Override
+	public ST get(Object key, Object namespace) {
+
+		final int keyGroupIndex = backend.getCurrentKeyGroupIndex();
+
+		Map<N, Map<K, ST>> namespaceMap = get(keyGroupIndex);
+
+		if (namespaceMap == null) {
+			return null;
+		}
+
+		Map<K, ST> keyedMap = namespaceMap.get(namespace);
+
+		if (keyedMap == null) {
+			return null;
+		}
+
+		return keyedMap.get(key);
+	}
+
+	@Override
+	public void put(K key, N namespace, ST value) {
+		putAndGetOld(key, namespace, value);
+	}
+
+	@Override
+	public ST putAndGetOld(K key, N namespace, ST value) {
+		final int keyGroupIndex = backend.getCurrentKeyGroupIndex();
+
+		Map<N, Map<K, ST>> namespaceMap = get(keyGroupIndex);
+
+		if (namespaceMap == null) {
+			namespaceMap = new HashMap<>();
+			set(keyGroupIndex, namespaceMap);
+		}
+
+		Map<K, ST> keyedMap = namespaceMap.get(namespace);
+
+		if (keyedMap == null) {
+			keyedMap = new HashMap<>();
+			namespaceMap.put(namespace, keyedMap);
+		}
+
+		return keyedMap.put(key, value);
+	}
+
+	@Override
+	public void remove(Object key, Object namespace) {
+		removeAndGetOld(key, namespace);
+	}
+
+	@Override
+	public ST removeAndGetOld(Object key, Object namespace) {
+		final int keyGroupIndex = backend.getCurrentKeyGroupIndex();
+
+		Map<N, Map<K, ST>> namespaceMap = get(keyGroupIndex);
+
+		if (namespaceMap == null) {
+			return null;
+		}
+
+		Map<K, ST> keyedMap = namespaceMap.get(namespace);
+
+		if (keyedMap == null) {
+			return null;
+		}
+
+		ST removed = keyedMap.remove(key);
+
+		if (keyedMap.isEmpty()) {
+			namespaceMap.remove(namespace);
+		}
+
+		return removed;
+	}
+
+	@Override
+	public Iterator<StateEntry<K, N, ST>> iterator() {
+		throw new UnsupportedOperationException("TODO!");
 	}
 }

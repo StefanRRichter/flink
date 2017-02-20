@@ -27,14 +27,13 @@ import org.apache.flink.runtime.state.KeyedStateBackend;
 import org.apache.flink.runtime.state.internal.InternalAggregatingState;
 
 import java.io.IOException;
-import java.util.Map;
 
 import static org.apache.flink.util.Preconditions.checkState;
 
 /**
  * Heap-backed partitioned {@link ReducingState} that is
  * snapshotted into files.
- * 
+ *
  * @param <K> The type of the key.
  * @param <N> The type of the namespace.
  * @param <IN> The type of the value added to the state.
@@ -76,33 +75,22 @@ public class HeapAggregatingState<K, N, IN, ACC, OUT>
 
 	@Override
 	public OUT get() {
+		final N namespace = currentNamespace;
 		final K key = backend.getCurrentKey();
 
-		checkState(currentNamespace != null, "No namespace set.");
+		checkState(namespace != null, "No namespace set.");
 		checkState(key != null, "No key set.");
 
-		Map<N, Map<K, ACC>> namespaceMap =
-				stateTable.get(backend.getCurrentKeyGroupIndex());
-
-		if (namespaceMap == null) {
-			return null;
-		}
-
-		Map<K, ACC> keyedMap = namespaceMap.get(currentNamespace);
-
-		if (keyedMap == null) {
-			return null;
-		}
-
-		ACC accumulator = keyedMap.get(key);
-		return aggFunction.getResult(accumulator);
+		ACC accumulator = stateTable.get(key, namespace);
+		return accumulator != null ? aggFunction.getResult(accumulator) : null;
 	}
 
 	@Override
 	public void add(IN value) throws IOException {
+		final N namespace = currentNamespace;
 		final K key = backend.getCurrentKey();
 
-		checkState(currentNamespace != null, "No namespace set.");
+		checkState(namespace != null, "No namespace set.");
 		checkState(key != null, "No key set.");
 
 		if (value == null) {
@@ -110,29 +98,15 @@ public class HeapAggregatingState<K, N, IN, ACC, OUT>
 			return;
 		}
 
-		Map<N, Map<K, ACC>> namespaceMap =
-				stateTable.get(backend.getCurrentKeyGroupIndex());
-
-		if (namespaceMap == null) {
-			namespaceMap = createNewMap();
-			stateTable.set(backend.getCurrentKeyGroupIndex(), namespaceMap);
-		}
-
-		Map<K, ACC> keyedMap = namespaceMap.get(currentNamespace);
-
-		if (keyedMap == null) {
-			keyedMap = createNewMap();
-			namespaceMap.put(currentNamespace, keyedMap);
-		}
+		final StateTable<K, N, ACC> map = stateTable;
 
 		// if this is the first value for the key, create a new accumulator
-		ACC accumulator = keyedMap.get(key);
+		ACC accumulator = map.get(key, namespace);
 		if (accumulator == null) {
 			accumulator = aggFunction.createAccumulator();
-			keyedMap.put(key, accumulator);
+			map.put(key, namespace, accumulator);
 		}
 
-		// 
 		aggFunction.add(value, accumulator);
 	}
 

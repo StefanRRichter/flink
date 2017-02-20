@@ -25,12 +25,10 @@ import org.apache.flink.runtime.state.KeyedStateBackend;
 import org.apache.flink.runtime.state.internal.InternalValueState;
 import org.apache.flink.util.Preconditions;
 
-import java.util.Map;
-
 /**
  * Heap-backed partitioned {@link org.apache.flink.api.common.state.ValueState} that is snapshotted
  * into files.
- * 
+ *
  * @param <K> The type of the key.
  * @param <N> The type of the namespace.
  * @param <V> The type of the value.
@@ -58,23 +56,13 @@ public class HeapValueState<K, N, V>
 
 	@Override
 	public V value() {
-		Preconditions.checkState(currentNamespace != null, "No namespace set.");
-		Preconditions.checkState(backend.getCurrentKey() != null, "No key set.");
+		final N namespace = currentNamespace;
+		final K key = backend.getCurrentKey();
 
-		Map<N, Map<K, V>> namespaceMap =
-				stateTable.get(backend.getCurrentKeyGroupIndex());
+		Preconditions.checkState(namespace != null, "No namespace set.");
+		Preconditions.checkState(key != null, "No key set.");
 
-		if (namespaceMap == null) {
-			return stateDesc.getDefaultValue();
-		}
-
-		Map<K, V> keyedMap = namespaceMap.get(currentNamespace);
-
-		if (keyedMap == null) {
-			return stateDesc.getDefaultValue();
-		}
-
-		V result = keyedMap.get(backend.<K>getCurrentKey());
+		final V result = stateTable.get(key, namespace);
 
 		if (result == null) {
 			return stateDesc.getDefaultValue();
@@ -85,29 +73,17 @@ public class HeapValueState<K, N, V>
 
 	@Override
 	public void update(V value) {
-		Preconditions.checkState(currentNamespace != null, "No namespace set.");
-		Preconditions.checkState(backend.getCurrentKey() != null, "No key set.");
+		final N namespace = currentNamespace;
+		final K key = backend.getCurrentKey();
+
+		Preconditions.checkState(namespace != null, "No namespace set.");
+		Preconditions.checkState(key != null, "No key set.");
 
 		if (value == null) {
 			clear();
 			return;
 		}
 
-		Map<N, Map<K, V>> namespaceMap =
-				stateTable.get(backend.getCurrentKeyGroupIndex());
-
-		if (namespaceMap == null) {
-			namespaceMap = createNewMap();
-			stateTable.set(backend.getCurrentKeyGroupIndex(), namespaceMap);
-		}
-
-		Map<K, V> keyedMap = namespaceMap.get(currentNamespace);
-
-		if (keyedMap == null) {
-			keyedMap = createNewMap();
-			namespaceMap.put(currentNamespace, keyedMap);
-		}
-
-		keyedMap.put(backend.<K>getCurrentKey(), value);
+		stateTable.put(key, namespace, value);
 	}
 }
