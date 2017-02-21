@@ -208,4 +208,34 @@ public class NestedMapsStateTable<K, N, ST> extends AbstractStateTable<K, N, ST>
 
 		return removed;
 	}
+
+	@Override
+	public int numberOfKeysInNamespace(Object namespace) {
+		int count = 0;
+		for (Map<N, Map<K, ST>> namespaceMap : state) {
+			if (null != namespaceMap) {
+				Map<K, ST> keyMap = namespaceMap.get(namespace);
+				count += keyMap != null ? keyMap.size() : 0;
+			}
+		}
+
+		return count;
+	}
+
+	// snapshots ---------------------------------------------------------------------------------------------------
+
+	@Override
+	public boolean supportsAsynchronousSnapshots() {
+		return false;
+	}
+
+	@Override
+	public StateTableSnapshot<K, N, ST> createSnapshot() {
+		throw new UnsupportedOperationException("TODO");
+	}
+
+	@Override
+	public void releaseSnapshot(StateTableSnapshot<K, N, ST> snapshotToRelease) {
+		throw new UnsupportedOperationException("TODO");
+	}
 }

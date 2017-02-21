@@ -98,9 +98,15 @@ public class TimeWindow extends Window {
 
 	@Override
 	public int hashCode() {
-		int result = (int) (start ^ (start >>> 32));
-		result = 31 * result + (int) (end ^ (end >>> 32));
-		return result;
+		return bitmix(start + end);
+	}
+
+	//TODO move to some util class
+	private static int bitmix(long x) {
+		x = (x ^ (x >>> 30)) * 0xbf58476d1ce4e5b9L;
+		x = (x ^ (x >>> 27)) * 0x94d049bb133111ebL;
+		x = x ^ (x >>> 31);
+		return (int) x;
 	}
 
 	@Override

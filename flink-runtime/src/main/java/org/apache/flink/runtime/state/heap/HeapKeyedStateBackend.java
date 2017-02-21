@@ -89,7 +89,7 @@ public class HeapKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 	 * but we can't put them here because different key/value states with different types and
 	 * namespace types share this central list of tables.
 	 */
-	private final Map<String, NestedMapsStateTable<K, ?, ?>> stateTables = new HashMap<>();
+	private final Map<String, AbstractStateTable<K, ?, ?>> stateTables = new HashMap<>();
 
 	public HeapKeyedStateBackend(
 			TaskKvStateRegistry kvStateRegistry,
@@ -213,7 +213,7 @@ public class HeapKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 
 			Map<String, Integer> kVStateToId = new HashMap<>(stateTables.size());
 
-			for (Map.Entry<String, NestedMapsStateTable<K, ?, ?>> kvState : stateTables.entrySet()) {
+			for (Map.Entry<String, AbstractStateTable<K, ?, ?>> kvState : stateTables.entrySet()) {
 
 				RegisteredBackendStateMetaInfo<?, ?> metaInfo = kvState.getValue().getMetaInfo();
 				KeyedBackendSerializationProxy.StateMetaInfo<?, ?> metaInfoProxy = new KeyedBackendSerializationProxy.StateMetaInfo(
@@ -237,7 +237,7 @@ public class HeapKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 			for (int keyGroupIndex = keyGroupRange.getStartKeyGroup(); keyGroupIndex <= keyGroupRange.getEndKeyGroup(); keyGroupIndex++) {
 				keyGroupRangeOffsets[offsetCounter++] = stream.getPos();
 				outView.writeInt(keyGroupIndex);
-				for (Map.Entry<String, NestedMapsStateTable<K, ?, ?>> kvState : stateTables.entrySet()) {
+				for (Map.Entry<String, AbstractStateTable<K, ?, ?>> kvState : stateTables.entrySet()) {
 					outView.writeShort(kVStateToId.get(kvState.getKey()));
 					writeStateTableForKeyGroup(outView, kvState.getValue(), keyGroupIndex);
 				}
@@ -357,7 +357,7 @@ public class HeapKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 							continue;
 						}
 
-						NestedMapsStateTable<K, ?, ?> stateTable = stateTables.get(kvStatesById.get(kvStateId));
+						AbstractStateTable<K, ?, ?> stateTable = stateTables.get(kvStatesById.get(kvStateId));
 						Preconditions.checkNotNull(stateTable);
 
 						readStateTableForKeyGroup(inView, stateTable, keyGroupIndex);

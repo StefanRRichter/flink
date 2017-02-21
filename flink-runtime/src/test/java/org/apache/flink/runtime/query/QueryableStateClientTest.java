@@ -278,8 +278,9 @@ public class QueryableStateClientTest {
 
 				// Register state
 				HeapValueState<Integer, VoidNamespace, Integer> kvState = new HeapValueState<>(
+						keyedStateBackend,
 						descriptor,
-						new NestedMapsStateTable<Integer, VoidNamespace, Integer>(keyedStateBackend, registeredBackendStateMetaInfo),
+						new StateTable<Integer, VoidNamespace, Integer>(registeredBackendStateMetaInfo),
 						IntSerializer.INSTANCE,
 						VoidNamespaceSerializer.INSTANCE);
 

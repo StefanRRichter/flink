@@ -18,6 +18,7 @@
 
 package org.apache.flink.runtime.state.heap;
 
+import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.typeutils.TypeSerializer;
 import org.apache.flink.runtime.state.RegisteredBackendStateMetaInfo;
 import org.apache.flink.util.Preconditions;
@@ -156,4 +157,17 @@ public abstract class AbstractStateTable<K, N, S> {
 	public void setMetaInfo(RegisteredBackendStateMetaInfo<N, S> metaInfo) {
 		this.metaInfo = metaInfo;
 	}
+
+	// Snapshotting -------------------------------------------------------------------------
+
+	public abstract boolean supportsAsynchronousSnapshots();
+
+	public abstract StateTableSnapshot<K, N, S> createSnapshot();
+
+	public abstract void releaseSnapshot(StateTableSnapshot<K, N, S> snapshotToRelease);
+
+	// for testing --------------------------------------------------------------------------
+
+	@VisibleForTesting
+	public abstract int numberOfKeysInNamespace(Object namespace);
 }
