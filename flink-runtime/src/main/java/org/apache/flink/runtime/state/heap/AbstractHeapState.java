@@ -25,7 +25,6 @@ import org.apache.flink.api.common.state.StateDescriptor;
 import org.apache.flink.api.common.typeutils.TypeSerializer;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.runtime.query.netty.message.KvStateRequestSerializer;
-import org.apache.flink.runtime.state.KeyedStateBackend;
 import org.apache.flink.runtime.state.internal.InternalKvState;
 import org.apache.flink.util.Preconditions;
 
@@ -43,15 +42,13 @@ public abstract class AbstractHeapState<K, N, SV, S extends State, SD extends St
 		implements InternalKvState<N> {
 
 	/** Map containing the actual key/value pairs */
-	protected final StateTable<K, N, SV> stateTable;
+	protected final NestedMapsStateTable<K, N, SV> stateTable;
 
 	/** This holds the name of the state and can create an initial default value for the state. */
 	protected final SD stateDesc;
 
 	/** The current namespace, which the access methods will refer to. */
-	protected N currentNamespace = null;
-
-	protected final KeyedStateBackend<K> backend;
+	protected N currentNamespace;
 
 	protected final TypeSerializer<K> keySerializer;
 
@@ -60,35 +57,28 @@ public abstract class AbstractHeapState<K, N, SV, S extends State, SD extends St
 	/**
 	 * Creates a new key/value state for the given hash map of key/value pairs.
 	 *
-	 * @param backend The state backend backing that created this state.
 	 * @param stateDesc The state identifier for the state. This contains name
 	 *                           and can create a default state value.
 	 * @param stateTable The state tab;e to use in this kev/value state. May contain initial state.
 	 */
 	protected AbstractHeapState(
-			KeyedStateBackend<K> backend,
 			SD stateDesc,
-			StateTable<K, N, SV> stateTable,
+			NestedMapsStateTable<K, N, SV> stateTable,
 			TypeSerializer<K> keySerializer,
 			TypeSerializer<N> namespaceSerializer) {
 
-		Preconditions.checkNotNull(stateTable, "State table must not be null.");
-
-		this.backend = backend;
 		this.stateDesc = stateDesc;
-		this.stateTable = stateTable;
+		this.stateTable = Preconditions.checkNotNull(stateTable, "State table must not be null.");
 		this.keySerializer = keySerializer;
 		this.namespaceSerializer = namespaceSerializer;
+		this.currentNamespace = null;
 	}
 
 	// ------------------------------------------------------------------------
 
 	@Override
 	public final void clear() {
-		Preconditions.checkState(currentNamespace != null, "No namespace set.");
-		Preconditions.checkState(backend.getCurrentKey() != null, "No key set.");
-
-		stateTable.remove(backend.getCurrentKey(), currentNamespace);
+		stateTable.remove(currentNamespace);
 	}
 
 	@Override
@@ -125,7 +115,7 @@ public abstract class AbstractHeapState<K, N, SV, S extends State, SD extends St
 	 * This should only be used for testing.
 	 */
 	@VisibleForTesting
-	public StateTable<K, N, SV> getStateTable() {
+	public NestedMapsStateTable<K, N, SV> getStateTable() {
 		return stateTable;
 	}
 }

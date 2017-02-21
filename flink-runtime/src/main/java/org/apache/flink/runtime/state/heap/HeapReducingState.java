@@ -22,9 +22,7 @@ import org.apache.flink.api.common.functions.ReduceFunction;
 import org.apache.flink.api.common.state.ReducingState;
 import org.apache.flink.api.common.state.ReducingStateDescriptor;
 import org.apache.flink.api.common.typeutils.TypeSerializer;
-import org.apache.flink.runtime.state.KeyedStateBackend;
 import org.apache.flink.runtime.state.internal.InternalReducingState;
-import org.apache.flink.util.Preconditions;
 
 import java.io.IOException;
 
@@ -45,19 +43,17 @@ public class HeapReducingState<K, N, V>
 	/**
 	 * Creates a new key/value state for the given hash map of key/value pairs.
 	 *
-	 * @param backend The state backend backing that created this state.
 	 * @param stateDesc The state identifier for the state. This contains name
 	 *                           and can create a default state value.
 	 * @param stateTable The state table to use in this kev/value state. May contain initial state.
 	 */
 	public HeapReducingState(
-			KeyedStateBackend<K> backend,
 			ReducingStateDescriptor<V> stateDesc,
-			StateTable<K, N, V> stateTable,
+			NestedMapsStateTable<K, N, V> stateTable,
 			TypeSerializer<K> keySerializer,
 			TypeSerializer<N> namespaceSerializer) {
 
-		super(backend, stateDesc, stateTable, keySerializer, namespaceSerializer);
+		super(stateDesc, stateTable, keySerializer, namespaceSerializer);
 		this.reduceFunction = stateDesc.getReduceFunction();
 	}
 
@@ -67,30 +63,20 @@ public class HeapReducingState<K, N, V>
 
 	@Override
 	public V get() {
-		final N namespace = currentNamespace;
-		final K key = backend.getCurrentKey();
-
-		Preconditions.checkState(namespace != null, "No namespace set.");
-		Preconditions.checkState(key != null, "No key set.");
-
-		return stateTable.get(key, namespace);
+		return stateTable.get(currentNamespace);
 	}
 
 	@Override
 	public void add(V value) throws IOException {
 		final N namespace = currentNamespace;
-		final K key = backend.getCurrentKey();
-
-		Preconditions.checkState(namespace != null, "No namespace set.");
-		Preconditions.checkState(key != null, "No key set.");
 
 		if (value == null) {
 			clear();
 			return;
 		}
 
-		final StateTable<K, N, V> map = stateTable;
-		final V currentValue = map.putAndGetOld(key, namespace, value);
+		final NestedMapsStateTable<K, N, V> map = stateTable;
+		final V currentValue = map.putAndGetOld(namespace, value);
 
 		if (currentValue != null) {
 			V reducedValue;
@@ -99,7 +85,7 @@ public class HeapReducingState<K, N, V>
 			} catch (Exception e) {
 				throw new IOException("Exception while applying ReduceFunction in reducing state", e);
 			}
-			map.put(key, namespace, reducedValue);
+			map.put(namespace, reducedValue);
 		}
 	}
 

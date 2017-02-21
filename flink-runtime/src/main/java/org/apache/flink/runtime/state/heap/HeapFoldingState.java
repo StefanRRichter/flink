@@ -22,9 +22,7 @@ import org.apache.flink.api.common.functions.FoldFunction;
 import org.apache.flink.api.common.state.FoldingState;
 import org.apache.flink.api.common.state.FoldingStateDescriptor;
 import org.apache.flink.api.common.typeutils.TypeSerializer;
-import org.apache.flink.runtime.state.KeyedStateBackend;
 import org.apache.flink.runtime.state.internal.InternalFoldingState;
-import org.apache.flink.util.Preconditions;
 
 import java.io.IOException;
 
@@ -47,18 +45,16 @@ public class HeapFoldingState<K, N, T, ACC>
 	/**
 	 * Creates a new key/value state for the given hash map of key/value pairs.
 	 *
-	 * @param backend The state backend backing that created this state.
 	 * @param stateDesc The state identifier for the state. This contains name
 	 *                           and can create a default state value.
 	 * @param stateTable The state tab;e to use in this kev/value state. May contain initial state.
 	 */
 	public HeapFoldingState(
-			KeyedStateBackend<K> backend,
 			FoldingStateDescriptor<T, ACC> stateDesc,
-			StateTable<K, N, ACC> stateTable,
+			NestedMapsStateTable<K, N, ACC> stateTable,
 			TypeSerializer<K> keySerializer,
 			TypeSerializer<N> namespaceSerializer) {
-		super(backend, stateDesc, stateTable, keySerializer, namespaceSerializer);
+		super(stateDesc, stateTable, keySerializer, namespaceSerializer);
 		this.foldFunction = stateDesc.getFoldFunction();
 	}
 
@@ -68,38 +64,27 @@ public class HeapFoldingState<K, N, T, ACC>
 
 	@Override
 	public ACC get() {
-		final N namespace = currentNamespace;
-		final K key = backend.getCurrentKey();
-
-		Preconditions.checkState(namespace != null, "No namespace set.");
-		Preconditions.checkState(key != null, "No key set.");
-
-		return stateTable.get(key, namespace);
+		return stateTable.get(currentNamespace);
 	}
 
 	@Override
 	public void add(T value) throws IOException {
 		final N namespace = currentNamespace;
-		final K key = backend.getCurrentKey();
-
-		Preconditions.checkState(namespace != null, "No namespace set.");
-		Preconditions.checkState(key != null, "No key set.");
 
 		if (value == null) {
 			clear();
 			return;
 		}
 
-		final StateTable<K, N, ACC> map = stateTable;
-		final ACC currentValue = map.get(key, namespace);
+		final NestedMapsStateTable<K, N, ACC> map = stateTable;
+		final ACC currentValue = map.get(namespace);
 
 		try {
 
 			if (currentValue == null) {
-				map.put(key, namespace,
-						foldFunction.fold(stateDesc.getDefaultValue(), value));
+				map.put(namespace, foldFunction.fold(stateDesc.getDefaultValue(), value));
 			} else {
-				map.put(key, namespace, foldFunction.fold(currentValue, value));
+				map.put(namespace, foldFunction.fold(currentValue, value));
 			}
 		} catch (Exception e) {
 			throw new RuntimeException("Could not add value to folding state.", e);

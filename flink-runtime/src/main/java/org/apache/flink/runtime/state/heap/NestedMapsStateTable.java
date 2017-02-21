@@ -17,14 +17,14 @@
  */
 package org.apache.flink.runtime.state.heap;
 
-import org.apache.flink.runtime.state.KeyGroupRange;
+import org.apache.flink.annotation.VisibleForTesting;
+import org.apache.flink.runtime.state.KeyGroupRangeAssignment;
 import org.apache.flink.runtime.state.RegisteredBackendStateMetaInfo;
 
 import java.util.HashMap;
-import java.util.Iterator;
 import java.util.Map;
 
-public class StateTable<K, N, ST> extends AbstractStateTable<K, N, ST> {
+public class NestedMapsStateTable<K, N, ST> extends AbstractStateTable<K, N, ST> {
 
 	/** Map for holding the actual state objects. */
 	private final Map<N, Map<K, ST>>[] state;
@@ -33,12 +33,12 @@ public class StateTable<K, N, ST> extends AbstractStateTable<K, N, ST> {
 	private final int keyGroupOffset;
 
 	// ------------------------------------------------------------------------
-	public StateTable(RegisteredBackendStateMetaInfo<N, ST> metaInfo, KeyGroupRange keyGroupRange) {
-		super(metaInfo);
-		this.keyGroupOffset = keyGroupRange.getStartKeyGroup();
+	public NestedMapsStateTable(KeyContext<K> keyContext, RegisteredBackendStateMetaInfo<N, ST> metaInfo) {
+		super(keyContext, metaInfo);
+		this.keyGroupOffset = keyContext.getKeyGroupRange().getStartKeyGroup();
 
 		@SuppressWarnings("unchecked")
-		Map<N, Map<K, ST>>[] state = (Map<N, Map<K, ST>>[]) new Map[keyGroupRange.getNumberOfKeyGroups()];
+		Map<N, Map<K, ST>>[] state = (Map<N, Map<K, ST>>[]) new Map[keyContext.getNumberOfKeyGroups()];
 		this.state = state;
 	}
 
@@ -50,8 +50,9 @@ public class StateTable<K, N, ST> extends AbstractStateTable<K, N, ST> {
 		return state;
 	}
 
-	public Map<N, Map<K, ST>> get(int index) {
-		final int pos = indexToOffset(index);
+	@VisibleForTesting
+	public Map<N, Map<K, ST>> getMapForKeyGroup(int keyGroupIndex) {
+		final int pos = indexToOffset(keyGroupIndex);
 		if (pos >= 0 && pos < state.length) {
 			return state[pos];
 		} else {
@@ -59,7 +60,7 @@ public class StateTable<K, N, ST> extends AbstractStateTable<K, N, ST> {
 		}
 	}
 
-	public void set(int index, Map<N, Map<K, ST>> map) {
+	public void setMapForKeyGroup(int index, Map<N, Map<K, ST>> map) {
 		try {
 			state[indexToOffset(index)] = map;
 		}
@@ -91,10 +92,46 @@ public class StateTable<K, N, ST> extends AbstractStateTable<K, N, ST> {
 	}
 
 	@Override
-	public boolean containsKey(Object key, Object namespace) {
-		final int keyGroupIndex = backend.getCurrentKeyGroupIndex();
+	public ST get(Object namespace) {
+		return get(keyContext.getCurrentKey(), keyContext.getCurrentKeyGroupIndex(), namespace);
+	}
 
-		Map<N, Map<K, ST>> namespaceMap = get(keyGroupIndex);
+	@Override
+	public boolean containsKey(Object namespace) {
+		return containsKey(keyContext.getCurrentKey(), keyContext.getCurrentKeyGroupIndex(), namespace);
+	}
+
+	@Override
+	public void put(N namespace, ST value) {
+		put(keyContext.getCurrentKey(), keyContext.getCurrentKeyGroupIndex(), namespace, value);
+	}
+
+	@Override
+	public ST putAndGetOld(N namespace, ST value) {
+		return putAndGetOld(keyContext.getCurrentKey(), keyContext.getCurrentKeyGroupIndex(), namespace, value);
+	}
+
+	@Override
+	public void remove(Object namespace) {
+		remove(keyContext.getCurrentKey(), keyContext.getCurrentKeyGroupIndex(), namespace);
+	}
+
+	@Override
+	public ST removeAndGetOld(Object namespace) {
+		return removeAndGetOld(keyContext.getCurrentKey(), keyContext.getCurrentKeyGroupIndex(), namespace);
+	}
+
+	@Override
+	public ST get(Object key, Object namespace) {
+		int keyGroup = KeyGroupRangeAssignment.assignToKeyGroup(key, keyContext.getNumberOfKeyGroups());
+		return get(key, keyGroup, namespace);
+	}
+
+	// ------------------------------------------------------------------------
+
+	boolean containsKey(Object key, int keyGroupIndex, Object namespace) {
+
+		Map<N, Map<K, ST>> namespaceMap = getMapForKeyGroup(keyGroupIndex);
 
 		if (namespaceMap == null) {
 			return false;
@@ -102,19 +139,12 @@ public class StateTable<K, N, ST> extends AbstractStateTable<K, N, ST> {
 
 		Map<K, ST> keyedMap = namespaceMap.get(namespace);
 
-		if (keyedMap == null) {
-			return false;
-		}
-
-		return keyedMap.containsKey(key);
+		return keyedMap != null && keyedMap.containsKey(key);
 	}
 
-	@Override
-	public ST get(Object key, Object namespace) {
+	ST get(Object key, int keyGroupIndex, Object namespace) {
 
-		final int keyGroupIndex = backend.getCurrentKeyGroupIndex();
-
-		Map<N, Map<K, ST>> namespaceMap = get(keyGroupIndex);
+		Map<N, Map<K, ST>> namespaceMap = getMapForKeyGroup(keyGroupIndex);
 
 		if (namespaceMap == null) {
 			return null;
@@ -129,20 +159,17 @@ public class StateTable<K, N, ST> extends AbstractStateTable<K, N, ST> {
 		return keyedMap.get(key);
 	}
 
-	@Override
-	public void put(K key, N namespace, ST value) {
-		putAndGetOld(key, namespace, value);
+	private void put(K key, int keyGroupIndex, N namespace, ST value) {
+		putAndGetOld(key, keyGroupIndex, namespace, value);
 	}
 
-	@Override
-	public ST putAndGetOld(K key, N namespace, ST value) {
-		final int keyGroupIndex = backend.getCurrentKeyGroupIndex();
+	private ST putAndGetOld(K key, int keyGroupIndex, N namespace, ST value) {
 
-		Map<N, Map<K, ST>> namespaceMap = get(keyGroupIndex);
+		Map<N, Map<K, ST>> namespaceMap = getMapForKeyGroup(keyGroupIndex);
 
 		if (namespaceMap == null) {
 			namespaceMap = new HashMap<>();
-			set(keyGroupIndex, namespaceMap);
+			setMapForKeyGroup(keyGroupIndex, namespaceMap);
 		}
 
 		Map<K, ST> keyedMap = namespaceMap.get(namespace);
@@ -155,16 +182,13 @@ public class StateTable<K, N, ST> extends AbstractStateTable<K, N, ST> {
 		return keyedMap.put(key, value);
 	}
 
-	@Override
-	public void remove(Object key, Object namespace) {
-		removeAndGetOld(key, namespace);
+	private void remove(Object key, int keyGroupIndex, Object namespace) {
+		removeAndGetOld(key, keyGroupIndex, namespace);
 	}
 
-	@Override
-	public ST removeAndGetOld(Object key, Object namespace) {
-		final int keyGroupIndex = backend.getCurrentKeyGroupIndex();
+	private ST removeAndGetOld(Object key, int keyGroupIndex, Object namespace) {
 
-		Map<N, Map<K, ST>> namespaceMap = get(keyGroupIndex);
+		Map<N, Map<K, ST>> namespaceMap = getMapForKeyGroup(keyGroupIndex);
 
 		if (namespaceMap == null) {
 			return null;
@@ -183,10 +207,5 @@ public class StateTable<K, N, ST> extends AbstractStateTable<K, N, ST> {
 		}
 
 		return removed;
-	}
-
-	@Override
-	public Iterator<StateEntry<K, N, ST>> iterator() {
-		throw new UnsupportedOperationException("TODO!");
 	}
 }

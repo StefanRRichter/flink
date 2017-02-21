@@ -18,44 +18,38 @@
 
 package org.apache.flink.runtime.state.heap;
 
+import org.apache.flink.api.common.typeutils.TypeSerializer;
+import org.apache.flink.runtime.state.KeyGroupRange;
+
 /**
- * One entry in a state table.
- *
- * @param <K> type of key
- * @param <N> type of namespace
- * @param <S> type of value
+ * This interface is the current context of a keyed state. It provides information about the currently selected key in
+ * the context, the corresponding key-group, and other key and key-grouping related information.
  */
-public class StateEntry<K, N, S> {
-
-	protected K key;
-	protected N namespace;
-	protected S state;
-
-	public StateEntry(K key, N namespace, S state) {
-		this.key = key;
-		this.namespace = namespace;
-		this.state = state;
-	}
+public interface KeyContext<K> {
 
 	/**
-	 * Returns the key of this entry.
+	 * Used by states to access the current key.
 	 */
-	public K getKey() {
-		return key;
-	}
+	K getCurrentKey();
 
 	/**
-	 * Returns the namespace of this entry.
+	 * Returns the key-group to which the current key belongs.
 	 */
-	public N getNamespace() {
-		return namespace;
-	}
+	int getCurrentKeyGroupIndex();
 
 	/**
-	 * Returns the state of this entry.
+	 * Returns the number of key-groups aka max parallelism.
 	 */
-	public S getState() {
-		return state;
-	}
+	int getNumberOfKeyGroups();
+
+	/**
+	 * Returns the key groups for this backend.
+	 */
+	KeyGroupRange getKeyGroupRange();
+
+	/**
+	 * {@link TypeSerializer} for the state backend key type.
+	 */
+	TypeSerializer<K> getKeySerializer();
 
 }

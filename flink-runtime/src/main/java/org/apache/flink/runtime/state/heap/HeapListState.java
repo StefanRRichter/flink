@@ -22,7 +22,6 @@ import org.apache.flink.api.common.state.ListState;
 import org.apache.flink.api.common.state.ListStateDescriptor;
 import org.apache.flink.api.common.typeutils.TypeSerializer;
 import org.apache.flink.core.memory.DataOutputViewStreamWrapper;
-import org.apache.flink.runtime.state.KeyedStateBackend;
 import org.apache.flink.runtime.state.internal.InternalListState;
 import org.apache.flink.util.Preconditions;
 
@@ -44,18 +43,16 @@ public class HeapListState<K, N, V>
 	/**
 	 * Creates a new key/value state for the given hash map of key/value pairs.
 	 *
-	 * @param backend The state backend backing that created this state.
 	 * @param stateDesc The state identifier for the state. This contains name
 	 *                           and can create a default state value.
 	 * @param stateTable The state tab;e to use in this kev/value state. May contain initial state.
 	 */
 	public HeapListState(
-			KeyedStateBackend<K> backend,
 			ListStateDescriptor<V> stateDesc,
-			StateTable<K, N, ArrayList<V>> stateTable,
+			NestedMapsStateTable<K, N, ArrayList<V>> stateTable,
 			TypeSerializer<K> keySerializer,
 			TypeSerializer<N> namespaceSerializer) {
-		super(backend, stateDesc, stateTable, keySerializer, namespaceSerializer);
+		super(stateDesc, stateTable, keySerializer, namespaceSerializer);
 	}
 
 	// ------------------------------------------------------------------------
@@ -64,34 +61,24 @@ public class HeapListState<K, N, V>
 
 	@Override
 	public Iterable<V> get() {
-		final N namespace = currentNamespace;
-		final K key = backend.getCurrentKey();
-
-		Preconditions.checkState(namespace != null, "No namespace set.");
-		Preconditions.checkState(key != null, "No key set.");
-
-		return stateTable.get(key, namespace);
+		return stateTable.get(currentNamespace);
 	}
 
 	@Override
 	public void add(V value) {
 		final N namespace = currentNamespace;
-		final K key = backend.getCurrentKey();
-
-		Preconditions.checkState(namespace != null, "No namespace set.");
-		Preconditions.checkState(key != null, "No key set.");
 
 		if (value == null) {
 			clear();
 			return;
 		}
 
-		final StateTable<K, N, ArrayList<V>> map = stateTable;
-		ArrayList<V> list = map.get(key, namespace);
+		final NestedMapsStateTable<K, N, ArrayList<V>> map = stateTable;
+		ArrayList<V> list = map.get(namespace);
 
 		if (list == null) {
 			list = new ArrayList<>();
-			map.put(key, namespace, list);
+			map.put(namespace, list);
 		}
 		list.add(value);
 	}

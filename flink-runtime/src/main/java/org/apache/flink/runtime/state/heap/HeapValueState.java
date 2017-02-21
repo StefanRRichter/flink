@@ -21,9 +21,7 @@ package org.apache.flink.runtime.state.heap;
 import org.apache.flink.api.common.state.ValueState;
 import org.apache.flink.api.common.state.ValueStateDescriptor;
 import org.apache.flink.api.common.typeutils.TypeSerializer;
-import org.apache.flink.runtime.state.KeyedStateBackend;
 import org.apache.flink.runtime.state.internal.InternalValueState;
-import org.apache.flink.util.Preconditions;
 
 /**
  * Heap-backed partitioned {@link org.apache.flink.api.common.state.ValueState} that is snapshotted
@@ -40,29 +38,21 @@ public class HeapValueState<K, N, V>
 	/**
 	 * Creates a new key/value state for the given hash map of key/value pairs.
 	 *
-	 * @param backend The state backend backing that created this state.
 	 * @param stateDesc The state identifier for the state. This contains name
 	 *                           and can create a default state value.
 	 * @param stateTable The state tab;e to use in this kev/value state. May contain initial state.
 	 */
 	public HeapValueState(
-			KeyedStateBackend<K> backend,
 			ValueStateDescriptor<V> stateDesc,
-			StateTable<K, N, V> stateTable,
+			NestedMapsStateTable<K, N, V> stateTable,
 			TypeSerializer<K> keySerializer,
 			TypeSerializer<N> namespaceSerializer) {
-		super(backend, stateDesc, stateTable, keySerializer, namespaceSerializer);
+		super(stateDesc, stateTable, keySerializer, namespaceSerializer);
 	}
 
 	@Override
 	public V value() {
-		final N namespace = currentNamespace;
-		final K key = backend.getCurrentKey();
-
-		Preconditions.checkState(namespace != null, "No namespace set.");
-		Preconditions.checkState(key != null, "No key set.");
-
-		final V result = stateTable.get(key, namespace);
+		final V result = stateTable.get(currentNamespace);
 
 		if (result == null) {
 			return stateDesc.getDefaultValue();
@@ -73,17 +63,12 @@ public class HeapValueState<K, N, V>
 
 	@Override
 	public void update(V value) {
-		final N namespace = currentNamespace;
-		final K key = backend.getCurrentKey();
-
-		Preconditions.checkState(namespace != null, "No namespace set.");
-		Preconditions.checkState(key != null, "No key set.");
 
 		if (value == null) {
 			clear();
 			return;
 		}
 
-		stateTable.put(key, namespace, value);
+		stateTable.put(currentNamespace, value);
 	}
 }

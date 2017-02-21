@@ -23,12 +23,9 @@ import org.apache.flink.api.common.state.AggregatingState;
 import org.apache.flink.api.common.state.AggregatingStateDescriptor;
 import org.apache.flink.api.common.state.ReducingState;
 import org.apache.flink.api.common.typeutils.TypeSerializer;
-import org.apache.flink.runtime.state.KeyedStateBackend;
 import org.apache.flink.runtime.state.internal.InternalAggregatingState;
 
 import java.io.IOException;
-
-import static org.apache.flink.util.Preconditions.checkState;
 
 /**
  * Heap-backed partitioned {@link ReducingState} that is
@@ -49,8 +46,6 @@ public class HeapAggregatingState<K, N, IN, ACC, OUT>
 	/**
 	 * Creates a new key/value state for the given hash map of key/value pairs.
 	 *
-	 * @param backend
-	 *             The state backend backing that created this state.
 	 * @param stateDesc
 	 *             The state identifier for the state. This contains name and can create a default state value.
 	 * @param stateTable
@@ -59,13 +54,12 @@ public class HeapAggregatingState<K, N, IN, ACC, OUT>
 	 *             The serializer for the type that indicates the namespace
 	 */
 	public HeapAggregatingState(
-			KeyedStateBackend<K> backend,
 			AggregatingStateDescriptor<IN, ACC, OUT> stateDesc,
-			StateTable<K, N, ACC> stateTable,
+			NestedMapsStateTable<K, N, ACC> stateTable,
 			TypeSerializer<K> keySerializer,
 			TypeSerializer<N> namespaceSerializer) {
 
-		super(backend, stateDesc, stateTable, keySerializer, namespaceSerializer);
+		super(stateDesc, stateTable, keySerializer, namespaceSerializer);
 		this.aggFunction = stateDesc.getAggregateFunction();
 	}
 
@@ -75,36 +69,27 @@ public class HeapAggregatingState<K, N, IN, ACC, OUT>
 
 	@Override
 	public OUT get() {
-		final N namespace = currentNamespace;
-		final K key = backend.getCurrentKey();
 
-		checkState(namespace != null, "No namespace set.");
-		checkState(key != null, "No key set.");
-
-		ACC accumulator = stateTable.get(key, namespace);
+		ACC accumulator = stateTable.get(currentNamespace);
 		return accumulator != null ? aggFunction.getResult(accumulator) : null;
 	}
 
 	@Override
 	public void add(IN value) throws IOException {
 		final N namespace = currentNamespace;
-		final K key = backend.getCurrentKey();
-
-		checkState(namespace != null, "No namespace set.");
-		checkState(key != null, "No key set.");
 
 		if (value == null) {
 			clear();
 			return;
 		}
 
-		final StateTable<K, N, ACC> map = stateTable;
+		final NestedMapsStateTable<K, N, ACC> map = stateTable;
 
 		// if this is the first value for the key, create a new accumulator
-		ACC accumulator = map.get(key, namespace);
+		ACC accumulator = map.get(namespace);
 		if (accumulator == null) {
 			accumulator = aggFunction.createAccumulator();
-			map.put(key, namespace, accumulator);
+			map.put(namespace, accumulator);
 		}
 
 		aggFunction.add(value, accumulator);

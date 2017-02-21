@@ -22,12 +22,9 @@ import org.apache.flink.api.common.state.MergingState;
 import org.apache.flink.api.common.state.State;
 import org.apache.flink.api.common.state.StateDescriptor;
 import org.apache.flink.api.common.typeutils.TypeSerializer;
-import org.apache.flink.runtime.state.KeyedStateBackend;
 import org.apache.flink.runtime.state.internal.InternalMergingState;
 
 import java.util.Collection;
-
-import static org.apache.flink.util.Preconditions.checkState;
 
 /**
  * Base class for {@link MergingState} ({@link org.apache.flink.runtime.state.internal.InternalMergingState})
@@ -46,19 +43,17 @@ public abstract class AbstractHeapMergingState<K, N, IN, OUT, SV, S extends Stat
 	/**
 	 * Creates a new key/value state for the given hash map of key/value pairs.
 	 *
-	 * @param backend The state backend backing that created this state.
 	 * @param stateDesc The state identifier for the state. This contains name
 	 *                           and can create a default state value.
 	 * @param stateTable The state tab;e to use in this kev/value state. May contain initial state.
 	 */
 	protected AbstractHeapMergingState(
-			KeyedStateBackend<K> backend,
 			SD stateDesc,
-			StateTable<K, N, SV> stateTable,
+			NestedMapsStateTable<K, N, SV> stateTable,
 			TypeSerializer<K> keySerializer,
 			TypeSerializer<N> namespaceSerializer) {
 
-		super(backend, stateDesc, stateTable, keySerializer, namespaceSerializer);
+		super(stateDesc, stateTable, keySerializer, namespaceSerializer);
 	}
 
 	@Override
@@ -67,10 +62,7 @@ public abstract class AbstractHeapMergingState<K, N, IN, OUT, SV, S extends Stat
 			return; // nothing to do
 		}
 
-		final K key = backend.getCurrentKey();
-		checkState(key != null, "No key set.");
-
-		final StateTable<K, N, SV> map = stateTable;
+		final NestedMapsStateTable<K, N, SV> map = stateTable;
 
 		SV merged = null;
 
@@ -78,7 +70,7 @@ public abstract class AbstractHeapMergingState<K, N, IN, OUT, SV, S extends Stat
 		for (N source : sources) {
 
 			// get and remove the next source per namespace/key
-			SV sourceState = map.removeAndGetOld(key, source);
+			SV sourceState = map.removeAndGetOld(source);
 
 			if (merged != null && sourceState != null) {
 				merged = mergeState(merged, sourceState);
@@ -90,14 +82,14 @@ public abstract class AbstractHeapMergingState<K, N, IN, OUT, SV, S extends Stat
 		// merge into the target, if needed
 		if (merged != null) {
 
-			SV targetState = map.get(key, target);
+			SV targetState = map.get(target);
 
 			if (targetState != null) {
 				targetState = mergeState(targetState, merged);
 			} else {
 				targetState = merged;
 			}
-			map.put(key, target, targetState);
+			map.put(target, targetState);
 		}
 	}
 
