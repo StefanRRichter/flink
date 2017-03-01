@@ -92,7 +92,7 @@ public class HeapReducingStateTest {
 
 			// make sure all lists / maps are cleared
 
-			NestedMapsStateTable<String, VoidNamespace, Long> stateTable =
+			AbstractStateTable<String, VoidNamespace, Long> stateTable =
 					((HeapReducingState<String, VoidNamespace, Long>) state).stateTable;
 
 			assertTrue(stateTable.isEmpty());
@@ -213,8 +213,8 @@ public class HeapReducingStateTest {
 			keyedBackend.setCurrentKey("mno");
 			state.setCurrentNamespace(namespace1);
 			state.clear();
-			
-			NestedMapsStateTable<String, Integer, Long> stateTable =
+
+			AbstractStateTable<String, Integer, Long> stateTable =
 					((HeapReducingState<String, Integer, Long>) state).stateTable;
 
 			assertTrue(stateTable.isEmpty());

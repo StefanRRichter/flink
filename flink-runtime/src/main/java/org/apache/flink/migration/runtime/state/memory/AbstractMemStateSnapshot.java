@@ -21,14 +21,9 @@ package org.apache.flink.migration.runtime.state.memory;
 import org.apache.flink.api.common.state.State;
 import org.apache.flink.api.common.state.StateDescriptor;
 import org.apache.flink.api.common.typeutils.TypeSerializer;
-import org.apache.flink.api.common.typeutils.base.VoidSerializer;
 import org.apache.flink.migration.runtime.state.KvStateSnapshot;
 import org.apache.flink.runtime.state.KeyGroupRange;
-import org.apache.flink.runtime.state.RegisteredBackendStateMetaInfo;
-import org.apache.flink.runtime.state.VoidNamespace;
-import org.apache.flink.runtime.state.VoidNamespaceSerializer;
-import org.apache.flink.runtime.state.heap.StateTable;
-import org.apache.flink.runtime.util.DataInputDeserializer;
+import org.apache.flink.runtime.state.heap.AbstractStateTable;
 import org.apache.flink.util.Preconditions;
 
 import java.io.IOException;
@@ -79,46 +74,48 @@ public abstract class AbstractMemStateSnapshot<K, N, SV, S extends State, SD ext
 
 	@Override
 	@SuppressWarnings("unchecked")
-	public StateTable<K, N, SV> deserialize(
+	public AbstractStateTable<K, N, SV> deserialize(
 			String stateName,
 			KeyGroupRange keyGroupRange,
-			int totalNumberOfKeyGroups) throws IOException {
+			int totalNumberOfKeyGroups,
+			boolean async) throws IOException {
 
 		Preconditions.checkNotNull(stateName, "State name is null. Cannot deserialize snapshot.");
 		Preconditions.checkNotNull(stateName, "KeyGroupRange is null. Cannot deserialize snapshot.");
 
-		DataInputDeserializer inView = new DataInputDeserializer(data, 0, data.length);
-
-		final int numKeys = inView.readInt();
-
-		TypeSerializer<N> patchedNamespaceSerializer = this.namespaceSerializer;
-		if (patchedNamespaceSerializer instanceof VoidSerializer) {
-
-			patchedNamespaceSerializer = (TypeSerializer<N>) VoidNamespaceSerializer.INSTANCE;
-		}
-
-		RegisteredBackendStateMetaInfo<N, SV> registeredBackendStateMetaInfo =
-				new RegisteredBackendStateMetaInfo<>(
-						StateDescriptor.Type.UNKNOWN,
-						stateName,
-						patchedNamespaceSerializer,
-						stateSerializer);
-
-		StateTable<K, N, SV> stateMap = new StateTable<>(registeredBackendStateMetaInfo);
-
-		for (int i = 0; i < numKeys && !closed; i++) {
-			N namespace = namespaceSerializer.deserialize(inView);
-			if (null == namespace) {
-				namespace = (N) VoidNamespace.INSTANCE;
-			}
-			final int numValues = inView.readInt();
-			for (int j = 0; j < numValues; j++) {
-				K key = keySerializer.deserialize(inView);
-				SV value = stateSerializer.deserialize(inView);
-				stateMap.put(key, namespace, value);
-			}
-		}
-		return stateMap;
+		throw new UnsupportedOperationException("TODO");
+//		DataInputDeserializer inView = new DataInputDeserializer(data, 0, data.length);
+//
+//		final int numKeys = inView.readInt();
+//
+//		TypeSerializer<N> patchedNamespaceSerializer = this.namespaceSerializer;
+//		if (patchedNamespaceSerializer instanceof VoidSerializer) {
+//
+//			patchedNamespaceSerializer = (TypeSerializer<N>) VoidNamespaceSerializer.INSTANCE;
+//		}
+//
+//		RegisteredBackendStateMetaInfo<N, SV> registeredBackendStateMetaInfo =
+//				new RegisteredBackendStateMetaInfo<>(
+//						StateDescriptor.Type.UNKNOWN,
+//						stateName,
+//						patchedNamespaceSerializer,
+//						stateSerializer);
+//
+//		AbstractStateTable<K, N, SV> stateMap = new CopyOnWriteStateTable<>(registeredBackendStateMetaInfo);
+//
+//		for (int i = 0; i < numKeys && !closed; i++) {
+//			N namespace = namespaceSerializer.deserialize(inView);
+//			if (null == namespace) {
+//				namespace = (N) VoidNamespace.INSTANCE;
+//			}
+//			final int numValues = inView.readInt();
+//			for (int j = 0; j < numValues; j++) {
+//				K key = keySerializer.deserialize(inView);
+//				SV value = stateSerializer.deserialize(inView);
+//				stateMap.put(key, namespace, value);
+//			}
+//		}
+//		return stateMap;
 	}
 
 	/**

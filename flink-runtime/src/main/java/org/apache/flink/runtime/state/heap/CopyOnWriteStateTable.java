@@ -20,10 +20,12 @@ package org.apache.flink.runtime.state.heap;
 
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.typeutils.TypeSerializer;
+import org.apache.flink.core.memory.DataInputView;
 import org.apache.flink.runtime.state.RegisteredBackendStateMetaInfo;
 import org.apache.flink.util.MathUtils;
 import org.apache.flink.util.Preconditions;
 
+import java.io.IOException;
 import java.util.Arrays;
 import java.util.ConcurrentModificationException;
 import java.util.Iterator;
@@ -82,16 +84,16 @@ import java.util.NoSuchElementException;
  * @param <N> type of namespace
  * @param <S> type of value
  */
-public class StateTable<K, N, S> extends AbstractStateTable<K, N, S> implements Iterable<StateEntry<K, N, S>> {
+public class CopyOnWriteStateTable<K, N, S> extends AbstractStateTable<K, N, S> implements Iterable<StateEntry<K, N, S>> {
 
 	/**
-	 * Min capacity (other than zero) for a {@link StateTable}. Must be a power of two
+	 * Min capacity (other than zero) for a {@link CopyOnWriteStateTable}. Must be a power of two
 	 * greater than 1 (and less than 1 << 30).
 	 */
 	private static final int MINIMUM_CAPACITY = 4;
 
 	/**
-	 * Max capacity for a {@link StateTable}. Must be a power of two >= MINIMUM_CAPACITY.
+	 * Max capacity for a {@link CopyOnWriteStateTable}. Must be a power of two >= MINIMUM_CAPACITY.
 	 */
 	private static final int MAXIMUM_CAPACITY = 1 << 30;
 
@@ -109,7 +111,7 @@ public class StateTable<K, N, S> extends AbstractStateTable<K, N, S> implements 
 	private static final StateTableEntry<?, ?, ?>[] EMPTY_TABLE = new StateTableEntry[MINIMUM_CAPACITY >>> 1];
 
 	/**
-	 * Empty entry that we use to bootstrap our {@link StateTable.StateEntryIterator}.
+	 * Empty entry that we use to bootstrap our {@link CopyOnWriteStateTable.StateEntryIterator}.
 	 */
 	private static final StateTableEntry<?, ?, ?> ITERATOR_BOOTSTRAP_ENTRY = new StateTableEntry<>();
 
@@ -147,7 +149,7 @@ public class StateTable<K, N, S> extends AbstractStateTable<K, N, S> implements 
 	private int rehashIndex;
 
 	/**
-	 * The {@link StateTable} is rehashed when its size exceeds this threshold.
+	 * The {@link CopyOnWriteStateTable} is rehashed when its size exceeds this threshold.
 	 * The value of this field is generally .75 * capacity, except when
 	 * the capacity is zero, as described in the EMPTY_TABLE declaration
 	 * above.
@@ -165,7 +167,7 @@ public class StateTable<K, N, S> extends AbstractStateTable<K, N, S> implements 
 	 *
 	 * @param metaInfo the meta information, including the type serializer for state copy-on-write.
 	 */
-	public StateTable(KeyContext<K> keyContext, RegisteredBackendStateMetaInfo<N, S> metaInfo) {
+	public CopyOnWriteStateTable(KeyContext<K> keyContext, RegisteredBackendStateMetaInfo<N, S> metaInfo) {
 		this(keyContext, metaInfo, 1024);
 	}
 
@@ -177,7 +179,7 @@ public class StateTable<K, N, S> extends AbstractStateTable<K, N, S> implements 
 	 * @throws IllegalArgumentException when the capacity is less than zero.
 	 */
 	@SuppressWarnings("unchecked")
-	public StateTable(KeyContext<K> keyContext, RegisteredBackendStateMetaInfo<N, S> metaInfo, int capacity) {
+	public CopyOnWriteStateTable(KeyContext<K> keyContext, RegisteredBackendStateMetaInfo<N, S> metaInfo, int capacity) {
 		super(keyContext, metaInfo);
 
 		//size 2, initialized to EMPTY_TABLE.
@@ -212,9 +214,9 @@ public class StateTable<K, N, S> extends AbstractStateTable<K, N, S> implements 
 	// Main interface methods of StateTable ----------------------------------------------------------------------------
 
 	/**
-	 * Returns the total number of entries in this {@link StateTable}. This is the sum of both sub-tables.
+	 * Returns the total number of entries in this {@link CopyOnWriteStateTable}. This is the sum of both sub-tables.
 	 *
-	 * @return the number of entries in this {@link StateTable}.
+	 * @return the number of entries in this {@link CopyOnWriteStateTable}.
 	 */
 	public int size() {
 		return sizes[0] + sizes[1];
@@ -562,43 +564,54 @@ public class StateTable<K, N, S> extends AbstractStateTable<K, N, S> implements 
 		return true;
 	}
 
-	/**
-	 * Creates a snapshot of this {@link StateTable}, to be written in checkpointing. The snapshot integrity is
-	 * protected through copy-on-write from the {@link StateTable}. Users should call
-	 * {@link #releaseSnapshot(StateTableSnapshot)} after using the returned object.
-	 *
-	 * @return a snapshot from this {@link StateTable}, for checkpointing.
-	 */
-	@Override
-	public StateTableSnapshot<K, N, S> createSnapshot() {
-
-		return new StateTableSnapshot<>(
-				snapshotTableArrays(),
-				size(),
-				keyContext.getKeySerializer(),
-				metaInfo.getNamespaceSerializer(),
-				metaInfo.getStateSerializer(),
-				keyContext.getKeyGroupRange(),
-				keyContext.getNumberOfKeyGroups(),
-				stateTableVersion);
+	public int getStateTableVersion() {
+		return stateTableVersion;
 	}
 
 	/**
-	 * Releases a snapshot for this {@link StateTable}. This method should be called once a snapshot is no more needed,
-	 * so that the {@link StateTable} can stop considering this snapshot for copy-on-write, thus avoiding unnecessary
+	 * Creates a snapshot of this {@link CopyOnWriteStateTable}, to be written in checkpointing. The snapshot integrity is
+	 * protected through copy-on-write from the {@link CopyOnWriteStateTable}. Users should call
+	 * {@link #releaseSnapshot(CopyOnWriteStateTableSnapshot)} after using the returned object.
+	 *
+	 * @return a snapshot from this {@link CopyOnWriteStateTable}, for checkpointing.
+	 */
+	@Override
+	public CopyOnWriteStateTableSnapshot<K, N, S> createSnapshot() {
+
+		return new CopyOnWriteStateTableSnapshot<>(this);
+	}
+
+	@Override
+	public void readKeyGroupData(DataInputView inView, int keyGroupId) throws IOException {
+		TypeSerializer<K> keySerializer = keyContext.getKeySerializer();
+		TypeSerializer<N> namespaceSerializer = getNamespaceSerializer();
+		TypeSerializer<S> stateSerializer = getStateSerializer();
+
+		int numKeys = inView.readInt();
+		for (int i = 0; i < numKeys; ++i) {
+			K key = keySerializer.deserialize(inView);
+			N namespace = namespaceSerializer.deserialize(inView);
+			S state = stateSerializer.deserialize(inView);
+			put(key, namespace, state);
+		}
+	}
+
+	/**
+	 * Releases a snapshot for this {@link CopyOnWriteStateTable}. This method should be called once a snapshot is no more needed,
+	 * so that the {@link CopyOnWriteStateTable} can stop considering this snapshot for copy-on-write, thus avoiding unnecessary
 	 * object creation.
 	 *
 	 * @param snapshotToRelease the snapshot to release.
 	 */
 	@Override
-	public void releaseSnapshot(StateTableSnapshot<K, N, S> snapshotToRelease) {
+	public void releaseSnapshot(CopyOnWriteStateTableSnapshot<K, N, S> snapshotToRelease) {
 		releaseSnapshot(snapshotToRelease.getSnapshotVersion());
 	}
 
 	// Private utility functions for StateTable management -------------------------------------------------------------
 
 	/**
-	 * @see #releaseSnapshot(StateTableSnapshot)
+	 * @see #releaseSnapshot(CopyOnWriteStateTableSnapshot)
 	 */
 	public synchronized void releaseSnapshot(int snapshotVersion) {
 
@@ -613,7 +626,7 @@ public class StateTable<K, N, S> extends AbstractStateTable<K, N, S> implements 
 
 	/**
 	 * Creates (combined) copy of the table arrays for a snapshot. This method must be called by the same Thread that
-	 * does modifications to the {@link StateTable}.
+	 * does modifications to the {@link CopyOnWriteStateTable}.
 	 */
 	@VisibleForTesting
 	@SuppressWarnings("unchecked")
@@ -851,7 +864,7 @@ public class StateTable<K, N, S> extends AbstractStateTable<K, N, S> implements 
 	// StateTableEntry -------------------------------------------------------------------------------------------------
 
 	/**
-	 * One entry in the {@link StateTable}. This is a triplet of key, namespace, and state. Thereby, key and namespace
+	 * One entry in the {@link CopyOnWriteStateTable}. This is a triplet of key, namespace, and state. Thereby, key and namespace
 	 * together serve as a composite key for the state. This class also contains some management meta data for
 	 * copy-on-write, a pointer to link other {@link StateTableEntry}s to a list, and cached hash code.
 	 *
@@ -862,7 +875,7 @@ public class StateTable<K, N, S> extends AbstractStateTable<K, N, S> implements 
 	static class StateTableEntry<K, N, S> extends StateEntry<K, N, S> {
 
 		/**
-		 * Link to another {@link StateTableEntry}. This is used to resolve collisions in the {@link StateTable} through chaining.
+		 * Link to another {@link StateTableEntry}. This is used to resolve collisions in the {@link CopyOnWriteStateTable} through chaining.
 		 */
 		StateTableEntry<K, N, S> next;
 
@@ -918,7 +931,7 @@ public class StateTable<K, N, S> extends AbstractStateTable<K, N, S> implements 
 	// For testing  ----------------------------------------------------------------------------------------------------
 
 	@Override
-	public int numberOfKeysInNamespace(Object namespace) {
+	public int sizeOfNamespace(Object namespace) {
 		int count = 0;
 		for (StateTableEntry<K, N, S>[] table : tables) {
 			for (StateTableEntry<K, N, S> entry : table) {
@@ -934,7 +947,7 @@ public class StateTable<K, N, S> extends AbstractStateTable<K, N, S> implements 
 	// StateEntryIterator  ---------------------------------------------------------------------------------------------
 
 	/**
-	 * Iterator over the entries in a {@link StateTable}.
+	 * Iterator over the entries in a {@link CopyOnWriteStateTable}.
 	 */
 	class StateEntryIterator implements Iterator<StateEntry<K, N, S>> {
 		private int activeSubTableId;

@@ -92,7 +92,7 @@ public class HeapAggregatingStateTest {
 
 			// make sure all lists / maps are cleared
 
-			NestedMapsStateTable<String, VoidNamespace, MutableLong> stateTable =
+			AbstractStateTable<String, VoidNamespace, MutableLong> stateTable =
 					((HeapAggregatingState<String, VoidNamespace, Long, MutableLong, Long>) state).stateTable;
 
 			assertTrue(stateTable.isEmpty());
@@ -214,7 +214,7 @@ public class HeapAggregatingStateTest {
 			state.setCurrentNamespace(namespace1);
 			state.clear();
 
-			NestedMapsStateTable<String, Integer, MutableLong> stateTable =
+			AbstractStateTable<String, Integer, MutableLong> stateTable =
 					((HeapAggregatingState<String, Integer, Long, MutableLong, Long>) state).stateTable;
 
 			assertTrue(stateTable.isEmpty());

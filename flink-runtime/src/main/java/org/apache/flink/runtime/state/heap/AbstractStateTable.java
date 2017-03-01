@@ -20,8 +20,11 @@ package org.apache.flink.runtime.state.heap;
 
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.typeutils.TypeSerializer;
+import org.apache.flink.core.memory.DataInputView;
 import org.apache.flink.runtime.state.RegisteredBackendStateMetaInfo;
 import org.apache.flink.util.Preconditions;
+
+import java.io.IOException;
 
 /**
  * Base class for state tables. Accesses to state are typically scoped by the currently active key, as provided
@@ -129,6 +132,8 @@ public abstract class AbstractStateTable<K, N, S> {
 	 */
 	public abstract S removeAndGetOld(Object namespace);
 
+	// For queryable state --------------------------------------------------------------------------
+
 	/**
 	 * Returns the value for the composite of active key and given namespace. This is typically used by
 	 * queryable state.
@@ -162,12 +167,14 @@ public abstract class AbstractStateTable<K, N, S> {
 
 	public abstract boolean supportsAsynchronousSnapshots();
 
-	public abstract StateTableSnapshot<K, N, S> createSnapshot();
+	public abstract StateTableSnapshot createSnapshot();
 
-	public abstract void releaseSnapshot(StateTableSnapshot<K, N, S> snapshotToRelease);
+	public abstract void readKeyGroupData(DataInputView inView, int keyGroupId) throws IOException;
+
+	public abstract void releaseSnapshot(CopyOnWriteStateTableSnapshot<K, N, S> snapshotToRelease);
 
 	// for testing --------------------------------------------------------------------------
 
 	@VisibleForTesting
-	public abstract int numberOfKeysInNamespace(Object namespace);
+	public abstract int sizeOfNamespace(Object namespace);
 }

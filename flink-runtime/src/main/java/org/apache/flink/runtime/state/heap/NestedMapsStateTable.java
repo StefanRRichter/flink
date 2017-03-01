@@ -18,13 +18,16 @@
 package org.apache.flink.runtime.state.heap;
 
 import org.apache.flink.annotation.VisibleForTesting;
+import org.apache.flink.core.memory.DataInputView;
+import org.apache.flink.core.memory.DataOutputView;
 import org.apache.flink.runtime.state.KeyGroupRangeAssignment;
 import org.apache.flink.runtime.state.RegisteredBackendStateMetaInfo;
 
+import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
 
-public class NestedMapsStateTable<K, N, ST> extends AbstractStateTable<K, N, ST> {
+public class NestedMapsStateTable<K, N, ST> extends AbstractStateTable<K, N, ST> implements StateTableSnapshot {
 
 	/** Map for holding the actual state objects. */
 	private final Map<N, Map<K, ST>>[] state;
@@ -210,7 +213,7 @@ public class NestedMapsStateTable<K, N, ST> extends AbstractStateTable<K, N, ST>
 	}
 
 	@Override
-	public int numberOfKeysInNamespace(Object namespace) {
+	public int sizeOfNamespace(Object namespace) {
 		int count = 0;
 		for (Map<N, Map<K, ST>> namespaceMap : state) {
 			if (null != namespaceMap) {
@@ -230,12 +233,27 @@ public class NestedMapsStateTable<K, N, ST> extends AbstractStateTable<K, N, ST>
 	}
 
 	@Override
-	public StateTableSnapshot<K, N, ST> createSnapshot() {
+	public CopyOnWriteStateTableSnapshot<K, N, ST> createSnapshot() {
 		throw new UnsupportedOperationException("TODO");
 	}
 
 	@Override
-	public void releaseSnapshot(StateTableSnapshot<K, N, ST> snapshotToRelease) {
+	public void readKeyGroupData(DataInputView inView, int keyGroupId) throws IOException {
 		throw new UnsupportedOperationException("TODO");
+	}
+
+	@Override
+	public void releaseSnapshot(CopyOnWriteStateTableSnapshot<K, N, ST> snapshotToRelease) {
+		throw new UnsupportedOperationException("TODO");
+	}
+
+	@Override
+	public void writeKeyGroupData(DataOutputView dov, int keyGroupId) throws IOException {
+
+	}
+
+	@Override
+	public void release() {
+		// nothing to do
 	}
 }

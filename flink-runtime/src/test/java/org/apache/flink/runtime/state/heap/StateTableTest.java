@@ -19,10 +19,12 @@
 package org.apache.flink.runtime.state.heap;
 
 import org.apache.flink.api.common.state.StateDescriptor;
+import org.apache.flink.api.common.typeutils.TypeSerializer;
 import org.apache.flink.api.common.typeutils.base.IntSerializer;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.api.java.tuple.Tuple3;
 import org.apache.flink.runtime.state.ArrayListSerializer;
+import org.apache.flink.runtime.state.KeyGroupRange;
 import org.apache.flink.runtime.state.RegisteredBackendStateMetaInfo;
 import org.junit.Assert;
 import org.junit.Test;
@@ -46,8 +48,10 @@ public class StateTableTest {
 						IntSerializer.INSTANCE,
 						new ArrayListSerializer<>(IntSerializer.INSTANCE)); // we use mutable state objects.
 
-		StateTable<Integer, Integer, ArrayList<Integer>> stateTable =
-				new StateTable<>(8, metaInfo);
+		final MockKeyContext<Integer> keyContext = new MockKeyContext<>(IntSerializer.INSTANCE);
+
+		final CopyOnWriteStateTable<Integer, Integer, ArrayList<Integer>> stateTable =
+				new CopyOnWriteStateTable<>(keyContext, metaInfo);
 
 		ArrayList<Integer> state_1_1 = new ArrayList<>();
 		state_1_1.add(41);
@@ -99,21 +103,23 @@ public class StateTableTest {
 						IntSerializer.INSTANCE,
 						new ArrayListSerializer<>(IntSerializer.INSTANCE)); // we use mutable state objects.
 
-		StateTable<Integer, Integer, ArrayList<Integer>> stateTable =
-				new StateTable<>(128, metaInfo);
+		final MockKeyContext<Integer> keyContext = new MockKeyContext<>(IntSerializer.INSTANCE);
+
+		final CopyOnWriteStateTable<Integer, Integer, ArrayList<Integer>> stateTable =
+				new CopyOnWriteStateTable<>(keyContext, metaInfo);
 
 		int insert = 0;
 		int remove = 0;
 		while (!stateTable.isRehashing()) {
 			stateTable.put(insert++, 0, new ArrayList<Integer>());
-			if(insert % 8 == 0) {
+			if (insert % 8 == 0) {
 				stateTable.remove(remove++, 0);
 			}
 		}
 		Assert.assertEquals(insert - remove, stateTable.size());
 		while (stateTable.isRehashing()) {
 			stateTable.put(insert++, 0, new ArrayList<Integer>());
-			if(insert % 8 == 0) {
+			if (insert % 8 == 0) {
 				stateTable.remove(remove++, 0);
 			}
 		}
@@ -142,14 +148,16 @@ public class StateTableTest {
 						IntSerializer.INSTANCE,
 						new ArrayListSerializer<>(IntSerializer.INSTANCE)); // we use mutable state objects.
 
-		StateTable<Integer, Integer, ArrayList<Integer>> stateTable =
-				new StateTable<>(128, metaInfo);
+		final MockKeyContext<Integer> keyContext = new MockKeyContext<>(IntSerializer.INSTANCE);
+
+		final CopyOnWriteStateTable<Integer, Integer, ArrayList<Integer>> stateTable =
+				new CopyOnWriteStateTable<>(keyContext, metaInfo);
 
 		HashMap<Tuple2<Integer, Integer>, ArrayList<Integer>> referenceMap = new HashMap<>();
 
 		Random rand = new Random(42);
 
-		StateTable.StateTableEntry<Integer, Integer, ArrayList<Integer>>[] snapshot = null;
+		CopyOnWriteStateTable.StateTableEntry<Integer, Integer, ArrayList<Integer>>[] snapshot = null;
 		int snapshotSize = 0;
 		Tuple3<Integer, Integer, ArrayList<Integer>>[] reference = null;
 
@@ -227,7 +235,7 @@ public class StateTableTest {
 
 				if (snapshot != null) {
 					Assert.assertTrue(deepCompare(convert(snapshot, snapshotSize), reference));
-					if(i % 5_000 == 0) {
+					if (i % 5_000 == 0) {
 						snapshot = null;
 						reference = null;
 						snapshotSize = 0;
@@ -244,10 +252,10 @@ public class StateTableTest {
 	}
 
 	@SuppressWarnings("unchecked")
-	private static <K, N, S> Tuple3<K, N, S>[] convert(StateTable.StateTableEntry<K, N, S>[] snapshot, int mapSize) {
+	private static <K, N, S> Tuple3<K, N, S>[] convert(CopyOnWriteStateTable.StateTableEntry<K, N, S>[] snapshot, int mapSize) {
 		Tuple3<K, N, S>[] result = new Tuple3[mapSize];
 		int pos = 0;
-		for (StateTable.StateTableEntry<K, N, S> entry : snapshot) {
+		for (CopyOnWriteStateTable.StateTableEntry<K, N, S> entry : snapshot) {
 			while (null != entry) {
 				result[pos++] = new Tuple3<>(entry.getKey(), entry.getNamespace(), entry.getState());
 				entry = entry.next;
@@ -319,4 +327,44 @@ public class StateTableTest {
 		return true;
 	}
 
+	static class MockKeyContext<T> implements KeyContext<T> {
+
+		private T key;
+		private final TypeSerializer<T> serializer;
+		private final KeyGroupRange keyGroupRange;
+
+		public MockKeyContext(TypeSerializer<T> serializer) {
+			this.serializer = serializer;
+			this.keyGroupRange = new KeyGroupRange(0, 0);
+		}
+
+		public void setKey(T key) {
+			this.key = key;
+		}
+
+		@Override
+		public T getCurrentKey() {
+			return key;
+		}
+
+		@Override
+		public int getCurrentKeyGroupIndex() {
+			return 0;
+		}
+
+		@Override
+		public int getNumberOfKeyGroups() {
+			return 1;
+		}
+
+		@Override
+		public KeyGroupRange getKeyGroupRange() {
+			return keyGroupRange;
+		}
+
+		@Override
+		public TypeSerializer<T> getKeySerializer() {
+			return serializer;
+		}
+	}
 }

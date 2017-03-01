@@ -74,7 +74,7 @@ public class StateEntry<K, N, S> {
 
 	@Override
 	public final boolean equals(Object o) {
-		if (!(o instanceof StateTable.StateTableEntry)) {
+		if (!(o instanceof CopyOnWriteStateTable.StateTableEntry)) {
 			return false;
 		}
 

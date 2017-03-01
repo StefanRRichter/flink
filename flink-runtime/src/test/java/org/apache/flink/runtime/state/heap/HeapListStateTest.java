@@ -94,7 +94,7 @@ public class HeapListStateTest {
 
 			// make sure all lists / maps are cleared
 
-			NestedMapsStateTable<String, VoidNamespace, ArrayList<Long>> stateTable =
+			AbstractStateTable<String, VoidNamespace, ArrayList<Long>> stateTable =
 					((HeapListState<String, VoidNamespace, Long>) state).stateTable;
 
 			assertTrue(stateTable.isEmpty());
@@ -214,7 +214,7 @@ public class HeapListStateTest {
 			state.setCurrentNamespace(namespace1);
 			state.clear();
 
-			NestedMapsStateTable<String, Integer, ArrayList<Long>> stateTable =
+			AbstractStateTable<String, Integer, ArrayList<Long>> stateTable =
 					((HeapListState<String, Integer, Long>) state).stateTable;
 
 			assertTrue(stateTable.isEmpty());
