@@ -26,12 +26,19 @@ import org.apache.flink.runtime.state.KeyGroupRange;
 import org.apache.flink.runtime.state.RegisteredBackendStateMetaInfo;
 import org.apache.flink.runtime.state.VoidNamespace;
 import org.apache.flink.runtime.state.VoidNamespaceSerializer;
-import org.apache.flink.runtime.state.heap.AbstractStateTable;
+import org.apache.flink.runtime.state.heap.StateTable;
 import org.apache.flink.runtime.state.heap.HeapKeyedStateBackend;
 import org.apache.flink.util.Preconditions;
 
 import java.io.IOException;
 
+/**
+ * This class outlines the general strategy to restore from migration states.
+ *
+ * @param <K> type of key.
+ * @param <N> type of namespace.
+ * @param <S> type of state.
+ */
 @Deprecated
 public abstract class AbstractMigrationRestoreStrategy<K, N, S> implements MigrationRestoreSnapshot<K, N, S> {
 
@@ -61,7 +68,7 @@ public abstract class AbstractMigrationRestoreStrategy<K, N, S> implements Migra
 	}
 
 	@Override
-	public AbstractStateTable<K, N, S> deserialize(String stateName, HeapKeyedStateBackend<K> stateBackend) throws IOException {
+	public StateTable<K, N, S> deserialize(String stateName, HeapKeyedStateBackend<K> stateBackend) throws IOException {
 
 		Preconditions.checkNotNull(stateName, "State name is null. Cannot deserialize snapshot.");
 		Preconditions.checkNotNull(stateBackend, "State backend is null. Cannot deserialize snapshot.");
@@ -83,7 +90,7 @@ public abstract class AbstractMigrationRestoreStrategy<K, N, S> implements Migra
 						patchedNamespaceSerializer,
 						stateSerializer);
 
-		final AbstractStateTable<K, N, S> stateTable = stateBackend.newStateTable(registeredBackendStateMetaInfo);
+		final StateTable<K, N, S> stateTable = stateBackend.newStateTable(registeredBackendStateMetaInfo);
 		final DataInputView inView = openDataInputView();
 		final int keyGroup = keyGroupRange.getStartKeyGroup();
 		final int numNamespaces = inView.readInt();
@@ -103,5 +110,8 @@ public abstract class AbstractMigrationRestoreStrategy<K, N, S> implements Migra
 		return stateTable;
 	}
 
+	/**
+	 * Different state handles require different code to end up with a {@link DataInputView}.
+	 */
 	protected abstract DataInputView openDataInputView() throws IOException;
 }

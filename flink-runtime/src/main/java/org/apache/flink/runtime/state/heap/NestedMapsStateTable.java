@@ -28,14 +28,21 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * @param <K>
- * @param <N>
- * @param <S>
+ * This implementation of {@link StateTable} is based on the Flink 1.2 implementation, using nested {@link HashMap}
+ * objects. It is also maintaining a partitioning by key-group.
+ * <p>
+ * In contrast to {@link CopyOnWriteStateTable}, this implementation does not support asynchronous snapshots. However,
+ * it might have a better memory footprint for some use-cases, e.g. it is naturally de-duplicating namespace objects.
+ *
+ * @param <K> type of key.
+ * @param <N> type of namespace.
+ * @param <S> type of state.
  */
-public class NestedMapsStateTable<K, N, S> extends AbstractStateTable<K, N, S> {
+public class NestedMapsStateTable<K, N, S> extends StateTable<K, N, S> {
 
 	/**
-	 * Map for holding the actual state objects.
+	 * Map for holding the actual state objects. The outer array represents the key-groups. The nested maps provide
+	 * an outer scope by namespace and an inner scope by key.
 	 */
 	private final Map<N, Map<K, S>>[] state;
 
@@ -45,6 +52,13 @@ public class NestedMapsStateTable<K, N, S> extends AbstractStateTable<K, N, S> {
 	private final int keyGroupOffset;
 
 	// ------------------------------------------------------------------------
+
+	/**
+	 * Creates a new {@link NestedMapsStateTable} for the given key context and meta info.
+	 *
+	 * @param keyContext the key context.
+	 * @param metaInfo the meta information for this state table.
+	 */
 	public NestedMapsStateTable(KeyContext<K> keyContext, RegisteredBackendStateMetaInfo<N, S> metaInfo) {
 		super(keyContext, metaInfo);
 		this.keyGroupOffset = keyContext.getKeyGroupRange().getStartKeyGroup();
@@ -58,13 +72,16 @@ public class NestedMapsStateTable<K, N, S> extends AbstractStateTable<K, N, S> {
 	//  access to maps
 	// ------------------------------------------------------------------------
 
+	/**
+	 * Returns the internal data structure.
+	 */
 	public Map<N, Map<K, S>>[] getState() {
 		return state;
 	}
 
 	@VisibleForTesting
-	public Map<N, Map<K, S>> getMapForKeyGroup(int keyGroupIndex) {
-		final int pos = indexToOffset(keyGroupIndex);
+	Map<N, Map<K, S>> getMapForKeyGroup(int keyGroupIndex) {
+		final int pos = keyGroupIdToArrayIndex(keyGroupIndex);
 		if (pos >= 0 && pos < state.length) {
 			return state[pos];
 		} else {
@@ -72,17 +89,20 @@ public class NestedMapsStateTable<K, N, S> extends AbstractStateTable<K, N, S> {
 		}
 	}
 
-	public void setMapForKeyGroup(int index, Map<N, Map<K, S>> map) {
+	private void setMapForKeyGroup(int keyGroupId, Map<N, Map<K, S>> map) {
 		try {
-			state[indexToOffset(index)] = map;
+			state[keyGroupIdToArrayIndex(keyGroupId)] = map;
 		} catch (ArrayIndexOutOfBoundsException e) {
 			throw new IllegalArgumentException("Key group index out of range of key group range [" +
 					keyGroupOffset + ", " + (keyGroupOffset + state.length) + ").");
 		}
 	}
 
-	private int indexToOffset(int index) {
-		return index - keyGroupOffset;
+	/**
+	 * Translates key-group ids to the array index for the associated state.
+	 */
+	private int keyGroupIdToArrayIndex(int keyGroupId) {
+		return keyGroupId - keyGroupOffset;
 	}
 
 	// ------------------------------------------------------------------------
@@ -140,7 +160,7 @@ public class NestedMapsStateTable<K, N, S> extends AbstractStateTable<K, N, S> {
 
 	// ------------------------------------------------------------------------
 
-	boolean containsKey(Object key, int keyGroupIndex, Object namespace) {
+	private boolean containsKey(Object key, int keyGroupIndex, Object namespace) {
 
 		Map<N, Map<K, S>> namespaceMap = getMapForKeyGroup(keyGroupIndex);
 
@@ -250,6 +270,13 @@ public class NestedMapsStateTable<K, N, S> extends AbstractStateTable<K, N, S> {
 		return new NestedMapsStateTableSnapshot<>(this);
 	}
 
+	/**
+	 * This class encapsulates the snapshot logic.
+	 *
+	 * @param <K> type of key.
+	 * @param <N> type of namespace.
+	 * @param <S> type of state.
+	 */
 	static class NestedMapsStateTableSnapshot<K, N, S>
 			extends StateTableSnapshot<K, N, S, NestedMapsStateTable<K, N, S>> {
 
@@ -257,6 +284,15 @@ public class NestedMapsStateTable<K, N, S> extends AbstractStateTable<K, N, S> {
 			super(owningTable);
 		}
 
+		/**
+		 * Implementation note: we currently chose the same format between {@link NestedMapsStateTable} and
+		 * {@link CopyOnWriteStateTable}.
+		 * <p>
+		 * {@link NestedMapsStateTable} could naturally support a kind of
+		 * prefix-compressed format (grouping by namespace, writing the namespace only once per group instead for each
+		 * mapping). We might implement support for different formats later (tailored towards different state table
+		 * implementations).
+		 */
 		@Override
 		public void writeMappingsInKeyGroup(DataOutputView dov, int keyGroupId) throws IOException {
 			final Map<N, Map<K, S>> keyGroupMap = owningStateTable.getMapForKeyGroup(keyGroupId);

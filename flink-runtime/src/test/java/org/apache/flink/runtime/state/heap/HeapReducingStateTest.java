@@ -92,7 +92,7 @@ public class HeapReducingStateTest {
 
 			// make sure all lists / maps are cleared
 
-			AbstractStateTable<String, VoidNamespace, Long> stateTable =
+			StateTable<String, VoidNamespace, Long> stateTable =
 					((HeapReducingState<String, VoidNamespace, Long>) state).stateTable;
 
 			assertTrue(stateTable.isEmpty());
@@ -214,7 +214,7 @@ public class HeapReducingStateTest {
 			state.setCurrentNamespace(namespace1);
 			state.clear();
 
-			AbstractStateTable<String, Integer, Long> stateTable =
+			StateTable<String, Integer, Long> stateTable =
 					((HeapReducingState<String, Integer, Long>) state).stateTable;
 
 			assertTrue(stateTable.isEmpty());

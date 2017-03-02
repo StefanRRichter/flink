@@ -23,7 +23,7 @@ import org.apache.flink.api.common.state.StateDescriptor;
 import org.apache.flink.api.common.typeutils.TypeSerializer;
 import org.apache.flink.core.memory.DataInputView;
 import org.apache.flink.migration.runtime.state.KvStateSnapshot;
-import org.apache.flink.runtime.state.heap.AbstractStateTable;
+import org.apache.flink.runtime.state.heap.StateTable;
 import org.apache.flink.runtime.state.heap.HeapKeyedStateBackend;
 import org.apache.flink.runtime.util.DataInputDeserializer;
 
@@ -75,7 +75,7 @@ public abstract class AbstractMemStateSnapshot<K, N, SV, S extends State, SD ext
 
 	@Override
 	@SuppressWarnings("unchecked")
-	public AbstractStateTable<K, N, SV> deserialize(
+	public StateTable<K, N, SV> deserialize(
 			String stateName,
 			HeapKeyedStateBackend<K> stateBackend) throws IOException {
 

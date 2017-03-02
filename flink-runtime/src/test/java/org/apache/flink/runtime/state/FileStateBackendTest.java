@@ -51,7 +51,7 @@ public class FileStateBackendTest extends StateBackendTestBase<FsStateBackend> {
 	@Override
 	protected FsStateBackend getStateBackend() throws Exception {
 		File checkpointPath = tempFolder.newFolder();
-		return new FsStateBackend(localFileUri(checkpointPath));
+		return new FsStateBackend(localFileUri(checkpointPath), (System.currentTimeMillis() & 1) == 0);
 	}
 
 	// disable these because the verification does not work for this state backend

@@ -50,11 +50,16 @@ public class CopyOnWriteStateTableSnapshot<K, N, S> extends StateTableSnapshot<K
 	private final int snapshotVersion;
 
 	/**
+	 * The number of entries in the {@link CopyOnWriteStateTable} at the time of creating this snapshot.
+	 */
+	private final int stateTableSize;
+
+	/**
 	 * The state table entries, as by the time this snapshot was created. Objects in this array may or may not be deep
 	 * copies of the current entries in the {@link CopyOnWriteStateTable} that created this snapshot. This depends for each entry
 	 * on whether or not it was subject to copy-on-write operations by the {@link CopyOnWriteStateTable}.
 	 */
-	private CopyOnWriteStateTable.StateTableEntry<K, N, S>[] snapshotData;
+	private final CopyOnWriteStateTable.StateTableEntry<K, N, S>[] snapshotData;
 
 	/**
 	 * Offsets for the individual key-groups. This is lazily created when the snapshot is grouped by key-group during
@@ -63,10 +68,10 @@ public class CopyOnWriteStateTableSnapshot<K, N, S> extends StateTableSnapshot<K
 	private int[] keyGroupOffsets;
 
 	/**
-	 * The number of entries in the {@link CopyOnWriteStateTable} at the time of creating this snapshot.
+	 * Creates a new {@link CopyOnWriteStateTableSnapshot}.
+	 *
+	 * @param owningStateTable the {@link CopyOnWriteStateTable} for which this object represents a snapshot.
 	 */
-	private int stateTableSize;
-
 	CopyOnWriteStateTableSnapshot(CopyOnWriteStateTable<K, N, S> owningStateTable) {
 
 		super(owningStateTable);
@@ -120,8 +125,6 @@ public class CopyOnWriteStateTableSnapshot<K, N, S> extends StateTableSnapshot<K
 			}
 		}
 
-		CopyOnWriteStateTable.StateTableEntry<K, N, S>[] groupedOut = snapshotData;
-
 		// 2) We accumulate the histogram bins to obtain key-group ranges in the final array
 		for (int i = 1; i < histogram.length; ++i) {
 			histogram[i] += histogram[i - 1];
@@ -131,7 +134,7 @@ public class CopyOnWriteStateTableSnapshot<K, N, S> extends StateTableSnapshot<K
 		for (CopyOnWriteStateTable.StateTableEntry<K, N, S> t : unfold) {
 			int effectiveKgIdx =
 					KeyGroupRangeAssignment.computeKeyGroupForKeyHash(t.key.hashCode(), totalKeyGroups) - baseKgIdx;
-			groupedOut[histogram[effectiveKgIdx]++] = t;
+			snapshotData[histogram[effectiveKgIdx]++] = t;
 		}
 
 		// 4) As byproduct, we also created the key-group offsets
@@ -173,6 +176,9 @@ public class CopyOnWriteStateTableSnapshot<K, N, S> extends StateTableSnapshot<K
 		}
 	}
 
+	/**
+	 * Returns true iff the given state table is the owner of this snapshot object.
+	 */
 	boolean isOwner(CopyOnWriteStateTable<K, N, S> stateTable) {
 		return stateTable == owningStateTable;
 	}

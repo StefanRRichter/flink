@@ -29,7 +29,7 @@ import org.apache.flink.core.memory.DataInputViewStreamWrapper;
 import org.apache.flink.migration.runtime.state.KvStateSnapshot;
 import org.apache.flink.migration.runtime.state.memory.AbstractMigrationRestoreStrategy;
 import org.apache.flink.migration.runtime.state.memory.MigrationRestoreSnapshot;
-import org.apache.flink.runtime.state.heap.AbstractStateTable;
+import org.apache.flink.runtime.state.heap.StateTable;
 import org.apache.flink.runtime.state.heap.HeapKeyedStateBackend;
 
 import java.io.IOException;
@@ -95,7 +95,7 @@ public abstract class AbstractFsStateSnapshot<K, N, SV, S extends State, SD exte
 
 	@Override
 	@SuppressWarnings("unchecked")
-	public AbstractStateTable<K, N, SV> deserialize(
+	public StateTable<K, N, SV> deserialize(
 			String stateName,
 			HeapKeyedStateBackend<K> stateBackend) throws IOException {
 

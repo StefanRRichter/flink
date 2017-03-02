@@ -28,6 +28,7 @@ import java.util.Arrays;
 import java.util.ConcurrentModificationException;
 import java.util.Iterator;
 import java.util.NoSuchElementException;
+import java.util.TreeSet;
 
 /**
  * Basis for Flink's in-memory state tables with copy-on-write support. This map does not support null values for
@@ -72,6 +73,9 @@ import java.util.NoSuchElementException;
  * 8) We could try a hybrid of a serialized and object based backends, where key and namespace of the entries are both
  * serialized in one byte-array.
  * <p>
+ * 9) We could consider smaller types (e.g. short) for the version counting and think about some reset strategy before
+ * overflows, when there is no snapshot running. However, this would have to touch all entries in the map.
+ * <p>
  * This class was initially based on the {@link java.util.HashMap} implementation of the Android JDK, but is now heavily
  * customized towards the use case of table for state entries.
  *
@@ -79,7 +83,7 @@ import java.util.NoSuchElementException;
  * @param <N> type of namespace
  * @param <S> type of value
  */
-public class CopyOnWriteStateTable<K, N, S> extends AbstractStateTable<K, N, S> implements Iterable<StateEntry<K, N, S>> {
+public class CopyOnWriteStateTable<K, N, S> extends StateTable<K, N, S> implements Iterable<StateEntry<K, N, S>> {
 
 	/**
 	 * Min capacity (other than zero) for a {@link CopyOnWriteStateTable}. Must be a power of two
@@ -116,6 +120,11 @@ public class CopyOnWriteStateTable<K, N, S> extends AbstractStateTable<K, N, S> 
 	 * itself is always 2.
 	 */
 	private final StateTableEntry<K, N, S>[][] tables;
+
+	/**
+	 *
+	 */
+	private final TreeSet<Integer> requiredSnapshotVersions;
 
 	/**
 	 * The number of mappings in the (two) state table(s). Size of the array is always 2, second index is only used in
@@ -162,7 +171,7 @@ public class CopyOnWriteStateTable<K, N, S> extends AbstractStateTable<K, N, S> 
 	 *
 	 * @param metaInfo the meta information, including the type serializer for state copy-on-write.
 	 */
-	public CopyOnWriteStateTable(KeyContext<K> keyContext, RegisteredBackendStateMetaInfo<N, S> metaInfo) {
+	CopyOnWriteStateTable(KeyContext<K> keyContext, RegisteredBackendStateMetaInfo<N, S> metaInfo) {
 		this(keyContext, metaInfo, 1024);
 	}
 
@@ -174,7 +183,7 @@ public class CopyOnWriteStateTable<K, N, S> extends AbstractStateTable<K, N, S> 
 	 * @throws IllegalArgumentException when the capacity is less than zero.
 	 */
 	@SuppressWarnings("unchecked")
-	public CopyOnWriteStateTable(KeyContext<K> keyContext, RegisteredBackendStateMetaInfo<N, S> metaInfo, int capacity) {
+	private CopyOnWriteStateTable(KeyContext<K> keyContext, RegisteredBackendStateMetaInfo<N, S> metaInfo, int capacity) {
 		super(keyContext, metaInfo);
 
 		//size 2, initialized to EMPTY_TABLE.
@@ -185,7 +194,8 @@ public class CopyOnWriteStateTable<K, N, S> extends AbstractStateTable<K, N, S> 
 
 		this.rehashIndex = 0;
 		this.stateTableVersion = 0;
-		this.highestRequiredSnapshotVersion = stateTableVersion;
+		this.highestRequiredSnapshotVersion = 0;
+		this.requiredSnapshotVersions = new TreeSet<>();
 
 		if (capacity < 0) {
 			throw new IllegalArgumentException("Capacity: " + capacity);
@@ -291,7 +301,7 @@ public class CopyOnWriteStateTable<K, N, S> extends AbstractStateTable<K, N, S> 
 	 * @return the value of any previous mapping with the specified key or
 	 * {@code null} if there was no such mapping.
 	 */
-	public S putAndGetOld(K key, N namespace, S value) {
+	S putAndGetOld(K key, N namespace, S value) {
 
 		assert (null != key && null != namespace);
 
@@ -382,7 +392,7 @@ public class CopyOnWriteStateTable<K, N, S> extends AbstractStateTable<K, N, S> 
 	 * @return the value of the removed mapping or {@code null} if no mapping
 	 * for the specified key was found.
 	 */
-	public S removeAndGetOld(Object key, Object namespace) {
+	S removeAndGetOld(Object key, Object namespace) {
 
 		assert (null != key && null != namespace);
 
@@ -555,7 +565,7 @@ public class CopyOnWriteStateTable<K, N, S> extends AbstractStateTable<K, N, S> 
 
 	// Snapshotting ----------------------------------------------------------------------------------------------------
 
-	public int getStateTableVersion() {
+	int getStateTableVersion() {
 		return stateTableVersion;
 	}
 
@@ -601,10 +611,8 @@ public class CopyOnWriteStateTable<K, N, S> extends AbstractStateTable<K, N, S> 
 		// we guard against concurrent modifications of highestRequiredSnapshotVersion between snapshot and release.
 		// Only stale reads of from the result of #releaseSnapshot calls are ok.
 		assert Thread.holdsLock(this);
-
-		if (snapshotVersion == highestRequiredSnapshotVersion) {
-			highestRequiredSnapshotVersion = 0;
-		}
+		requiredSnapshotVersions.remove(snapshotVersion);
+		highestRequiredSnapshotVersion = requiredSnapshotVersions.isEmpty() ? 0 : requiredSnapshotVersions.last();
 	}
 
 	/**
@@ -622,7 +630,14 @@ public class CopyOnWriteStateTable<K, N, S> extends AbstractStateTable<K, N, S> 
 
 		// increase the table version for copy-on-write and register the snapshot
 		++stateTableVersion;
+
+		if (stateTableVersion < 0) {
+			// this is just a safety net, but should never happen in practice (i.e., only after 2^31 snapshots)
+			throw new IllegalStateException("Version count for CopyOnWriteStateTable is exhausted. Enforcing restart.");
+		}
+
 		highestRequiredSnapshotVersion = stateTableVersion;
+		requiredSnapshotVersions.add(highestRequiredSnapshotVersion);
 
 		StateTableEntry<K, N, S>[] table = tables[0];
 		if (isRehashing()) {

@@ -51,7 +51,7 @@ public class HeapFoldingState<K, N, T, ACC>
 	 */
 	public HeapFoldingState(
 			FoldingStateDescriptor<T, ACC> stateDesc,
-			AbstractStateTable<K, N, ACC> stateTable,
+			StateTable<K, N, ACC> stateTable,
 			TypeSerializer<K> keySerializer,
 			TypeSerializer<N> namespaceSerializer) {
 		super(stateDesc, stateTable, keySerializer, namespaceSerializer);
@@ -76,7 +76,7 @@ public class HeapFoldingState<K, N, T, ACC>
 			return;
 		}
 
-		final AbstractStateTable<K, N, ACC> map = stateTable;
+		final StateTable<K, N, ACC> map = stateTable;
 		final ACC currentValue = map.get(namespace);
 
 		try {

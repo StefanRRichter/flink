@@ -44,7 +44,7 @@ public class HeapValueState<K, N, V>
 	 */
 	public HeapValueState(
 			ValueStateDescriptor<V> stateDesc,
-			AbstractStateTable<K, N, V> stateTable,
+			StateTable<K, N, V> stateTable,
 			TypeSerializer<K> keySerializer,
 			TypeSerializer<N> namespaceSerializer) {
 		super(stateDesc, stateTable, keySerializer, namespaceSerializer);

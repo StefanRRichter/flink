@@ -37,8 +37,11 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Random;
 
-public class StateTableTest {
+public class CopyOnWriteStateTableTest {
 
+	/**
+	 * Testing the basic map operations.
+	 */
 	@Test
 	public void testPutGetRemoveContains() {
 		RegisteredBackendStateMetaInfo<Integer, ArrayList<Integer>> metaInfo =
@@ -94,6 +97,9 @@ public class StateTableTest {
 		Assert.assertEquals(1, stateTable.size());
 	}
 
+	/**
+	 * This test triggers incremental rehash and tests for corruptions.
+	 */
 	@Test
 	public void testIncrementalRehash() {
 		RegisteredBackendStateMetaInfo<Integer, ArrayList<Integer>> metaInfo =
@@ -136,10 +142,10 @@ public class StateTableTest {
 
 	/**
 	 * This test does some random modifications to a state table and a reference (hash map). Then draws snapshots,
-	 * does more modifications and checks snapshot integrity.
+	 * performs more modifications and checks snapshot integrity.
 	 */
 	@Test
-	public void testRandomModificationsAndCopyOnWrite() {
+	public void testRandomModificationsAndCopyOnWriteIsolation() {
 
 		RegisteredBackendStateMetaInfo<Integer, ArrayList<Integer>> metaInfo =
 				new RegisteredBackendStateMetaInfo<>(
@@ -249,6 +255,76 @@ public class StateTableTest {
 				}
 			}
 		}
+	}
+
+	/**
+	 * This tests for the copy-on-write contracts, e.g. ensures that no copy-on-write is active after all snapshots are
+	 * released.
+	 */
+	@Test
+	public void testCopyOnWriteContracts() {
+		RegisteredBackendStateMetaInfo<Integer, ArrayList<Integer>> metaInfo =
+				new RegisteredBackendStateMetaInfo<>(
+						StateDescriptor.Type.UNKNOWN,
+						"test",
+						IntSerializer.INSTANCE,
+						new ArrayListSerializer<>(IntSerializer.INSTANCE)); // we use mutable state objects.
+
+		final MockKeyContext<Integer> keyContext = new MockKeyContext<>(IntSerializer.INSTANCE);
+
+		final CopyOnWriteStateTable<Integer, Integer, ArrayList<Integer>> stateTable =
+				new CopyOnWriteStateTable<>(keyContext, metaInfo);
+
+		ArrayList<Integer> originalState1 = new ArrayList<>(1);
+		ArrayList<Integer> originalState2 = new ArrayList<>(1);
+		ArrayList<Integer> originalState3 = new ArrayList<>(1);
+		ArrayList<Integer> originalState4 = new ArrayList<>(1);
+		ArrayList<Integer> originalState5 = new ArrayList<>(1);
+
+		originalState1.add(1);
+		originalState2.add(2);
+		originalState3.add(3);
+		originalState4.add(4);
+		originalState5.add(5);
+
+		stateTable.put(1, 1, originalState1);
+		stateTable.put(2, 1, originalState2);
+		stateTable.put(4, 1, originalState4);
+		stateTable.put(5, 1, originalState5);
+
+		// no snapshot taken, we get the original back
+		Assert.assertTrue(stateTable.get(1, 1) == originalState1);
+		CopyOnWriteStateTableSnapshot<Integer, Integer, ArrayList<Integer>> snapshot1 = stateTable.createSnapshot();
+		// after snapshot1 is taken, we get a copy...
+		final ArrayList<Integer> copyState = stateTable.get(1, 1);
+		Assert.assertFalse(copyState == originalState1);
+		// ...and the copy is equal
+		Assert.assertEquals(originalState1, copyState);
+
+		// we make an insert AFTER snapshot1
+		stateTable.put(3, 1, originalState3);
+
+		// on repeated lookups, we get the same copy because no further snapshot was taken
+		Assert.assertTrue(copyState == stateTable.get(1, 1));
+
+		// we take snapshot2
+		CopyOnWriteStateTableSnapshot<Integer, Integer, ArrayList<Integer>> snapshot2 = stateTable.createSnapshot();
+		// after the second snapshot, copy-on-write is active again for old entries
+		Assert.assertFalse(copyState == stateTable.get(1, 1));
+		// and equality still holds
+		Assert.assertEquals(copyState, stateTable.get(1, 1));
+
+		// after releasing snapshot2
+		stateTable.releaseSnapshot(snapshot2);
+		// we still get the original of the untouched late insert (after snapshot1)
+		Assert.assertTrue(originalState3 == stateTable.get(3, 1));
+		// but copy-on-write is still active for older inserts (before snapshot1)
+		Assert.assertFalse(originalState4 == stateTable.get(4, 1));
+
+		// after releasing snapshot1
+		stateTable.releaseSnapshot(snapshot1);
+		// no copy-on-write is active
+		Assert.assertTrue(originalState5 == stateTable.get(5, 1));
 	}
 
 	@SuppressWarnings("unchecked")

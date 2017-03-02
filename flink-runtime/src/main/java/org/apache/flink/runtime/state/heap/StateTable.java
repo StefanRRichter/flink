@@ -34,7 +34,7 @@ import java.io.IOException;
  * @param <N> type of namespace
  * @param <S> type of state
  */
-public abstract class AbstractStateTable<K, N, S> {
+public abstract class StateTable<K, N, S> {
 
 	/**
 	 * The key context view on the backend. This provides information, such as the currently active key.
@@ -51,7 +51,7 @@ public abstract class AbstractStateTable<K, N, S> {
 	 * @param keyContext the key context provides the key scope for all put/get/delete operations.
 	 * @param metaInfo the meta information, including the type serializer for state copy-on-write.
 	 */
-	public AbstractStateTable(KeyContext<K> keyContext, RegisteredBackendStateMetaInfo<N, S> metaInfo) {
+	public StateTable(KeyContext<K> keyContext, RegisteredBackendStateMetaInfo<N, S> metaInfo) {
 		this.keyContext = Preconditions.checkNotNull(keyContext);
 		this.metaInfo = Preconditions.checkNotNull(metaInfo);
 	}
@@ -169,7 +169,7 @@ public abstract class AbstractStateTable<K, N, S> {
 
 	// Snapshotting -------------------------------------------------------------------------
 
-	public abstract StateTableSnapshot<K, N, S, ? extends AbstractStateTable<K, N, S>> createSnapshot();
+	public abstract StateTableSnapshot<K, N, S, ? extends StateTable<K, N, S>> createSnapshot();
 
 	public void readMappingsInKeyGroup(DataInputView inView, int keyGroupId) throws IOException {
 		TypeSerializer<K> keySerializer = keyContext.getKeySerializer();

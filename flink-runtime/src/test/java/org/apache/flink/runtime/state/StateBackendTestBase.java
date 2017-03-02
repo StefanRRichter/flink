@@ -48,7 +48,7 @@ import org.apache.flink.runtime.query.KvStateRegistry;
 import org.apache.flink.runtime.query.KvStateRegistryListener;
 import org.apache.flink.runtime.query.netty.message.KvStateRequestSerializer;
 import org.apache.flink.runtime.state.heap.AbstractHeapState;
-import org.apache.flink.runtime.state.heap.AbstractStateTable;
+import org.apache.flink.runtime.state.heap.StateTable;
 import org.apache.flink.runtime.state.internal.InternalKvState;
 import org.apache.flink.runtime.state.internal.InternalValueState;
 import org.apache.flink.runtime.util.BlockerCheckpointStreamFactory;
@@ -1269,7 +1269,7 @@ public abstract class StateBackendTestBase<B extends AbstractStateBackend> exten
 			state.update(121818273);
 
 			int keyGroupIndex = KeyGroupRangeAssignment.assignToKeyGroup(1, numberOfKeyGroups);
-			AbstractStateTable stateTable = ((AbstractHeapState) kvState).getStateTable();
+			StateTable stateTable = ((AbstractHeapState) kvState).getStateTable();
 			assertNotNull("State not set", stateTable);
 			//TODO
 //			assertTrue(stateTable.getState() instanceof ConcurrentHashMap);
@@ -1296,7 +1296,7 @@ public abstract class StateBackendTestBase<B extends AbstractStateBackend> exten
 			state.add(121818273);
 
 			int keyGroupIndex = KeyGroupRangeAssignment.assignToKeyGroup(1, numberOfKeyGroups);
-			AbstractStateTable stateTable = ((AbstractHeapState) kvState).getStateTable();
+			StateTable stateTable = ((AbstractHeapState) kvState).getStateTable();
 			assertNotNull("State not set", stateTable);
 			//TODO
 //			assertTrue(stateTable.getState() instanceof ConcurrentHashMap);
@@ -1328,7 +1328,7 @@ public abstract class StateBackendTestBase<B extends AbstractStateBackend> exten
 			state.add(121818273);
 
 			int keyGroupIndex = KeyGroupRangeAssignment.assignToKeyGroup(1, numberOfKeyGroups);
-			AbstractStateTable stateTable = ((AbstractHeapState) kvState).getStateTable();
+			StateTable stateTable = ((AbstractHeapState) kvState).getStateTable();
 			assertNotNull("State not set", stateTable);
 			//TODO
 //			assertTrue(stateTable.getState() instanceof ConcurrentHashMap);
@@ -1360,7 +1360,7 @@ public abstract class StateBackendTestBase<B extends AbstractStateBackend> exten
 			state.add(121818273);
 
 			int keyGroupIndex = KeyGroupRangeAssignment.assignToKeyGroup(1, numberOfKeyGroups);
-			AbstractStateTable stateTable = ((AbstractHeapState) kvState).getStateTable();
+			StateTable stateTable = ((AbstractHeapState) kvState).getStateTable();
 			assertNotNull("State not set", stateTable);
 			//TODO
 //			assertTrue(stateTable.getState() instanceof ConcurrentHashMap);

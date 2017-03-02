@@ -24,16 +24,22 @@ import org.apache.flink.util.Preconditions;
 import java.io.IOException;
 
 /**
- *
+ * Abstract class to encapsulate the logic to take snapshots of {@link StateTable} implementations.
  */
-public abstract class StateTableSnapshot<K, N, S, T extends AbstractStateTable<K, N, S>> {
+public abstract class StateTableSnapshot<K, N, S, T extends StateTable<K, N, S>> {
 
 	/**
-	 * The state table from which this snapshot was created.
+	 * The {@link StateTable} from which this snapshot was created.
 	 */
-	protected final T owningStateTable;
+	final T owningStateTable;
 
-	public StateTableSnapshot(T owningStateTable) {
+
+	/**
+	 * Creates a new {@link StateTableSnapshot} for and owned by the given table.
+	 *
+	 * @param owningStateTable the {@link StateTable} for which this object represents a snapshot.
+	 */
+	StateTableSnapshot(T owningStateTable) {
 		this.owningStateTable = Preconditions.checkNotNull(owningStateTable);
 	}
 

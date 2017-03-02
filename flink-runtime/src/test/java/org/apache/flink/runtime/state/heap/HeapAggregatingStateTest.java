@@ -92,7 +92,7 @@ public class HeapAggregatingStateTest {
 
 			// make sure all lists / maps are cleared
 
-			AbstractStateTable<String, VoidNamespace, MutableLong> stateTable =
+			StateTable<String, VoidNamespace, MutableLong> stateTable =
 					((HeapAggregatingState<String, VoidNamespace, Long, MutableLong, Long>) state).stateTable;
 
 			assertTrue(stateTable.isEmpty());
@@ -214,7 +214,7 @@ public class HeapAggregatingStateTest {
 			state.setCurrentNamespace(namespace1);
 			state.clear();
 
-			AbstractStateTable<String, Integer, MutableLong> stateTable =
+			StateTable<String, Integer, MutableLong> stateTable =
 					((HeapAggregatingState<String, Integer, Long, MutableLong, Long>) state).stateTable;
 
 			assertTrue(stateTable.isEmpty());
