@@ -124,7 +124,7 @@ public class CopyOnWriteStateTable<K, N, S> extends StateTable<K, N, S> implemen
 	/**
 	 *
 	 */
-	private final TreeSet<Integer> requiredSnapshotVersions;
+	private final TreeSet<Integer> snapshotVersions;
 
 	/**
 	 * The number of mappings in the (two) state table(s). Size of the array is always 2, second index is only used in
@@ -169,6 +169,7 @@ public class CopyOnWriteStateTable<K, N, S> extends StateTable<K, N, S> implemen
 	/**
 	 * Constructs a new {@code StateTable} with default capacity of 1024.
 	 *
+	 * @param keyContext the key context.
 	 * @param metaInfo the meta information, including the type serializer for state copy-on-write.
 	 */
 	CopyOnWriteStateTable(KeyContext<K> keyContext, RegisteredBackendStateMetaInfo<N, S> metaInfo) {
@@ -178,8 +179,9 @@ public class CopyOnWriteStateTable<K, N, S> extends StateTable<K, N, S> implemen
 	/**
 	 * Constructs a new {@code StateTable} instance with the specified capacity.
 	 *
-	 * @param capacity the initial capacity of this hash map.
+	 * @param keyContext the key context.
 	 * @param metaInfo the meta information, including the type serializer for state copy-on-write.
+	 * @param capacity the initial capacity of this hash map.
 	 * @throws IllegalArgumentException when the capacity is less than zero.
 	 */
 	@SuppressWarnings("unchecked")
@@ -195,7 +197,7 @@ public class CopyOnWriteStateTable<K, N, S> extends StateTable<K, N, S> implemen
 		this.rehashIndex = 0;
 		this.stateTableVersion = 0;
 		this.highestRequiredSnapshotVersion = 0;
-		this.requiredSnapshotVersions = new TreeSet<>();
+		this.snapshotVersions = new TreeSet<>();
 
 		if (capacity < 0) {
 			throw new IllegalArgumentException("Capacity: " + capacity);
@@ -611,8 +613,7 @@ public class CopyOnWriteStateTable<K, N, S> extends StateTable<K, N, S> implemen
 		// we guard against concurrent modifications of highestRequiredSnapshotVersion between snapshot and release.
 		// Only stale reads of from the result of #releaseSnapshot calls are ok.
 		assert Thread.holdsLock(this);
-		requiredSnapshotVersions.remove(snapshotVersion);
-		highestRequiredSnapshotVersion = requiredSnapshotVersions.isEmpty() ? 0 : requiredSnapshotVersions.last();
+		snapshotVersions.remove(snapshotVersion);
 	}
 
 	/**
@@ -637,7 +638,7 @@ public class CopyOnWriteStateTable<K, N, S> extends StateTable<K, N, S> implemen
 		}
 
 		highestRequiredSnapshotVersion = stateTableVersion;
-		requiredSnapshotVersions.add(highestRequiredSnapshotVersion);
+		snapshotVersions.add(highestRequiredSnapshotVersion);
 
 		StateTableEntry<K, N, S>[] table = tables[0];
 		if (isRehashing()) {

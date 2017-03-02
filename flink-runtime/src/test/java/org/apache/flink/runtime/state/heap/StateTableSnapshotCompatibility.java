@@ -48,7 +48,7 @@ public class StateTableSnapshotCompatibility {
 						StateDescriptor.Type.UNKNOWN,
 						"test",
 						IntSerializer.INSTANCE,
-						new ArrayListSerializer<>(IntSerializer.INSTANCE)); // we use mutable state objects.
+						new ArrayListSerializer<>(IntSerializer.INSTANCE));
 
 		final CopyOnWriteStateTableTest.MockKeyContext<Integer> keyContext =
 				new CopyOnWriteStateTableTest.MockKeyContext<>(IntSerializer.INSTANCE);
@@ -57,7 +57,7 @@ public class StateTableSnapshotCompatibility {
 				new CopyOnWriteStateTable<>(keyContext, metaInfo);
 
 		for (int i = 0; i < 100; ++i) {
-			ArrayList<Integer> list = new ArrayList<>();
+			ArrayList<Integer> list = new ArrayList<>(5);
 			int end = r.nextInt(5);
 			for (int j = 0; j < end; ++j) {
 				list.add(r.nextInt(100));
@@ -97,14 +97,14 @@ public class StateTableSnapshotCompatibility {
 			StateTableSnapshot<K, N, S, ?> snapshot,
 			KeyGroupRange keyGroupRange) throws IOException {
 
-		ByteArrayOutputStreamWithPos out = new ByteArrayOutputStreamWithPos(4 * 1024 * 1024);
-		DataOutputViewStreamWrapper dov = new DataOutputViewStreamWrapper(out);
+		final ByteArrayOutputStreamWithPos out = new ByteArrayOutputStreamWithPos(1024 * 1024);
+		final DataOutputViewStreamWrapper dov = new DataOutputViewStreamWrapper(out);
 
 		for (Integer keyGroup : keyGroupRange) {
 			snapshot.writeMappingsInKeyGroup(dov, keyGroup);
 		}
 
-		ByteArrayInputStreamWithPos in = new ByteArrayInputStreamWithPos(out.getBuf());
+		final ByteArrayInputStreamWithPos in = new ByteArrayInputStreamWithPos(out.getBuf());
 		final DataInputViewStreamWrapper div = new DataInputViewStreamWrapper(in);
 
 		for (Integer keyGroup : keyGroupRange) {

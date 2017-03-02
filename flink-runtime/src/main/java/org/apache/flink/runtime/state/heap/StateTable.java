@@ -171,7 +171,7 @@ public abstract class StateTable<K, N, S> {
 
 	public abstract StateTableSnapshot<K, N, S, ? extends StateTable<K, N, S>> createSnapshot();
 
-	public void readMappingsInKeyGroup(DataInputView inView, int keyGroupId) throws IOException {
+	void readMappingsInKeyGroup(DataInputView inView, int keyGroupId) throws IOException {
 		TypeSerializer<K> keySerializer = keyContext.getKeySerializer();
 		TypeSerializer<N> namespaceSerializer = getNamespaceSerializer();
 		TypeSerializer<S> stateSerializer = getStateSerializer();

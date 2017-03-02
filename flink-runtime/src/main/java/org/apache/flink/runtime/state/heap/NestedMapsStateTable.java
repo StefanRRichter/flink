@@ -81,7 +81,7 @@ public class NestedMapsStateTable<K, N, S> extends StateTable<K, N, S> {
 
 	@VisibleForTesting
 	Map<N, Map<K, S>> getMapForKeyGroup(int keyGroupIndex) {
-		final int pos = keyGroupIdToArrayIndex(keyGroupIndex);
+		final int pos = indexToOffset(keyGroupIndex);
 		if (pos >= 0 && pos < state.length) {
 			return state[pos];
 		} else {
@@ -91,7 +91,7 @@ public class NestedMapsStateTable<K, N, S> extends StateTable<K, N, S> {
 
 	private void setMapForKeyGroup(int keyGroupId, Map<N, Map<K, S>> map) {
 		try {
-			state[keyGroupIdToArrayIndex(keyGroupId)] = map;
+			state[indexToOffset(keyGroupId)] = map;
 		} catch (ArrayIndexOutOfBoundsException e) {
 			throw new IllegalArgumentException("Key group index out of range of key group range [" +
 					keyGroupOffset + ", " + (keyGroupOffset + state.length) + ").");
@@ -99,10 +99,10 @@ public class NestedMapsStateTable<K, N, S> extends StateTable<K, N, S> {
 	}
 
 	/**
-	 * Translates key-group ids to the array index for the associated state.
+	 * Translates key-group
 	 */
-	private int keyGroupIdToArrayIndex(int keyGroupId) {
-		return keyGroupId - keyGroupOffset;
+	private int indexToOffset(int index) {
+		return index - keyGroupOffset;
 	}
 
 	// ------------------------------------------------------------------------
