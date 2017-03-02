@@ -235,7 +235,8 @@ public class HeapAggregatingStateTest {
 				StringSerializer.INSTANCE,
 				HeapAggregatingStateTest.class.getClassLoader(),
 				16,
-				new KeyGroupRange(0, 15));
+				new KeyGroupRange(0, 15),
+				(System.currentTimeMillis() & 1) == 1);
 	}
 
 	// ------------------------------------------------------------------------

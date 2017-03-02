@@ -147,7 +147,7 @@ public abstract class AbstractStateTable<K, N, S> {
 
 	// For efficient restore ------------------------------------------------------------------------
 
-	abstract void put(K key, int keyGroup, N namespace, S state);
+	public abstract void put(K key, int keyGroup, N namespace, S state);
 
 	// Meta data setter / getter and toString --------------------------------------------------------------------------
 

@@ -325,7 +325,9 @@ public class KvStateRequestSerializerTest {
 				mock(TaskKvStateRegistry.class),
 				LongSerializer.INSTANCE,
 				ClassLoader.getSystemClassLoader(),
-				1, new KeyGroupRange(0, 0)
+				1,
+				new KeyGroupRange(0, 0),
+				(System.currentTimeMillis() & 1) == 1
 			);
 		longHeapKeyedStateBackend.setCurrentKey(key);
 

@@ -21,11 +21,16 @@ package org.apache.flink.migration.runtime.state.filesystem;
 import org.apache.flink.api.common.state.State;
 import org.apache.flink.api.common.state.StateDescriptor;
 import org.apache.flink.api.common.typeutils.TypeSerializer;
+import org.apache.flink.core.fs.FSDataInputStream;
+import org.apache.flink.core.fs.FileSystem;
 import org.apache.flink.core.fs.Path;
+import org.apache.flink.core.memory.DataInputView;
+import org.apache.flink.core.memory.DataInputViewStreamWrapper;
 import org.apache.flink.migration.runtime.state.KvStateSnapshot;
+import org.apache.flink.migration.runtime.state.memory.AbstractMigrationRestoreStrategy;
 import org.apache.flink.migration.runtime.state.memory.MigrationRestoreSnapshot;
-import org.apache.flink.runtime.state.KeyGroupRange;
 import org.apache.flink.runtime.state.heap.AbstractStateTable;
+import org.apache.flink.runtime.state.heap.HeapKeyedStateBackend;
 
 import java.io.IOException;
 
@@ -92,58 +97,19 @@ public abstract class AbstractFsStateSnapshot<K, N, SV, S extends State, SD exte
 	@SuppressWarnings("unchecked")
 	public AbstractStateTable<K, N, SV> deserialize(
 			String stateName,
-			KeyGroupRange keyGroupRange,
-			int totalNumberOfKeyGroups,
-			boolean async) throws IOException {
+			HeapKeyedStateBackend<K> stateBackend) throws IOException {
 
-		throw  new UnsupportedOperationException("TODO");
-
-//		Preconditions.checkNotNull(stateName, "State name is null. Cannot deserialize snapshot.");
-//		Preconditions.checkNotNull(stateName, "KeyGroupRange is null. Cannot deserialize snapshot.");
-//		FileSystem fs = getFilePath().getFileSystem();
-//		//TODO register closeable to support fast cancelation?
-//		try (FSDataInputStream inStream = fs.open(getFilePath())) {
-//
-//			DataInputViewStreamWrapper inView = new DataInputViewStreamWrapper(inStream);
-//
-//			final int numNamespaces = inView.readInt();
-//			TypeSerializer<K> keySerializer = getKeySerializer();
-//			TypeSerializer<N> namespaceSerializer = getNamespaceSerializer();
-//			TypeSerializer<SV> stateSerializer = getStateSerializer();
-//
-//			TypeSerializer<N> patchedNamespaceSerializer = this.namespaceSerializer;
-//			if (patchedNamespaceSerializer instanceof VoidSerializer) {
-//
-//				patchedNamespaceSerializer = (TypeSerializer<N>) VoidNamespaceSerializer.INSTANCE;
-//			}
-//
-//			RegisteredBackendStateMetaInfo<N, SV> registeredBackendStateMetaInfo =
-//					new RegisteredBackendStateMetaInfo<>(
-//							StateDescriptor.Type.UNKNOWN,
-//							stateName,
-//							patchedNamespaceSerializer,
-//							stateSerializer);
-//
-//			CopyOnWriteStateTable<K, N, SV> stateMap = new CopyOnWriteStateTable<>(registeredBackendStateMetaInfo);
-//
-//			for (int i = 0; i < numNamespaces; i++) {
-//
-//				N namespace = namespaceSerializer.deserialize(inView);
-//
-//				if (null == namespace) {
-//					namespace = (N) VoidNamespace.INSTANCE;
-//				}
-//
-//				final int numKV = inView.readInt();
-//				for (int j = 0; j < numKV; j++) {
-//					K key = keySerializer.deserialize(inView);
-//					SV value = stateSerializer.deserialize(inView);
-//					stateMap.put(key, namespace, value);
-//				}
-//			}
-//			return stateMap;
-//		} catch (Exception e) {
-//			throw new IOException("Failed to restore state from file system", e);
-//		}
+		final FileSystem fs = getFilePath().getFileSystem();
+		try (FSDataInputStream inStream = fs.open(getFilePath())) {
+			final DataInputViewStreamWrapper inView = new DataInputViewStreamWrapper(inStream);
+			AbstractMigrationRestoreStrategy<K, N, SV> restoreStrategy =
+					new AbstractMigrationRestoreStrategy<K, N, SV>(keySerializer, namespaceSerializer, stateSerializer) {
+						@Override
+						protected DataInputView openDataInputView() throws IOException {
+							return inView;
+						}
+					};
+			return restoreStrategy.deserialize(stateName, stateBackend);
+		}
 	}
 }

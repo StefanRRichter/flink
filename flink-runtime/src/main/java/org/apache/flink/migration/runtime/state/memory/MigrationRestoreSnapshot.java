@@ -19,8 +19,8 @@
 package org.apache.flink.migration.runtime.state.memory;
 
 import org.apache.flink.annotation.Internal;
-import org.apache.flink.runtime.state.KeyGroupRange;
 import org.apache.flink.runtime.state.heap.AbstractStateTable;
+import org.apache.flink.runtime.state.heap.HeapKeyedStateBackend;
 import org.apache.flink.util.Migration;
 
 import java.io.IOException;
@@ -28,10 +28,5 @@ import java.io.IOException;
 @Deprecated
 @Internal
 public interface MigrationRestoreSnapshot<K, N, S> extends Migration {
-
-	AbstractStateTable<K, N, S> deserialize(
-			String stateName,
-			KeyGroupRange keyGroupRange,
-			int totalNumberOfKeyGroups,
-			boolean async) throws IOException;
+	AbstractStateTable<K, N, S> deserialize(String stateName, HeapKeyedStateBackend<K> stateBackend) throws IOException;
 }

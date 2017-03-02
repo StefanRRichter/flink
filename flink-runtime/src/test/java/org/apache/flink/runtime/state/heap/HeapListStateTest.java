@@ -231,7 +231,8 @@ public class HeapListStateTest {
 				StringSerializer.INSTANCE,
 				HeapListStateTest.class.getClassLoader(),
 				16,
-				new KeyGroupRange(0, 15));
+				new KeyGroupRange(0, 15),
+				(System.currentTimeMillis() & 1) == 1);
 	}
 	
 	private static <T> void validateResult(Iterable<T> values, Set<T> expected) {

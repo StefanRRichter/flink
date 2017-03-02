@@ -171,7 +171,7 @@ public class NestedMapsStateTable<K, N, S> extends AbstractStateTable<K, N, S> {
 	}
 
 	@Override
-	void put(K key, int keyGroupIndex, N namespace, S value) {
+	public void put(K key, int keyGroupIndex, N namespace, S value) {
 		putAndGetOld(key, keyGroupIndex, namespace, value);
 	}
 

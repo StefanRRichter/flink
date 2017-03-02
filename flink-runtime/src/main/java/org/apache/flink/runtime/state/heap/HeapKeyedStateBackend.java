@@ -93,10 +93,11 @@ public class HeapKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 			TypeSerializer<K> keySerializer,
 			ClassLoader userCodeClassLoader,
 			int numberOfKeyGroups,
-			KeyGroupRange keyGroupRange) {
+			KeyGroupRange keyGroupRange,
+			boolean asynchronousSnapshots) {
 
 		super(kvStateRegistry, keySerializer, userCodeClassLoader, numberOfKeyGroups, keyGroupRange);
-		this.asynchronousSnapshots = true;
+		this.asynchronousSnapshots = asynchronousSnapshots;
 		LOG.info("Initializing heap keyed state backend with stream factory.");
 	}
 
@@ -424,7 +425,8 @@ public class HeapKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 
 			if (genericSnapshot instanceof MigrationRestoreSnapshot) {
 				MigrationRestoreSnapshot<K, ?, ?> stateSnapshot = (MigrationRestoreSnapshot<K, ?, ?>) genericSnapshot;
-				final AbstractStateTable rawResultMap = stateSnapshot.deserialize(stateName, keyGroupRange, numberOfKeyGroups, asynchronousSnapshots);
+				final AbstractStateTable rawResultMap =
+						stateSnapshot.deserialize(stateName, this);
 				// add named state to the backend
 				stateTables.put(stateName, rawResultMap);
 			} else {
@@ -458,7 +460,7 @@ public class HeapKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 		return sum;
 	}
 
-	private <N, V> AbstractStateTable<K, N, V> newStateTable(RegisteredBackendStateMetaInfo<N, V> newMetaInfo) {
+	public <N, V> AbstractStateTable<K, N, V> newStateTable(RegisteredBackendStateMetaInfo<N, V> newMetaInfo) {
 		return asynchronousSnapshots ?
 				new CopyOnWriteStateTable<>(this, newMetaInfo) :
 				new NestedMapsStateTable<>(this, newMetaInfo);

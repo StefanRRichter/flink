@@ -209,56 +209,6 @@ public class CopyOnWriteStateTable<K, N, S> extends AbstractStateTable<K, N, S> 
 	// Main interface methods of StateTable ----------------------------------------------------------------------------
 
 	/**
-	 * Returns the total number of entries in this {@link CopyOnWriteStateTable}. This is the sum of both sub-tables.
-	 *
-	 * @return the number of entries in this {@link CopyOnWriteStateTable}.
-	 */
-	public int size() {
-		return sizes[0] + sizes[1];
-	}
-
-	/**
-	 * Returns the value of the mapping with the specified key/namespace composite key.
-	 *
-	 * @param key       the key. Not null.
-	 * @param namespace the namespace. Not null.
-	 * @return the value of the mapping with the specified key/namespace composite key, or {@code null}
-	 * if no mapping for the specified key is found.
-	 */
-	public S get(Object key, Object namespace) {
-
-		assert (null != key && null != namespace);
-
-		incrementalRehash();
-
-		final int requiredVersion = highestRequiredSnapshotVersion;
-		final int hash = compositeHash(key, namespace);
-		StateTableEntry<K, N, S>[] tab = tables[selectActiveTable(hash)];
-		int index = hash & (tab.length - 1);
-
-		for (StateTableEntry<K, N, S> e = tab[index]; e != null; e = e.next) {
-			final K eKey = e.key;
-			final N eNamespace = e.namespace;
-			if ((e.hash == hash && key.equals(eKey) && namespace.equals(eNamespace))) {
-
-				// copy-on-write check for state
-				if (e.stateVersion < requiredVersion) {
-					// copy-on-write check for entry
-					if (e.entryVersion < requiredVersion) {
-						e = handleChainedEntryCopyOnWrite(tab, hash & (tab.length - 1), e);
-					}
-					e.stateVersion = stateTableVersion;
-					e.state = getStateSerializer().copy(e.state);
-				}
-
-				return e.state;
-			}
-		}
-
-		return null;
-	}
-
-	/**
 	 * Returns whether this table contains the specified key/namespace composite key.
 	 *
 	 * @param key       the key in the composite key to search for. Not null.
@@ -468,6 +418,58 @@ public class CopyOnWriteStateTable<K, N, S> extends AbstractStateTable<K, N, S> 
 
 	// Public API from AbstractStateTable ------------------------------------------------------------------------------
 
+	/**
+	 * Returns the total number of entries in this {@link CopyOnWriteStateTable}. This is the sum of both sub-tables.
+	 *
+	 * @return the number of entries in this {@link CopyOnWriteStateTable}.
+	 */
+	@Override
+	public int size() {
+		return sizes[0] + sizes[1];
+	}
+
+	/**
+	 * Returns the value of the mapping with the specified key/namespace composite key.
+	 *
+	 * @param key       the key. Not null.
+	 * @param namespace the namespace. Not null.
+	 * @return the value of the mapping with the specified key/namespace composite key, or {@code null}
+	 * if no mapping for the specified key is found.
+	 */
+	@Override
+	public S get(Object key, Object namespace) {
+
+		assert (null != key && null != namespace);
+
+		incrementalRehash();
+
+		final int requiredVersion = highestRequiredSnapshotVersion;
+		final int hash = compositeHash(key, namespace);
+		StateTableEntry<K, N, S>[] tab = tables[selectActiveTable(hash)];
+		int index = hash & (tab.length - 1);
+
+		for (StateTableEntry<K, N, S> e = tab[index]; e != null; e = e.next) {
+			final K eKey = e.key;
+			final N eNamespace = e.namespace;
+			if ((e.hash == hash && key.equals(eKey) && namespace.equals(eNamespace))) {
+
+				// copy-on-write check for state
+				if (e.stateVersion < requiredVersion) {
+					// copy-on-write check for entry
+					if (e.entryVersion < requiredVersion) {
+						e = handleChainedEntryCopyOnWrite(tab, hash & (tab.length - 1), e);
+					}
+					e.stateVersion = stateTableVersion;
+					e.state = getStateSerializer().copy(e.state);
+				}
+
+				return e.state;
+			}
+		}
+
+		return null;
+	}
+
 	@Override
 	public S get(Object namespace) {
 		return get(keyContext.getCurrentKey(), namespace);
@@ -584,12 +586,12 @@ public class CopyOnWriteStateTable<K, N, S> extends AbstractStateTable<K, N, S> 
 		releaseSnapshot(snapshotToRelease.getSnapshotVersion());
 	}
 
-	// Private utility functions for StateTable management -------------------------------------------------------------
-
 	@Override
-	void put(K key, int keyGroup, N namespace, S state) {
+	public void put(K key, int keyGroup, N namespace, S state) {
 		put(key, namespace, state);
 	}
+
+	// Private utility functions for StateTable management -------------------------------------------------------------
 
 	/**
 	 * @see #releaseSnapshot(CopyOnWriteStateTableSnapshot)
