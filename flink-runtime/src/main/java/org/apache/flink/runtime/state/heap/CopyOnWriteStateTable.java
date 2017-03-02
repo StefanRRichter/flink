@@ -20,12 +20,10 @@ package org.apache.flink.runtime.state.heap;
 
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.typeutils.TypeSerializer;
-import org.apache.flink.core.memory.DataInputView;
 import org.apache.flink.runtime.state.RegisteredBackendStateMetaInfo;
 import org.apache.flink.util.MathUtils;
 import org.apache.flink.util.Preconditions;
 
-import java.io.IOException;
 import java.util.Arrays;
 import java.util.ConcurrentModificationException;
 import java.util.Iterator;
@@ -35,16 +33,13 @@ import java.util.NoSuchElementException;
  * Basis for Flink's in-memory state tables with copy-on-write support. This map does not support null values for
  * key or namespace.
  * <p>
- * <p>
  * StateTable sacrifices some peak performance and memory efficiency for features like incremental rehashing and
  * asynchronous snapshots through copy-on-write. Copy-on-write tries to minimize the amount of copying by maintaining
  * version meta data for both, the map structure and the state objects. However, we must often proactively copy state
  * objects when we hand them to the user.
  * <p>
- * <p>
  * As for any state backend, user should not keep references on state objects that they obtained from state backends
  * outside the scope of the user function calls.
- * <p>
  * <p>
  * Some brief maintenance notes:
  * <p>
@@ -484,13 +479,13 @@ public class CopyOnWriteStateTable<K, N, S> extends AbstractStateTable<K, N, S> 
 	}
 
 	@Override
-	public void put(N namespace, S value) {
-		put(keyContext.getCurrentKey(), namespace, value);
+	public void put(N namespace, S state) {
+		put(keyContext.getCurrentKey(), namespace, state);
 	}
 
 	@Override
-	public S putAndGetOld(N namespace, S value) {
-		return putAndGetOld(keyContext.getCurrentKey(), namespace, value);
+	public S putAndGetOld(N namespace, S state) {
+		return putAndGetOld(keyContext.getCurrentKey(), namespace, state);
 	}
 
 	@Override
@@ -558,12 +553,6 @@ public class CopyOnWriteStateTable<K, N, S> extends AbstractStateTable<K, N, S> 
 
 	// Snapshotting ----------------------------------------------------------------------------------------------------
 
-
-	@Override
-	public boolean supportsAsynchronousSnapshots() {
-		return true;
-	}
-
 	public int getStateTableVersion() {
 		return stateTableVersion;
 	}
@@ -577,23 +566,7 @@ public class CopyOnWriteStateTable<K, N, S> extends AbstractStateTable<K, N, S> 
 	 */
 	@Override
 	public CopyOnWriteStateTableSnapshot<K, N, S> createSnapshot() {
-
 		return new CopyOnWriteStateTableSnapshot<>(this);
-	}
-
-	@Override
-	public void readKeyGroupData(DataInputView inView, int keyGroupId) throws IOException {
-		TypeSerializer<K> keySerializer = keyContext.getKeySerializer();
-		TypeSerializer<N> namespaceSerializer = getNamespaceSerializer();
-		TypeSerializer<S> stateSerializer = getStateSerializer();
-
-		int numKeys = inView.readInt();
-		for (int i = 0; i < numKeys; ++i) {
-			K key = keySerializer.deserialize(inView);
-			N namespace = namespaceSerializer.deserialize(inView);
-			S state = stateSerializer.deserialize(inView);
-			put(key, namespace, state);
-		}
 	}
 
 	/**
@@ -601,19 +574,27 @@ public class CopyOnWriteStateTable<K, N, S> extends AbstractStateTable<K, N, S> 
 	 * so that the {@link CopyOnWriteStateTable} can stop considering this snapshot for copy-on-write, thus avoiding unnecessary
 	 * object creation.
 	 *
-	 * @param snapshotToRelease the snapshot to release.
+	 * @param snapshotToRelease the snapshot to release, which was previously created by this state table.
 	 */
-	@Override
-	public void releaseSnapshot(CopyOnWriteStateTableSnapshot<K, N, S> snapshotToRelease) {
+	void releaseSnapshot(CopyOnWriteStateTableSnapshot<K, N, S> snapshotToRelease) {
+
+		Preconditions.checkArgument(snapshotToRelease.isOwner(this),
+				"Cannot release snapshot which is owned by a different state table.");
+
 		releaseSnapshot(snapshotToRelease.getSnapshotVersion());
 	}
 
 	// Private utility functions for StateTable management -------------------------------------------------------------
 
+	@Override
+	void put(K key, int keyGroup, N namespace, S state) {
+		put(key, namespace, state);
+	}
+
 	/**
 	 * @see #releaseSnapshot(CopyOnWriteStateTableSnapshot)
 	 */
-	public synchronized void releaseSnapshot(int snapshotVersion) {
+	synchronized void releaseSnapshot(int snapshotVersion) {
 
 		// we guard against concurrent modifications of highestRequiredSnapshotVersion between snapshot and release.
 		// Only stale reads of from the result of #releaseSnapshot calls are ok.
@@ -849,7 +830,7 @@ public class CopyOnWriteStateTable<K, N, S> extends AbstractStateTable<K, N, S> 
 	 */
 	private static int compositeHash(Object key, Object namespace) {
 
-		// composite by XOR
+		// composite key hash by XOR
 		int compositeHash = (key.hashCode() ^ namespace.hashCode());
 
 		// some bit-mixing to guard against bad hash functions (from Murmur's 32 bit finalizer)
@@ -1000,6 +981,7 @@ public class CopyOnWriteStateTable<K, N, S> extends AbstractStateTable<K, N, S> 
 			if (modCount != expectedModCount) {
 				throw new ConcurrentModificationException();
 			}
+
 			if (nextEntry == null) {
 				throw new NoSuchElementException();
 			}

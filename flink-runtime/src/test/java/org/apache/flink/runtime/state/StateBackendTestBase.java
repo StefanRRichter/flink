@@ -1528,6 +1528,11 @@ public abstract class StateBackendTestBase<B extends AbstractStateBackend> exten
 		AbstractKeyedStateBackend<Integer> backend = null;
 		try {
 			backend = createKeyedBackend(IntSerializer.INSTANCE);
+
+			if (!backend.supportsAsynchronousSnapshots()) {
+				return;
+			}
+
 			InternalValueState<VoidNamespace, Integer> valueState = backend.createValueState(
 					VoidNamespaceSerializer.INSTANCE,
 					new ValueStateDescriptor<>("test", IntSerializer.INSTANCE));

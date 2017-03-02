@@ -47,8 +47,8 @@ public abstract class AbstractStateTable<K, N, S> {
 	protected RegisteredBackendStateMetaInfo<N, S> metaInfo;
 
 	/**
-	 * Constructs a new {@code StateTable} with default capacity of 128.
 	 *
+	 * @param keyContext the key context provides the key scope for all put/get/delete operations.
 	 * @param metaInfo the meta information, including the type serializer for state copy-on-write.
 	 */
 	public AbstractStateTable(KeyContext<K> keyContext, RegisteredBackendStateMetaInfo<N, S> metaInfo) {
@@ -99,20 +99,20 @@ public abstract class AbstractStateTable<K, N, S> {
 	 * over {@link #putAndGetOld(Object, Object)} (Object, Object)} when the caller is not interested in the old value.
 	 *
 	 * @param namespace the namespace. Not null.
-	 * @param value     the value. Can be null.
+	 * @param state     the value. Can be null.
 	 */
-	public abstract void put(N namespace, S value);
+	public abstract void put(N namespace, S state);
 
 	/**
 	 * Maps the composite of active key and given namespace to the specified value. Returns the previous state that
 	 * was registered under the composite key.
 	 *
 	 * @param namespace the namespace. Not null.
-	 * @param value     the value. Can be null.
+	 * @param state     the value. Can be null.
 	 * @return the value of any previous mapping with the specified key or
 	 * {@code null} if there was no such mapping.
 	 */
-	public abstract S putAndGetOld(N namespace, S value);
+	public abstract S putAndGetOld(N namespace, S state);
 
 	/**
 	 * Removes the mapping for the composite of active key and given namespace. This method should be preferred
@@ -145,6 +145,10 @@ public abstract class AbstractStateTable<K, N, S> {
 	 */
 	public abstract S get(Object key, Object namespace);
 
+	// For efficient restore ------------------------------------------------------------------------
+
+	abstract void put(K key, int keyGroup, N namespace, S state);
+
 	// Meta data setter / getter and toString --------------------------------------------------------------------------
 
 	public TypeSerializer<S> getStateSerializer() {
@@ -165,13 +169,21 @@ public abstract class AbstractStateTable<K, N, S> {
 
 	// Snapshotting -------------------------------------------------------------------------
 
-	public abstract boolean supportsAsynchronousSnapshots();
+	public abstract StateTableSnapshot<K, N, S, ? extends AbstractStateTable<K, N, S>> createSnapshot();
 
-	public abstract StateTableSnapshot createSnapshot();
+	public void readMappingsInKeyGroup(DataInputView inView, int keyGroupId) throws IOException {
+		TypeSerializer<K> keySerializer = keyContext.getKeySerializer();
+		TypeSerializer<N> namespaceSerializer = getNamespaceSerializer();
+		TypeSerializer<S> stateSerializer = getStateSerializer();
 
-	public abstract void readKeyGroupData(DataInputView inView, int keyGroupId) throws IOException;
-
-	public abstract void releaseSnapshot(CopyOnWriteStateTableSnapshot<K, N, S> snapshotToRelease);
+		int numKeys = inView.readInt();
+		for (int i = 0; i < numKeys; ++i) {
+			N namespace = namespaceSerializer.deserialize(inView);
+			K key = keySerializer.deserialize(inView);
+			S state = stateSerializer.deserialize(inView);
+			put(key, keyGroupId, namespace, state);
+		}
+	}
 
 	// for testing --------------------------------------------------------------------------
 

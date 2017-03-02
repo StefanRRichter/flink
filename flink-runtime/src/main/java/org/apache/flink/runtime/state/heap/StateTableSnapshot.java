@@ -19,10 +19,24 @@
 package org.apache.flink.runtime.state.heap;
 
 import org.apache.flink.core.memory.DataOutputView;
+import org.apache.flink.util.Preconditions;
 
 import java.io.IOException;
 
-public interface StateTableSnapshot {
+/**
+ *
+ */
+public abstract class StateTableSnapshot<K, N, S, T extends AbstractStateTable<K, N, S>> {
+
+	/**
+	 * The state table from which this snapshot was created.
+	 */
+	protected final T owningStateTable;
+
+	public StateTableSnapshot(T owningStateTable) {
+		this.owningStateTable = Preconditions.checkNotNull(owningStateTable);
+	}
+
 	/**
 	 * Writes the data for the specified key-group to the output.
 	 *
@@ -30,10 +44,11 @@ public interface StateTableSnapshot {
 	 * @param keyGroupId the key-group to write
 	 * @throws IOException on write related problems
 	 */
-	void writeKeyGroupData(DataOutputView dov, int keyGroupId) throws IOException;
+	public abstract void writeMappingsInKeyGroup(DataOutputView dov, int keyGroupId) throws IOException;
 
 	/**
-	 * TODO
+	 * Optional hook to release resources for this snapshot at the end of its lifecycle.
 	 */
-	void release();
+	public void release() {
+	}
 }

@@ -22,7 +22,6 @@ import org.apache.flink.api.common.typeutils.TypeSerializer;
 import org.apache.flink.core.memory.DataOutputView;
 import org.apache.flink.runtime.state.KeyGroupRange;
 import org.apache.flink.runtime.state.KeyGroupRangeAssignment;
-import org.apache.flink.util.Preconditions;
 
 import java.io.IOException;
 
@@ -43,9 +42,7 @@ import java.io.IOException;
  * @param <N> type of namespace
  * @param <S> type of state
  */
-public class CopyOnWriteStateTableSnapshot<K, N, S> implements StateTableSnapshot {
-
-	private final CopyOnWriteStateTable<K, N, S> owningStateTable;
+public class CopyOnWriteStateTableSnapshot<K, N, S> extends StateTableSnapshot<K, N, S, CopyOnWriteStateTable<K, N, S>> {
 
 	/**
 	 * Version of the {@link CopyOnWriteStateTable} when this snapshot was created. This can be used to release the snapshot.
@@ -72,7 +69,7 @@ public class CopyOnWriteStateTableSnapshot<K, N, S> implements StateTableSnapsho
 
 	CopyOnWriteStateTableSnapshot(CopyOnWriteStateTable<K, N, S> owningStateTable) {
 
-		this.owningStateTable = Preconditions.checkNotNull(owningStateTable);
+		super(owningStateTable);
 		this.snapshotData = owningStateTable.snapshotTableArrays();
 		this.snapshotVersion = owningStateTable.getStateTableVersion();
 		this.stateTableSize = owningStateTable.size();
@@ -147,7 +144,7 @@ public class CopyOnWriteStateTableSnapshot<K, N, S> implements StateTableSnapsho
 	}
 
 	@Override
-	public void writeKeyGroupData(DataOutputView dov, int keyGroupId) throws IOException {
+	public void writeMappingsInKeyGroup(DataOutputView dov, int keyGroupId) throws IOException {
 
 		if (null == keyGroupOffsets) {
 			partitionEntriesByKeyGroup();
@@ -163,16 +160,20 @@ public class CopyOnWriteStateTableSnapshot<K, N, S> implements StateTableSnapsho
 		TypeSerializer<N> namespaceSerializer = owningStateTable.metaInfo.getNamespaceSerializer();
 		TypeSerializer<S> stateSerializer = owningStateTable.metaInfo.getStateSerializer();
 
-		// write number of elements
+		// write number of mappings in key-group
 		dov.writeInt(endOffset - startOffset);
 
-		// write elements
+		// write mappings
 		for (int i = startOffset; i < endOffset; ++i) {
 			CopyOnWriteStateTable.StateTableEntry<K, N, S> toWrite = groupedOut[i];
 			groupedOut[i] = null; // free asap for GC
-			keySerializer.serialize(toWrite.key, dov);
 			namespaceSerializer.serialize(toWrite.namespace, dov);
+			keySerializer.serialize(toWrite.key, dov);
 			stateSerializer.serialize(toWrite.state, dov);
 		}
+	}
+
+	boolean isOwner(CopyOnWriteStateTable<K, N, S> stateTable) {
+		return stateTable == owningStateTable;
 	}
 }

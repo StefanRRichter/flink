@@ -82,7 +82,11 @@ public class HeapKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 	 */
 	private final HashMap<String, AbstractStateTable<K, ?, ?>> stateTables = new HashMap<>();
 
-	private final boolean async;
+	/**
+	 * Determines whether or not we run snapshots asynchronously. This impacts the choice of the underlying
+	 * {@link AbstractStateTable} implementation.
+	 */
+	private final boolean asynchronousSnapshots;
 
 	public HeapKeyedStateBackend(
 			TaskKvStateRegistry kvStateRegistry,
@@ -92,7 +96,7 @@ public class HeapKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 			KeyGroupRange keyGroupRange) {
 
 		super(kvStateRegistry, keySerializer, userCodeClassLoader, numberOfKeyGroups, keyGroupRange);
-		this.async = true;
+		this.asynchronousSnapshots = true;
 		LOG.info("Initializing heap keyed state backend with stream factory.");
 	}
 
@@ -265,7 +269,7 @@ public class HeapKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 
 							for (Map.Entry<String, AbstractStateTable<K, ?, ?>> kvState : stateTables.entrySet()) {
 								outView.writeShort(kVStateToId.get(kvState.getKey()));
-								cowStateStableSnapshots.get(kvState.getValue()).writeKeyGroupData(outView, keyGroupId);
+								cowStateStableSnapshots.get(kvState.getValue()).writeMappingsInKeyGroup(outView, keyGroupId);
 							}
 						}
 
@@ -300,7 +304,13 @@ public class HeapKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 		LOG.info("Asynchronous heap backend snapshot (" + streamFactory + ", synchronous part) in thread " +
 				Thread.currentThread() + " took " + (System.currentTimeMillis() - syncStartTime) + " ms.");
 
-		return AsyncStoppableTaskWithCallback.from(ioCallable);
+		AsyncStoppableTaskWithCallback<KeyGroupsStateHandle> task = AsyncStoppableTaskWithCallback.from(ioCallable);
+
+		if (!asynchronousSnapshots) {
+			task.run();
+		}
+
+		return task;
 	}
 
 	@SuppressWarnings("deprecation")
@@ -376,7 +386,7 @@ public class HeapKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 					for (int i = 0; i < metaInfoList.size(); i++) {
 						int kvStateId = inView.readShort();
 						AbstractStateTable<K, ?, ?> stateTable = stateTables.get(kvStatesById.get(kvStateId));
-						stateTable.readKeyGroupData(inView, keyGroupIndex);
+						stateTable.readMappingsInKeyGroup(inView, keyGroupIndex);
 					}
 				}
 			} finally {
@@ -414,7 +424,7 @@ public class HeapKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 
 			if (genericSnapshot instanceof MigrationRestoreSnapshot) {
 				MigrationRestoreSnapshot<K, ?, ?> stateSnapshot = (MigrationRestoreSnapshot<K, ?, ?>) genericSnapshot;
-				final AbstractStateTable rawResultMap = stateSnapshot.deserialize(stateName, keyGroupRange, numberOfKeyGroups, async);
+				final AbstractStateTable rawResultMap = stateSnapshot.deserialize(stateName, keyGroupRange, numberOfKeyGroups, asynchronousSnapshots);
 				// add named state to the backend
 				stateTables.put(stateName, rawResultMap);
 			} else {
@@ -449,8 +459,13 @@ public class HeapKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 	}
 
 	private <N, V> AbstractStateTable<K, N, V> newStateTable(RegisteredBackendStateMetaInfo<N, V> newMetaInfo) {
-		return async ?
+		return asynchronousSnapshots ?
 				new CopyOnWriteStateTable<>(this, newMetaInfo) :
 				new NestedMapsStateTable<>(this, newMetaInfo);
+	}
+
+	@Override
+	public boolean supportsAsynchronousSnapshots() {
+		return asynchronousSnapshots;
 	}
 }
