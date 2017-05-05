@@ -18,7 +18,6 @@
 
 package org.apache.flink.runtime.checkpoint;
 
-import org.apache.commons.io.IOUtils;
 import org.apache.flink.core.fs.CloseableRegistry;
 import org.apache.flink.runtime.io.async.AbstractAsyncIOCallable;
 import org.apache.flink.runtime.state.CheckpointStreamFactory;
@@ -27,7 +26,6 @@ import org.apache.flink.runtime.state.StreamStateHandle;
 import org.apache.flink.util.Preconditions;
 
 import java.io.IOException;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Abstract base class for async IO operations of snapshots against a
@@ -42,7 +40,6 @@ public abstract class AbstractAsyncSnapshotIOCallable<H extends StateObject>
 
 	protected final CheckpointStreamFactory streamFactory;
 	protected final CloseableRegistry closeStreamOnCancelRegistry;
-	protected final AtomicBoolean open;
 
 	public AbstractAsyncSnapshotIOCallable(
 		long checkpointId,
@@ -54,56 +51,29 @@ public abstract class AbstractAsyncSnapshotIOCallable<H extends StateObject>
 		this.closeStreamOnCancelRegistry = Preconditions.checkNotNull(closeStreamOnCancelRegistry);
 		this.checkpointId = checkpointId;
 		this.timestamp = timestamp;
-		this.open = new AtomicBoolean(false);
 	}
 
 	@Override
 	public CheckpointStreamFactory.CheckpointStateOutputStream openIOHandle() throws Exception {
-		if (checkStreamClosedAndDoTransitionToOpen()) {
-			CheckpointStreamFactory.CheckpointStateOutputStream stream =
-				streamFactory.createCheckpointStateOutputStream(checkpointId, timestamp);
-			try {
-				closeStreamOnCancelRegistry.registerClosable(stream);
-				return stream;
-			} catch (Exception ex) {
-				open.set(false);
-				throw ex;
-			}
+		CheckpointStreamFactory.CheckpointStateOutputStream stream =
+			streamFactory.createCheckpointStateOutputStream(checkpointId, timestamp);
+		closeStreamOnCancelRegistry.registerClosable(stream);
+		return stream;
+	}
+
+	protected synchronized StreamStateHandle closeStreamAndGetStateHandle() throws IOException {
+		final CheckpointStreamFactory.CheckpointStateOutputStream stream = getIoHandle();
+		if (stream != null) {
+			return stream.closeAndGetHandle();
 		} else {
-			throw new IOException("Async snapshot: a checkpoint stream was already opened.");
+			throw new IOException("No active stream to a obtain handle.");
 		}
 	}
 
 	@Override
-	public void done(boolean canceled) {
-		if (checkStreamOpenAndDoTransitionToClose()) {
-			CheckpointStreamFactory.CheckpointStateOutputStream stream = getIoHandle();
-			if (stream != null) {
-				closeStreamOnCancelRegistry.unregisterClosable(stream);
-				IOUtils.closeQuietly(stream);
-			}
-		}
+	protected void doCloseInternal(CheckpointStreamFactory.CheckpointStateOutputStream stream)
+		throws IOException {
+		closeStreamOnCancelRegistry.unregisterClosable(stream);
+		super.doCloseInternal(stream);
 	}
-
-	protected boolean checkStreamClosedAndDoTransitionToOpen() {
-		return open.compareAndSet(false, true);
-	}
-
-	protected boolean checkStreamOpenAndDoTransitionToClose() {
-		return open.compareAndSet(true, false);
-	}
-
-	protected StreamStateHandle closeStreamAndGetStateHandle() throws IOException {
-		if (checkStreamOpenAndDoTransitionToClose()) {
-			final CheckpointStreamFactory.CheckpointStateOutputStream stream = getIoHandle();
-			try {
-				return stream.closeAndGetHandle();
-			} finally {
-				closeStreamOnCancelRegistry.unregisterClosable(stream);
-			}
-		} else {
-			throw new IOException("Checkpoint stream already closed.");
-		}
-	}
-
 }

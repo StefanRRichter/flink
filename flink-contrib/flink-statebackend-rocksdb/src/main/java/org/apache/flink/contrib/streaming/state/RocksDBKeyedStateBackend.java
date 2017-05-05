@@ -385,17 +385,13 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 					public KeyGroupsStateHandle performOperation() throws Exception {
 						long startTime = System.currentTimeMillis();
 						synchronized (asyncSnapshotLock) {
-							try {
-								// hold the db lock while operation on the db to guard us against async db disposal
-								if (db == null) {
-									throw new IOException("RocksDB closed.");
-								}
-
-								snapshotOperation.writeDBSnapshot();
-
-							} finally {
-								snapshotOperation.closeCheckpointStream();
+							// hold the db lock while operation on the db to guard us against async db disposal
+							if (db == null) {
+								throw new IOException("RocksDB closed.");
 							}
+
+							snapshotOperation.writeDBSnapshot();
+							snapshotOperation.closeCheckpointStreamAndPrepareStateHandle();
 						}
 
 						LOG.info("Asynchronous RocksDB snapshot ({}, asynchronous part) in thread {} took {} ms.",
@@ -503,7 +499,7 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 		 *
 		 * @throws IOException
 		 */
-		public void closeCheckpointStream() throws IOException {
+		public void closeCheckpointStreamAndPrepareStateHandle() throws IOException {
 			if (outStream != null) {
 				snapshotResultStateHandle = closeSnapshotStreamAndGetHandle();
 			} else {

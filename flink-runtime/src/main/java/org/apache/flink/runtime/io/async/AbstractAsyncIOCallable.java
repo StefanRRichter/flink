@@ -103,19 +103,22 @@ public abstract class AbstractAsyncIOCallable<V, D extends Closeable> implements
 	}
 
 	private synchronized void closeIOHandle() {
-
 		if (!stopped) {
 			stopped = true;
-
 			final D handle = ioHandle;
 			if (handle != null) {
 				try {
-					handle.close();
+					doCloseInternal(handle);
 				} catch (IOException ex) {
 					stopException = ex;
 				}
+				ioHandle = null;
 			}
 		}
+	}
+
+	protected void doCloseInternal(D handle) throws IOException {
+		handle.close();
 	}
 
 	/**
