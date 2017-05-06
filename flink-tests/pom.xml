@@ -331,6 +331,7 @@ under the License.
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-surefire-plugin</artifactId>
 				<configuration>
+					<argLine>-Xms256m -Xmx768m -Dmvn.forkNumber=${surefire.forkNumber} -XX:+UseSerialGC</argLine>
 					<systemPropertyVariables>
 						<log.level>WARN</log.level>
 					</systemPropertyVariables>
