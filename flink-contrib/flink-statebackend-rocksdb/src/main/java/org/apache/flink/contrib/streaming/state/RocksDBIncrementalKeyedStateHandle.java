@@ -62,9 +62,9 @@ public class RocksDBIncrementalKeyedStateHandle implements KeyedStateHandle, Com
 
 	private final long checkpointId;
 
-	private final Map<String, StreamStateHandle> newSstFiles;
+	private final Map<String, StreamStateHandle> unregisteredSstFiles;
 
-	private final Map<String, StreamStateHandle> oldSstFiles;
+	private final Map<String, StreamStateHandle> registeredSstFiles;
 
 	private final Map<String, StreamStateHandle> miscFiles;
 
@@ -85,8 +85,8 @@ public class RocksDBIncrementalKeyedStateHandle implements KeyedStateHandle, Com
 			String operatorIdentifier,
 			KeyGroupRange keyGroupRange,
 			long checkpointId,
-			Map<String, StreamStateHandle> newSstFiles,
-			Map<String, StreamStateHandle> oldSstFiles,
+			Map<String, StreamStateHandle> unregisteredSstFiles,
+			Map<String, StreamStateHandle> registeredSstFiles,
 			Map<String, StreamStateHandle> miscFiles,
 			StreamStateHandle metaStateHandle) {
 
@@ -94,8 +94,8 @@ public class RocksDBIncrementalKeyedStateHandle implements KeyedStateHandle, Com
 		this.operatorIdentifier = Preconditions.checkNotNull(operatorIdentifier);
 		this.keyGroupRange = Preconditions.checkNotNull(keyGroupRange);
 		this.checkpointId = checkpointId;
-		this.newSstFiles = Preconditions.checkNotNull(newSstFiles);
-		this.oldSstFiles = Preconditions.checkNotNull(oldSstFiles);
+		this.unregisteredSstFiles = Preconditions.checkNotNull(unregisteredSstFiles);
+		this.registeredSstFiles = Preconditions.checkNotNull(registeredSstFiles);
 		this.miscFiles = Preconditions.checkNotNull(miscFiles);
 		this.metaStateHandle = Preconditions.checkNotNull(metaStateHandle);
 		this.registered = false;
@@ -110,12 +110,12 @@ public class RocksDBIncrementalKeyedStateHandle implements KeyedStateHandle, Com
 		return checkpointId;
 	}
 
-	Map<String, StreamStateHandle> getNewSstFiles() {
-		return newSstFiles;
+	Map<String, StreamStateHandle> getUnregisteredSstFiles() {
+		return unregisteredSstFiles;
 	}
 
-	Map<String, StreamStateHandle> getOldSstFiles() {
-		return oldSstFiles;
+	Map<String, StreamStateHandle> getRegisteredSstFiles() {
+		return registeredSstFiles;
 	}
 
 	Map<String, StreamStateHandle> getMiscFiles() {
@@ -138,6 +138,8 @@ public class RocksDBIncrementalKeyedStateHandle implements KeyedStateHandle, Com
 	@Override
 	public void discardState() throws Exception {
 
+		Preconditions.checkState(!registered, "Attempt to dispose a registered composite state with registered shared state. Must unregister first.");
+
 		try {
 			metaStateHandle.discardState();
 		} catch (Exception e) {
@@ -150,24 +152,23 @@ public class RocksDBIncrementalKeyedStateHandle implements KeyedStateHandle, Com
 			LOG.warn("Could not properly discard misc file states.", e);
 		}
 
-		if (!registered) {
-			try {
-				StateUtil.bestEffortDiscardAllStateObjects(newSstFiles.values());
-			} catch (Exception e) {
-				LOG.warn("Could not properly discard new sst file states.", e);
-			}
+		try {
+			StateUtil.bestEffortDiscardAllStateObjects(unregisteredSstFiles.values());
+		} catch (Exception e) {
+			LOG.warn("Could not properly discard new sst file states.", e);
 		}
+
 	}
 
 	@Override
 	public long getStateSize() {
 		long size = StateUtil.getStateSize(metaStateHandle);
 
-		for (StreamStateHandle newSstFileHandle : newSstFiles.values()) {
+		for (StreamStateHandle newSstFileHandle : unregisteredSstFiles.values()) {
 			size += newSstFileHandle.getStateSize();
 		}
 
-		for (StreamStateHandle oldSstFileHandle : oldSstFiles.values()) {
+		for (StreamStateHandle oldSstFileHandle : registeredSstFiles.values()) {
 			size += oldSstFileHandle.getStateSize();
 		}
 
@@ -180,50 +181,60 @@ public class RocksDBIncrementalKeyedStateHandle implements KeyedStateHandle, Com
 
 	@Override
 	public void registerSharedStates(SharedStateRegistry stateRegistry) {
+
 		Preconditions.checkState(!registered, "The state handle has already registered its shared states.");
 
-		for (Map.Entry<String, StreamStateHandle> newSstFileEntry : newSstFiles.entrySet()) {
+		for (Map.Entry<String, StreamStateHandle> newSstFileEntry : unregisteredSstFiles.entrySet()) {
 			SharedStateRegistryKey registryKey =
 				createSharedStateRegistryKeyFromFileName(newSstFileEntry.getKey());
 
-			StreamStateHandle previouslyRegistered =
-				stateRegistry.tryRegisterNew(registryKey, newSstFileEntry.getValue());
+			SharedStateRegistry.Result result =
+				stateRegistry.registerNewReference(registryKey, newSstFileEntry.getValue());
 
-			if (previouslyRegistered != null) {
-				//TODO update handles!!!
-			}
+			// A previous checkpoint n has already registered the state. This can happen if a
+			// following checkpoint (n + x) wants to reference the same state before the backend got
+			// notified that checkpoint n completed.
+			newSstFileEntry.setValue(result.getReference());
 		}
 
-		for (Map.Entry<String, StreamStateHandle> oldSstFileName : oldSstFiles.entrySet()) {
+		for (Map.Entry<String, StreamStateHandle> oldSstFileName : registeredSstFiles.entrySet()) {
 			SharedStateRegistryKey registryKey =
 				createSharedStateRegistryKeyFromFileName(oldSstFileName.getKey());
-			stateRegistry.increaseReferenceCount(registryKey);
+
+			SharedStateRegistry.Result result = stateRegistry.obtainReference(registryKey);
+			oldSstFileName.setValue(result.getReference());
 		}
+
+		// Migrate state from unregistered to registered, so that it will not count as private state
+		// for #discardState() from now.
+		registeredSstFiles.putAll(unregisteredSstFiles);
+		unregisteredSstFiles.clear();
 
 		registered = true;
 	}
 
 	@Override
 	public void unregisterSharedStates(SharedStateRegistry stateRegistry) {
+
 		Preconditions.checkState(registered, "The state handle has not registered its shared states yet.");
 
-		for (Map.Entry<String, StreamStateHandle> newSstFileEntry : newSstFiles.entrySet()) {
+		for (Map.Entry<String, StreamStateHandle> newSstFileEntry : unregisteredSstFiles.entrySet()) {
 			SharedStateRegistryKey registryKey =
 				createSharedStateRegistryKeyFromFileName(newSstFileEntry.getKey());
-			stateRegistry.decreaseReferenceCount(registryKey);
+			stateRegistry.releaseReference(registryKey);
 		}
 
-		for (Map.Entry<String, StreamStateHandle> oldSstFileEntry : oldSstFiles.entrySet()) {
+		for (Map.Entry<String, StreamStateHandle> oldSstFileEntry : registeredSstFiles.entrySet()) {
 			SharedStateRegistryKey registryKey =
 				createSharedStateRegistryKeyFromFileName(oldSstFileEntry.getKey());
-			stateRegistry.decreaseReferenceCount(registryKey);
+			stateRegistry.releaseReference(registryKey);
 		}
 
 		registered = false;
 	}
 
 	private SharedStateRegistryKey createSharedStateRegistryKeyFromFileName(String fileName) {
-		return new SharedStateRegistryKey(jobId + "-" + operatorIdentifier + "-" + keyGroupRange + "-" + fileName);
+		return new SharedStateRegistryKey(operatorIdentifier + "-" + keyGroupRange + "-" + fileName);
 	}
 }
 

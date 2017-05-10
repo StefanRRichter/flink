@@ -18,12 +18,14 @@
 
 package org.apache.flink.runtime.state;
 
+import org.apache.flink.runtime.concurrent.Executors;
 import org.apache.flink.util.Preconditions;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.Executor;
 
 /**
  * A {@code SharedStateRegistry} will be deployed in the 
@@ -39,8 +41,11 @@ public class SharedStateRegistry {
 	/** All registered state objects by an artificial key */
 	private final Map<SharedStateRegistryKey, SharedStateRegistry.SharedStateEntry> registeredStates;
 
+	private final Executor asyncDisposalExecutor;
+
 	public SharedStateRegistry() {
 		this.registeredStates = new HashMap<>();
+		this.asyncDisposalExecutor = Executors.directExecutor(); //TODO!!!
 	}
 
 	/**
@@ -50,26 +55,30 @@ public class SharedStateRegistry {
 	 * @param state the shared state for which we register a reference.
 	 * @return the updated reference count for the given shared state.
 	 */
-	public StreamStateHandle tryRegisterNew(SharedStateRegistryKey registrationKey, StreamStateHandle state) {
+	public Result registerNewReference(SharedStateRegistryKey registrationKey, StreamStateHandle state) {
+
 		Preconditions.checkNotNull(state);
 
 		synchronized (registeredStates) {
-			SharedStateRegistry.SharedStateEntry entry =
-				registeredStates.get(registrationKey);
+			SharedStateRegistry.SharedStateEntry entry = registeredStates.get(registrationKey);
 
 			if (entry == null) {
-				SharedStateRegistry.SharedStateEntry stateEntry =
-					new SharedStateRegistry.SharedStateEntry(state);
-				registeredStates.put(registrationKey, stateEntry);
-				return state;
+				entry = new SharedStateRegistry.SharedStateEntry(state);
+				registeredStates.put(registrationKey, entry);
 			} else {
+				// delete if this is a real duplicate
+				if (!state.equals(entry.state)) {
+					asyncDisposalExecutor.execute(new AsyncDisposalRunnable(state));
+				}
 				entry.increaseReferenceCount();
-				return entry.getState();
 			}
+
+			return new Result(entry.getState(), entry.getReferenceCount());
 		}
 	}
 
-	public int increaseReferenceCount(SharedStateRegistryKey registrationKey) {
+	public Result obtainReference(SharedStateRegistryKey registrationKey) {
+
 		Preconditions.checkNotNull(registrationKey);
 
 		synchronized (registeredStates) {
@@ -77,7 +86,7 @@ public class SharedStateRegistry {
 				Preconditions.checkNotNull(registeredStates.get(registrationKey),
 					"Could not find a state for the given registration key!");
 			entry.increaseReferenceCount();
-			return entry.getReferenceCount();
+			return new Result(entry);
 		}
 	}
 
@@ -88,7 +97,8 @@ public class SharedStateRegistry {
 	 * @param registrationKey the shared state for which we unregister a reference.
 	 * @return the reference count for the shared state after the update.
 	 */
-	public int decreaseReferenceCount(SharedStateRegistryKey registrationKey) {
+	public Result releaseReference(SharedStateRegistryKey registrationKey) {
+
 		Preconditions.checkNotNull(registrationKey);
 
 		synchronized (registeredStates) {
@@ -104,13 +114,10 @@ public class SharedStateRegistry {
 			// Remove the state from the registry when it's not referenced any more.
 			if (newReferenceCount <= 0) {
 				registeredStates.remove(registrationKey);
-				try {
-					entry.getState().discardState(); //TODO async!
-				} catch (Exception e) {
-					LOG.warn("Cannot properly discard the state {}.", entry.getState(), e);
-				}
+				asyncDisposalExecutor.execute(new AsyncDisposalRunnable(entry.getState()));
 			}
-			return newReferenceCount;
+
+			return new Result(entry);
 		}
 	}
 
@@ -150,12 +157,15 @@ public class SharedStateRegistry {
 		}
 	}
 
+	/**
+	 *
+	 */
 	private static class SharedStateEntry {
 
-		/** The shared object */
+		/** The shared state handle */
 		private final StreamStateHandle state;
 
-		/** The reference count of the object */
+		/** The current reference count of the state handle */
 		private int referenceCount;
 
 		SharedStateEntry(StreamStateHandle value) {
@@ -180,12 +190,26 @@ public class SharedStateRegistry {
 		}
 	}
 
+	/**
+	 *
+	 */
 	public static class Result {
+
+		/** The (un)registered state handle from the request */
 		private final StreamStateHandle reference;
+
+		/** The reference count to the state handle after the request to (un)register */
 		private final int referenceCount;
 
+		private Result(SharedStateEntry sharedStateEntry) {
+			this.reference = sharedStateEntry.getState();
+			this.referenceCount = sharedStateEntry.getReferenceCount();
+		}
+
 		public Result(StreamStateHandle reference, int referenceCount) {
-			this.reference = reference;
+			Preconditions.checkArgument(referenceCount >= 0);
+
+			this.reference = Preconditions.checkNotNull(reference);
 			this.referenceCount = referenceCount;
 		}
 
@@ -195,6 +219,24 @@ public class SharedStateRegistry {
 
 		public int getReferenceCount() {
 			return referenceCount;
+		}
+	}
+
+	private static final class AsyncDisposalRunnable implements Runnable {
+
+		private final StateObject toDispose;
+
+		public AsyncDisposalRunnable(StateObject toDispose) {
+			this.toDispose = Preconditions.checkNotNull(toDispose);
+		}
+
+		@Override
+		public void run() {
+			try {
+				toDispose.discardState();
+			} catch (Exception e) {
+				LOG.warn("A problem occurred during asynchronous disposal of a shared state object: {}", toDispose, e);
+			}
 		}
 	}
 }

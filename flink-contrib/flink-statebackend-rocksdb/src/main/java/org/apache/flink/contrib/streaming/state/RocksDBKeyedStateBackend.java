@@ -54,7 +54,6 @@ import org.apache.flink.runtime.io.async.AsyncStoppableTaskWithCallback;
 import org.apache.flink.runtime.query.TaskKvStateRegistry;
 import org.apache.flink.runtime.state.AbstractKeyedStateBackend;
 import org.apache.flink.runtime.state.CheckpointStreamFactory;
-import org.apache.flink.runtime.state.StateMigrationUtil;
 import org.apache.flink.runtime.state.DoneFuture;
 import org.apache.flink.runtime.state.KeyGroupRange;
 import org.apache.flink.runtime.state.KeyGroupRangeAssignment;
@@ -62,9 +61,10 @@ import org.apache.flink.runtime.state.KeyGroupRangeOffsets;
 import org.apache.flink.runtime.state.KeyGroupsStateHandle;
 import org.apache.flink.runtime.state.KeyedBackendSerializationProxy;
 import org.apache.flink.runtime.state.KeyedStateHandle;
+import org.apache.flink.runtime.state.RegisteredKeyedBackendStateMetaInfo;
+import org.apache.flink.runtime.state.StateMigrationUtil;
 import org.apache.flink.runtime.state.StateObject;
 import org.apache.flink.runtime.state.StateUtil;
-import org.apache.flink.runtime.state.RegisteredKeyedBackendStateMetaInfo;
 import org.apache.flink.runtime.state.StreamStateHandle;
 import org.apache.flink.runtime.state.internal.InternalAggregatingState;
 import org.apache.flink.runtime.state.internal.InternalFoldingState;
@@ -72,6 +72,7 @@ import org.apache.flink.runtime.state.internal.InternalListState;
 import org.apache.flink.runtime.state.internal.InternalMapState;
 import org.apache.flink.runtime.state.internal.InternalReducingState;
 import org.apache.flink.runtime.state.internal.InternalValueState;
+import org.apache.flink.runtime.state.memory.ByteStreamStateHandle;
 import org.apache.flink.runtime.util.SerializableObject;
 import org.apache.flink.util.FileUtils;
 import org.apache.flink.util.IOUtils;
@@ -864,10 +865,11 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 
 						if (fileHandle == null) {
 							fileHandle = materializeStateData(filePath);
-
 							newSstFiles.put(fileName, fileHandle);
 						} else {
-							oldSstFiles.put(fileName, fileHandle);
+							// we introduce a placeholder state handle, that is replaced with the
+							// original from the shared state registry (created from a previous checkpoint)
+							oldSstFiles.put(fileName, new PlaceholderStreamStateHandle(fileHandle.getStateSize()));
 						}
 					} else {
 						StreamStateHandle fileHandle = materializeStateData(filePath);
@@ -920,6 +922,37 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 				} catch (Exception e) {
 					LOG.warn("Could not properly discard states.", e);
 				}
+			}
+		}
+
+		/**
+		 * A placeholder state handle for shared state that will replaced by an original that was
+		 * created in a previous checkpoint. So we don't have to send the handle twice, e.g. in
+		 * case of {@link ByteStreamStateHandle}.
+		 */
+		private static final class PlaceholderStreamStateHandle implements StreamStateHandle {
+
+			private static final long serialVersionUID = 1L;
+			private final long originalSize;
+
+			public PlaceholderStreamStateHandle(long originalSize) {
+				this.originalSize = originalSize;
+			}
+
+			@Override
+			public FSDataInputStream openInputStream() {
+				throw new UnsupportedOperationException(
+					"This is only a placeholder to be replaced by a real StreamStateHandle in the checkpoint coordinator.");
+			}
+
+			@Override
+			public void discardState() throws Exception {
+
+			}
+
+			@Override
+			public long getStateSize() {
+				return originalSize;
 			}
 		}
 	}
@@ -1260,7 +1293,7 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 				UUID.randomUUID().toString());
 
 			try {
-				Map<String, StreamStateHandle> newSstFiles = restoreStateHandle.getNewSstFiles();
+				Map<String, StreamStateHandle> newSstFiles = restoreStateHandle.getUnregisteredSstFiles();
 				for (Map.Entry<String, StreamStateHandle> newSstFileEntry : newSstFiles.entrySet()) {
 					String fileName = newSstFileEntry.getKey();
 					StreamStateHandle remoteFileHandle = newSstFileEntry.getValue();
@@ -1268,7 +1301,7 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 					readStateData(new Path(restoreInstancePath, fileName), remoteFileHandle);
 				}
 
-				Map<String, StreamStateHandle> oldSstFiles = restoreStateHandle.getOldSstFiles();
+				Map<String, StreamStateHandle> oldSstFiles = restoreStateHandle.getRegisteredSstFiles();
 				for (Map.Entry<String, StreamStateHandle> oldSstFileEntry : oldSstFiles.entrySet()) {
 					String fileName = oldSstFileEntry.getKey();
 					StreamStateHandle remoteFileHandle = oldSstFileEntry.getValue();
