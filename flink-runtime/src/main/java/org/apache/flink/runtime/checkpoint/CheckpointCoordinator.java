@@ -857,6 +857,7 @@ public class CheckpointCoordinator {
 			Preconditions.checkState(pendingCheckpoint.isDiscarded() && completedCheckpoint != null);
 
 			try {
+				System.out.println("--------------------"+completedCheckpoint.getCheckpointID());
 				completedCheckpointStore.addCheckpoint(completedCheckpoint);
 			} catch (Exception exception) {
 				// we failed to store the completed checkpoint. Let's clean up

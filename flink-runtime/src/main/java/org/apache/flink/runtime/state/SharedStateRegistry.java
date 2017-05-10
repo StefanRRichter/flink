@@ -63,9 +63,11 @@ public class SharedStateRegistry {
 				SharedStateRegistry.SharedStateEntry stateEntry =
 					new SharedStateRegistry.SharedStateEntry(state);
 				registeredStates.put(state.getRegistrationKey(), stateEntry);
+				System.out.println("A "+state.getRegistrationKey() +" -> "+1);
 				return 1;
 			} else {
 				entry.increaseReferenceCount();
+				System.out.println("A "+state.getRegistrationKey() +" -> "+entry.getReferenceCount());
 				return entry.getReferenceCount();
 			}
 		}
@@ -101,6 +103,7 @@ public class SharedStateRegistry {
 					LOG.warn("Cannot properly discard the state {}.", entry.getState(), e);
 				}
 			}
+			System.out.println("R "+state.getRegistrationKey() +" -> "+newReferenceCount);
 			return newReferenceCount;
 		}
 	}

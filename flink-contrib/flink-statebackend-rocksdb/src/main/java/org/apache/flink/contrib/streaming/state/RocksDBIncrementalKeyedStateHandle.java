@@ -54,20 +54,46 @@ public class RocksDBIncrementalKeyedStateHandle implements KeyedStateHandle, Com
 
 	private static final long serialVersionUID = -8328808513197388231L;
 
+	/**
+	 * Id of the Job which from which this snapshot was taken.
+	 */
 	private final JobID jobId;
 
+	/**
+	 * Id of the operator instance for which this snapshot was taken.
+	 */
 	private final String operatorIdentifier;
 
+	/**
+	 * Key-group range of the backend from which this snapshot was taken.
+	 */
 	private final KeyGroupRange keyGroupRange;
 
+	/**
+	 * Id of the checkpoint for which this snapshot was taken.
+	 */
 	private final long checkpointId;
 
-	private final Map<String, StreamStateHandle> newSstFiles;
+	/**
+	 * SST files newly created as part of this checkpoint.
+	 * (filename, currentCheckpointId) -> state handle
+	 */
+	private final Map<CheckpointScopedFileName, StreamStateHandle> newSstFiles;
 
-	private final Map<String, StreamStateHandle> oldSstFiles;
+	/**
+	 * SST files created by a previously completed checkpoint.
+	 * (filename, creatingCheckpointID) -> state handle
+	 */
+	private final Map<CheckpointScopedFileName, StreamStateHandle> oldSstFiles;
 
+	/**
+	 * Misc. files, file name -> state handle
+	 */
 	private final Map<String, StreamStateHandle> miscFiles;
 
+	/**
+	 * State handle for the meta data file of RocksDB.
+	 */
 	private final StreamStateHandle metaStateHandle;
 
 	/**
@@ -85,8 +111,8 @@ public class RocksDBIncrementalKeyedStateHandle implements KeyedStateHandle, Com
 			String operatorIdentifier,
 			KeyGroupRange keyGroupRange,
 			long checkpointId,
-			Map<String, StreamStateHandle> newSstFiles,
-			Map<String, StreamStateHandle> oldSstFiles,
+			Map<CheckpointScopedFileName, StreamStateHandle> newSstFiles,
+			Map<CheckpointScopedFileName, StreamStateHandle> oldSstFiles,
 			Map<String, StreamStateHandle> miscFiles,
 			StreamStateHandle metaStateHandle) {
 
@@ -110,11 +136,11 @@ public class RocksDBIncrementalKeyedStateHandle implements KeyedStateHandle, Com
 		return checkpointId;
 	}
 
-	Map<String, StreamStateHandle> getNewSstFiles() {
+	Map<CheckpointScopedFileName, StreamStateHandle> getNewSstFiles() {
 		return newSstFiles;
 	}
 
-	Map<String, StreamStateHandle> getOldSstFiles() {
+	Map<CheckpointScopedFileName, StreamStateHandle> getOldSstFiles() {
 		return oldSstFiles;
 	}
 
@@ -182,14 +208,14 @@ public class RocksDBIncrementalKeyedStateHandle implements KeyedStateHandle, Com
 	public void registerSharedStates(SharedStateRegistry stateRegistry) {
 		Preconditions.checkState(!registered, "The state handle has already registered its shared states.");
 
-		for (Map.Entry<String, StreamStateHandle> newSstFileEntry : newSstFiles.entrySet()) {
+		for (Map.Entry<CheckpointScopedFileName, StreamStateHandle> newSstFileEntry : newSstFiles.entrySet()) {
 			SstFileStateHandle stateHandle = new SstFileStateHandle(newSstFileEntry.getKey(), newSstFileEntry.getValue());
 
 			int referenceCount = stateRegistry.register(stateHandle);
 			Preconditions.checkState(referenceCount == 1);
 		}
 
-		for (Map.Entry<String, StreamStateHandle> oldSstFileEntry : oldSstFiles.entrySet()) {
+		for (Map.Entry<CheckpointScopedFileName, StreamStateHandle> oldSstFileEntry : oldSstFiles.entrySet()) {
 			SstFileStateHandle stateHandle = new SstFileStateHandle(oldSstFileEntry.getKey(), oldSstFileEntry.getValue());
 
 			int referenceCount = stateRegistry.register(stateHandle);
@@ -203,11 +229,11 @@ public class RocksDBIncrementalKeyedStateHandle implements KeyedStateHandle, Com
 	public void unregisterSharedStates(SharedStateRegistry stateRegistry) {
 		Preconditions.checkState(registered, "The state handle has not registered its shared states yet.");
 
-		for (Map.Entry<String, StreamStateHandle> newSstFileEntry : newSstFiles.entrySet()) {
+		for (Map.Entry<CheckpointScopedFileName, StreamStateHandle> newSstFileEntry : newSstFiles.entrySet()) {
 			stateRegistry.unregister(new SstFileStateHandle(newSstFileEntry.getKey(), newSstFileEntry.getValue()));
 		}
 
-		for (Map.Entry<String, StreamStateHandle> oldSstFileEntry : oldSstFiles.entrySet()) {
+		for (Map.Entry<CheckpointScopedFileName, StreamStateHandle> oldSstFileEntry : oldSstFiles.entrySet()) {
 			stateRegistry.unregister(new SstFileStateHandle(oldSstFileEntry.getKey(), oldSstFileEntry.getValue()));
 		}
 
@@ -218,20 +244,23 @@ public class RocksDBIncrementalKeyedStateHandle implements KeyedStateHandle, Com
 
 		private static final long serialVersionUID = 9092049285789170669L;
 
-		private final String fileName;
+		/** The name of the sst file, scoped by the checkpoint that initially created it */
+		private final CheckpointScopedFileName checkpointScopedFileName;
 
+		/** A state handle referencing the sst file*/
 		private final StreamStateHandle delegateStateHandle;
 
 		private SstFileStateHandle(
-				String fileName,
+				CheckpointScopedFileName checkpointScopedFileName,
 				StreamStateHandle delegateStateHandle) {
-			this.fileName = fileName;
+			this.checkpointScopedFileName = checkpointScopedFileName;
 			this.delegateStateHandle = delegateStateHandle;
 		}
 
 		@Override
 		public String getRegistrationKey() {
-			return jobId + "-" + operatorIdentifier + "-" + keyGroupRange + "-" + fileName;
+			return jobId + "-" + "-" + operatorIdentifier + "-"
+				+ keyGroupRange + "-" + checkpointScopedFileName;
 		}
 
 		@Override
