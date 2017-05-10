@@ -37,7 +37,7 @@ public class SharedStateRegistry {
 	private static final Logger LOG = LoggerFactory.getLogger(SharedStateRegistry.class);
 
 	/** All registered state objects by an artificial key */
-	private final Map<String, SharedStateRegistry.SharedStateEntry> registeredStates;
+	private final Map<SharedStateRegistryKey, SharedStateRegistry.SharedStateEntry> registeredStates;
 
 	public SharedStateRegistry() {
 		this.registeredStates = new HashMap<>();
@@ -50,37 +50,34 @@ public class SharedStateRegistry {
 	 * @param state the shared state for which we register a reference.
 	 * @return the updated reference count for the given shared state.
 	 */
-	public int register(SharedStateHandle state) {
-		if (state == null) {
-			return 0;
-		}
+	public StreamStateHandle tryRegisterNew(SharedStateRegistryKey registrationKey, StreamStateHandle state) {
+		Preconditions.checkNotNull(state);
 
 		synchronized (registeredStates) {
 			SharedStateRegistry.SharedStateEntry entry =
-				registeredStates.get(state.getRegistrationKey());
+				registeredStates.get(registrationKey);
 
 			if (entry == null) {
 				SharedStateRegistry.SharedStateEntry stateEntry =
 					new SharedStateRegistry.SharedStateEntry(state);
-				registeredStates.put(state.getRegistrationKey(), stateEntry);
-				return 1;
+				registeredStates.put(registrationKey, stateEntry);
+				return state;
 			} else {
 				entry.increaseReferenceCount();
-				return entry.getReferenceCount();
+				return entry.getState();
 			}
 		}
 	}
 
-	public void increaseReferenceCount(String registrationKey) {
-		if (registrationKey == null) {
-			return;
-		}
+	public int increaseReferenceCount(SharedStateRegistryKey registrationKey) {
+		Preconditions.checkNotNull(registrationKey);
 
 		synchronized (registeredStates) {
 			SharedStateRegistry.SharedStateEntry entry =
 				Preconditions.checkNotNull(registeredStates.get(registrationKey),
 					"Could not find a state for the given registration key!");
 			entry.increaseReferenceCount();
+			return entry.getReferenceCount();
 		}
 	}
 
@@ -88,18 +85,17 @@ public class SharedStateRegistry {
 	 * Unregister one reference to the given shared state in the registry. This decreases the
 	 * reference count by one. Once the count reaches zero, the shared state is deleted.
 	 *
-	 * @param state the shared state for which we unregister a reference.
+	 * @param registrationKey the shared state for which we unregister a reference.
 	 * @return the reference count for the shared state after the update.
 	 */
-	public int decreaseReferenceCount(String registrationKey) {
-		if (registrationKey == null) {
-			return 0;
-		}
+	public int decreaseReferenceCount(SharedStateRegistryKey registrationKey) {
+		Preconditions.checkNotNull(registrationKey);
 
 		synchronized (registeredStates) {
 			SharedStateRegistry.SharedStateEntry entry = registeredStates.get(registrationKey);
 
-			Preconditions.checkState(entry != null, "Cannot unregister a state that is not registered.");
+			Preconditions.checkState(entry != null,
+				"Cannot unregister a state that is not registered.");
 
 			entry.decreaseReferenceCount();
 
@@ -109,7 +105,7 @@ public class SharedStateRegistry {
 			if (newReferenceCount <= 0) {
 				registeredStates.remove(registrationKey);
 				try {
-					entry.getState().discardState();
+					entry.getState().discardState(); //TODO async!
 				} catch (Exception e) {
 					LOG.warn("Cannot properly discard the state {}.", entry.getState(), e);
 				}
@@ -157,17 +153,17 @@ public class SharedStateRegistry {
 	private static class SharedStateEntry {
 
 		/** The shared object */
-		private final SharedStateHandle state;
+		private final StreamStateHandle state;
 
 		/** The reference count of the object */
 		private int referenceCount;
 
-		SharedStateEntry(SharedStateHandle value) {
+		SharedStateEntry(StreamStateHandle value) {
 			this.state = value;
 			this.referenceCount = 1;
 		}
 
-		SharedStateHandle getState() {
+		StreamStateHandle getState() {
 			return state;
 		}
 
@@ -184,14 +180,21 @@ public class SharedStateRegistry {
 		}
 	}
 
-	public int getReferenceCount(SharedStateHandle state) {
-		if (state == null) {
-			return 0;
+	public static class Result {
+		private final StreamStateHandle reference;
+		private final int referenceCount;
+
+		public Result(StreamStateHandle reference, int referenceCount) {
+			this.reference = reference;
+			this.referenceCount = referenceCount;
 		}
 
-		SharedStateRegistry.SharedStateEntry entry =
-			registeredStates.get(state.getRegistrationKey());
+		public StreamStateHandle getReference() {
+			return reference;
+		}
 
-		return entry == null ? 0 : entry.getReferenceCount();
+		public int getReferenceCount() {
+			return referenceCount;
+		}
 	}
 }

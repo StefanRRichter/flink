@@ -22,8 +22,8 @@ import org.apache.flink.api.common.JobID;
 import org.apache.flink.runtime.state.CompositeStateHandle;
 import org.apache.flink.runtime.state.KeyGroupRange;
 import org.apache.flink.runtime.state.KeyedStateHandle;
-import org.apache.flink.runtime.state.SharedStateHandle;
 import org.apache.flink.runtime.state.SharedStateRegistry;
+import org.apache.flink.runtime.state.SharedStateRegistryKey;
 import org.apache.flink.runtime.state.StateUtil;
 import org.apache.flink.runtime.state.StreamStateHandle;
 import org.apache.flink.util.Preconditions;
@@ -183,17 +183,21 @@ public class RocksDBIncrementalKeyedStateHandle implements KeyedStateHandle, Com
 		Preconditions.checkState(!registered, "The state handle has already registered its shared states.");
 
 		for (Map.Entry<String, StreamStateHandle> newSstFileEntry : newSstFiles.entrySet()) {
-			SstFileStateHandle stateHandle = new SstFileStateHandle(newSstFileEntry.getKey(), newSstFileEntry.getValue());
+			SharedStateRegistryKey registryKey =
+				createSharedStateRegistryKeyFromFileName(newSstFileEntry.getKey());
 
-			int referenceCount = stateRegistry.register(stateHandle);
-			Preconditions.checkState(referenceCount == 1);
+			StreamStateHandle previouslyRegistered =
+				stateRegistry.tryRegisterNew(registryKey, newSstFileEntry.getValue());
+
+			if (previouslyRegistered != null) {
+				//TODO update handles!!!
+			}
 		}
 
-		for (Map.Entry<String, StreamStateHandle> oldSstFileEntry : oldSstFiles.entrySet()) {
-			SstFileStateHandle stateHandle = new SstFileStateHandle(oldSstFileEntry.getKey(), oldSstFileEntry.getValue());
-
-			int referenceCount = stateRegistry.register(stateHandle);
-			Preconditions.checkState(referenceCount > 1);
+		for (Map.Entry<String, StreamStateHandle> oldSstFileName : oldSstFiles.entrySet()) {
+			SharedStateRegistryKey registryKey =
+				createSharedStateRegistryKeyFromFileName(oldSstFileName.getKey());
+			stateRegistry.increaseReferenceCount(registryKey);
 		}
 
 		registered = true;
@@ -204,45 +208,22 @@ public class RocksDBIncrementalKeyedStateHandle implements KeyedStateHandle, Com
 		Preconditions.checkState(registered, "The state handle has not registered its shared states yet.");
 
 		for (Map.Entry<String, StreamStateHandle> newSstFileEntry : newSstFiles.entrySet()) {
-			stateRegistry.decreaseReferenceCount(new SstFileStateHandle(newSstFileEntry.getKey(), newSstFileEntry.getValue()));
+			SharedStateRegistryKey registryKey =
+				createSharedStateRegistryKeyFromFileName(newSstFileEntry.getKey());
+			stateRegistry.decreaseReferenceCount(registryKey);
 		}
 
 		for (Map.Entry<String, StreamStateHandle> oldSstFileEntry : oldSstFiles.entrySet()) {
-			stateRegistry.decreaseReferenceCount(new SstFileStateHandle(oldSstFileEntry.getKey(), oldSstFileEntry.getValue()));
+			SharedStateRegistryKey registryKey =
+				createSharedStateRegistryKeyFromFileName(oldSstFileEntry.getKey());
+			stateRegistry.decreaseReferenceCount(registryKey);
 		}
 
 		registered = false;
 	}
 
-	private class SstFileStateHandle implements SharedStateHandle {
-
-		private static final long serialVersionUID = 9092049285789170669L;
-
-		private final String fileName;
-
-		private final StreamStateHandle delegateStateHandle;
-
-		private SstFileStateHandle(
-				String fileName,
-				StreamStateHandle delegateStateHandle) {
-			this.fileName = fileName;
-			this.delegateStateHandle = delegateStateHandle;
-		}
-
-		@Override
-		public String getRegistrationKey() {
-			return jobId + "-" + operatorIdentifier + "-" + keyGroupRange + "-" + fileName;
-		}
-
-		@Override
-		public void discardState() throws Exception {
-			delegateStateHandle.discardState();
-		}
-
-		@Override
-		public long getStateSize() {
-			return delegateStateHandle.getStateSize();
-		}
+	private SharedStateRegistryKey createSharedStateRegistryKeyFromFileName(String fileName) {
+		return new SharedStateRegistryKey(jobId + "-" + operatorIdentifier + "-" + keyGroupRange + "-" + fileName);
 	}
 }
 
