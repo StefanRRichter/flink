@@ -44,10 +44,10 @@ public class SharedStateRegistryTest {
 		assertEquals(2, sharedStateRegistry.register(firstState));
 
 		// unregister the second state
-		assertEquals(0, sharedStateRegistry.unregister(secondState));
+		assertEquals(0, sharedStateRegistry.decreaseReferenceCount(secondState));
 
 		// unregister the first state
-		assertEquals(1, sharedStateRegistry.unregister(firstState));
+		assertEquals(1, sharedStateRegistry.decreaseReferenceCount(firstState));
 	}
 
 	/**
@@ -57,7 +57,7 @@ public class SharedStateRegistryTest {
 	public void testUnregisterWithUnexistedKey() {
 		SharedStateRegistry sharedStateRegistry = new SharedStateRegistry();
 
-		sharedStateRegistry.unregister(new TestSharedState("unexisted"));
+		sharedStateRegistry.decreaseReferenceCount(new TestSharedState("unexisted"));
 	}
 
 	private static class TestSharedState implements SharedStateHandle {

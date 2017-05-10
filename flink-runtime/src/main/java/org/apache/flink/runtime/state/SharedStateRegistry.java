@@ -71,6 +71,19 @@ public class SharedStateRegistry {
 		}
 	}
 
+	public void increaseReferenceCount(String registrationKey) {
+		if (registrationKey == null) {
+			return;
+		}
+
+		synchronized (registeredStates) {
+			SharedStateRegistry.SharedStateEntry entry =
+				Preconditions.checkNotNull(registeredStates.get(registrationKey),
+					"Could not find a state for the given registration key!");
+			entry.increaseReferenceCount();
+		}
+	}
+
 	/**
 	 * Unregister one reference to the given shared state in the registry. This decreases the
 	 * reference count by one. Once the count reaches zero, the shared state is deleted.
@@ -78,13 +91,13 @@ public class SharedStateRegistry {
 	 * @param state the shared state for which we unregister a reference.
 	 * @return the reference count for the shared state after the update.
 	 */
-	public int unregister(SharedStateHandle state) {
-		if (state == null) {
+	public int decreaseReferenceCount(String registrationKey) {
+		if (registrationKey == null) {
 			return 0;
 		}
 
 		synchronized (registeredStates) {
-			SharedStateRegistry.SharedStateEntry entry = registeredStates.get(state.getRegistrationKey());
+			SharedStateRegistry.SharedStateEntry entry = registeredStates.get(registrationKey);
 
 			Preconditions.checkState(entry != null, "Cannot unregister a state that is not registered.");
 
@@ -94,7 +107,7 @@ public class SharedStateRegistry {
 
 			// Remove the state from the registry when it's not referenced any more.
 			if (newReferenceCount <= 0) {
-				registeredStates.remove(state.getRegistrationKey());
+				registeredStates.remove(registrationKey);
 				try {
 					entry.getState().discardState();
 				} catch (Exception e) {

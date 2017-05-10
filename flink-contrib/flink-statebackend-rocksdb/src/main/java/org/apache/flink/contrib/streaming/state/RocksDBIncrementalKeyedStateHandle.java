@@ -204,11 +204,11 @@ public class RocksDBIncrementalKeyedStateHandle implements KeyedStateHandle, Com
 		Preconditions.checkState(registered, "The state handle has not registered its shared states yet.");
 
 		for (Map.Entry<String, StreamStateHandle> newSstFileEntry : newSstFiles.entrySet()) {
-			stateRegistry.unregister(new SstFileStateHandle(newSstFileEntry.getKey(), newSstFileEntry.getValue()));
+			stateRegistry.decreaseReferenceCount(new SstFileStateHandle(newSstFileEntry.getKey(), newSstFileEntry.getValue()));
 		}
 
 		for (Map.Entry<String, StreamStateHandle> oldSstFileEntry : oldSstFiles.entrySet()) {
-			stateRegistry.unregister(new SstFileStateHandle(oldSstFileEntry.getKey(), oldSstFileEntry.getValue()));
+			stateRegistry.decreaseReferenceCount(new SstFileStateHandle(oldSstFileEntry.getKey(), oldSstFileEntry.getValue()));
 		}
 
 		registered = false;
