@@ -18,7 +18,6 @@
 
 package org.apache.flink.contrib.streaming.state;
 
-import org.apache.flink.api.common.JobID;
 import org.apache.flink.runtime.state.CompositeStateHandle;
 import org.apache.flink.runtime.state.KeyGroupRange;
 import org.apache.flink.runtime.state.KeyedStateHandle;
@@ -54,8 +53,6 @@ public class RocksDBIncrementalKeyedStateHandle implements KeyedStateHandle, Com
 
 	private static final long serialVersionUID = -8328808513197388231L;
 
-	private final JobID jobId;
-
 	private final String operatorIdentifier;
 
 	private final KeyGroupRange keyGroupRange;
@@ -81,7 +78,6 @@ public class RocksDBIncrementalKeyedStateHandle implements KeyedStateHandle, Com
 	private boolean registered;
 
 	RocksDBIncrementalKeyedStateHandle(
-			JobID jobId,
 			String operatorIdentifier,
 			KeyGroupRange keyGroupRange,
 			long checkpointId,
@@ -90,7 +86,6 @@ public class RocksDBIncrementalKeyedStateHandle implements KeyedStateHandle, Com
 			Map<String, StreamStateHandle> miscFiles,
 			StreamStateHandle metaStateHandle) {
 
-		this.jobId = Preconditions.checkNotNull(jobId);
 		this.operatorIdentifier = Preconditions.checkNotNull(operatorIdentifier);
 		this.keyGroupRange = Preconditions.checkNotNull(keyGroupRange);
 		this.checkpointId = checkpointId;
@@ -191,9 +186,12 @@ public class RocksDBIncrementalKeyedStateHandle implements KeyedStateHandle, Com
 			SharedStateRegistry.Result result =
 				stateRegistry.registerNewReference(registryKey, newSstFileEntry.getValue());
 
+			// We update our reference with the result from the registry, to prevent the following
+			// problem:
 			// A previous checkpoint n has already registered the state. This can happen if a
 			// following checkpoint (n + x) wants to reference the same state before the backend got
-			// notified that checkpoint n completed.
+			// notified that checkpoint n completed. In this case, the shared registry did
+			// deduplication and returns the previous reference.
 			newSstFileEntry.setValue(result.getReference());
 		}
 
@@ -202,6 +200,9 @@ public class RocksDBIncrementalKeyedStateHandle implements KeyedStateHandle, Com
 				createSharedStateRegistryKeyFromFileName(oldSstFileName.getKey());
 
 			SharedStateRegistry.Result result = stateRegistry.obtainReference(registryKey);
+
+			// Again we update our state handle with the result from the registry, thus replacing
+			// placeholder state handles with the originals.
 			oldSstFileName.setValue(result.getReference());
 		}
 

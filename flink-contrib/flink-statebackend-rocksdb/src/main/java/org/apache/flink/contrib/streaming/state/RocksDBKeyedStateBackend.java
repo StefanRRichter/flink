@@ -710,16 +710,22 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 
 	private static final class RocksDBIncrementalSnapshotOperation {
 
+		/** The backend which we snapshot */
 		private final RocksDBKeyedStateBackend<?> stateBackend;
 
+		/** Stream factory that creates the outpus streams to DFS */
 		private final CheckpointStreamFactory checkpointStreamFactory;
 
+		/** Id for the current checkpoint */
 		private final long checkpointId;
 
+		/** Timestamp for the current checkpoint */
 		private final long checkpointTimestamp;
 
+		/** All sst files that were part of the last previously completed checkpoint */
 		private Map<String, StreamStateHandle> baseSstFiles;
 
+		/** The state meta data */
 		private final List<RegisteredKeyedBackendStateMetaInfo.Snapshot<?, ?>> stateMetaInfoSnapshots = new ArrayList<>();
 
 		private FileSystem backupFileSystem;
@@ -884,9 +890,14 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 
 			stateBackend.materializedSstFiles.put(checkpointId, sstFiles);
 
-			return new RocksDBIncrementalKeyedStateHandle(stateBackend.jobId,
-				stateBackend.operatorIdentifier, stateBackend.keyGroupRange,
-				checkpointId, newSstFiles, oldSstFiles, miscFiles, metaStateHandle);
+			return new RocksDBIncrementalKeyedStateHandle(
+				stateBackend.operatorIdentifier,
+				stateBackend.keyGroupRange,
+				checkpointId,
+				newSstFiles,
+				oldSstFiles,
+				miscFiles,
+				metaStateHandle);
 		}
 
 		void stop() {
@@ -933,6 +944,8 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 		private static final class PlaceholderStreamStateHandle implements StreamStateHandle {
 
 			private static final long serialVersionUID = 1L;
+
+			/** We remember the size of the original file for which this is a placeholder */
 			private final long originalSize;
 
 			public PlaceholderStreamStateHandle(long originalSize) {
@@ -947,7 +960,7 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 
 			@Override
 			public void discardState() throws Exception {
-
+				// nothing to do.
 			}
 
 			@Override

@@ -22,10 +22,17 @@ import org.apache.flink.util.Preconditions;
 
 import java.io.Serializable;
 
+/**
+ * This class represents a key that uniquely identifies (on a logical level) state handles for
+ * registration in the {@link SharedStateRegistry}. Two files which should logically
+ * be the same should have the same {@link SharedStateRegistryKey}. The meaning of logical
+ * equivalence is up to the application.
+ */
 public class SharedStateRegistryKey implements Serializable {
 
 	private static final long serialVersionUID = 1L;
 
+	/** Uses a String as internal representation */
 	private final String keyString;
 
 	public SharedStateRegistryKey(String keyString) {
