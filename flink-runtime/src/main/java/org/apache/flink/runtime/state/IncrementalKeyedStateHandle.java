@@ -265,7 +265,8 @@ public class IncrementalKeyedStateHandle implements KeyedStateHandle {
 		registered = false;
 	}
 
-	private SharedStateRegistryKey createSharedStateRegistryKeyFromFileName(StateHandleID shId) {
+	@VisibleForTesting
+	public SharedStateRegistryKey createSharedStateRegistryKeyFromFileName(StateHandleID shId) {
 		return new SharedStateRegistryKey(operatorIdentifier + '-' + keyGroupRange, shId);
 	}
 

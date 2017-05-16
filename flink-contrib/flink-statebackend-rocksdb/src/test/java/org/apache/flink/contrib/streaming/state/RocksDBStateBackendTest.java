@@ -26,18 +26,23 @@ import org.apache.flink.api.common.state.ValueState;
 import org.apache.flink.api.common.state.ValueStateDescriptor;
 import org.apache.flink.api.common.typeutils.base.IntSerializer;
 import org.apache.flink.core.testutils.OneShotLatch;
-import org.apache.flink.runtime.util.BlockerCheckpointStreamFactory;
 import org.apache.flink.runtime.checkpoint.CheckpointOptions;
 import org.apache.flink.runtime.execution.Environment;
 import org.apache.flink.runtime.operators.testutils.DummyEnvironment;
 import org.apache.flink.runtime.query.TaskKvStateRegistry;
 import org.apache.flink.runtime.state.AbstractKeyedStateBackend;
+import org.apache.flink.runtime.state.IncrementalKeyedStateHandle;
 import org.apache.flink.runtime.state.KeyGroupRange;
 import org.apache.flink.runtime.state.KeyedStateHandle;
+import org.apache.flink.runtime.state.SharedStateRegistry;
 import org.apache.flink.runtime.state.StateBackendTestBase;
+import org.apache.flink.runtime.state.StateHandleID;
+import org.apache.flink.runtime.state.StreamStateHandle;
 import org.apache.flink.runtime.state.VoidNamespace;
 import org.apache.flink.runtime.state.VoidNamespaceSerializer;
 import org.apache.flink.runtime.state.filesystem.FsStateBackend;
+import org.apache.flink.runtime.util.BlockerCheckpointStreamFactory;
+import org.junit.Assert;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
@@ -58,7 +63,11 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.HashMap;
+import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
+import java.util.Queue;
 import java.util.concurrent.RunnableFuture;
 
 import static junit.framework.TestCase.assertNotNull;
@@ -67,6 +76,7 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.Matchers.any;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.verify;
 import static org.mockito.internal.verification.VerificationModeFactory.times;
 import static org.powermock.api.mockito.PowerMockito.mock;
@@ -351,6 +361,93 @@ public class RocksDBStateBackendTest extends StateBackendTestBase<RocksDBStateBa
 		assertEquals(1, allFilesInDbDir.size());
 	}
 
+	@Test
+	public void testSharedIncrementalStateDeRegistration() throws Exception {
+		if (enableIncrementalCheckpointing) {
+			AbstractKeyedStateBackend<Integer> backend = createKeyedBackend(IntSerializer.INSTANCE);
+			ValueStateDescriptor<String> kvId =
+				new ValueStateDescriptor<>("id", String.class, null);
+
+			kvId.initializeSerializerUnlessSet(new ExecutionConfig());
+
+			ValueState<String> state =
+				backend.getPartitionedState(VoidNamespace.INSTANCE, VoidNamespaceSerializer.INSTANCE, kvId);
+
+
+			Queue<IncrementalKeyedStateHandle> previousStateHandles = new LinkedList<>();
+			SharedStateRegistry sharedStateRegistry = spy(new SharedStateRegistry());
+			for (int checkpointId = 0; checkpointId < 3; ++checkpointId) {
+
+				reset(sharedStateRegistry);
+
+				backend.setCurrentKey(checkpointId);
+				state.update("Hello-" + checkpointId);
+
+				RunnableFuture<KeyedStateHandle> snapshot = backend.snapshot(
+					checkpointId,
+					checkpointId,
+					createStreamFactory(),
+					CheckpointOptions.forFullCheckpoint());
+
+				snapshot.run();
+
+				IncrementalKeyedStateHandle stateHandle = (IncrementalKeyedStateHandle) snapshot.get();
+				Map<StateHandleID, StreamStateHandle> referencedSharedState =
+					new HashMap<>(stateHandle.getReferencedSharedState());
+				Map<StateHandleID, StreamStateHandle> createdSharedState =
+					new HashMap<>(stateHandle.getCreatedSharedState());
+				final int combinedSize = createdSharedState.size() + referencedSharedState.size();
+				Map<StateHandleID, StreamStateHandle> combined = new HashMap<>(combinedSize);
+				combined.putAll(createdSharedState);
+				combined.putAll(referencedSharedState);
+
+				stateHandle.registerSharedStates(sharedStateRegistry);
+
+				for (Map.Entry<StateHandleID, StreamStateHandle> e : createdSharedState.entrySet()) {
+					verify(sharedStateRegistry).registerNewReference(
+						stateHandle.createSharedStateRegistryKeyFromFileName(e.getKey()),
+						e.getValue());
+				}
+
+				for (StateHandleID id : referencedSharedState.keySet()) {
+					verify(sharedStateRegistry).obtainReference(
+						stateHandle.createSharedStateRegistryKeyFromFileName(id));
+				}
+
+				// check transfer created -> referenced inside the incremental state handle
+				Assert.assertEquals(0, stateHandle.getCreatedSharedState().size());
+				Assert.assertEquals(combinedSize, stateHandle.getReferencedSharedState().size());
+				Assert.assertEquals(combined.keySet(), stateHandle.getReferencedSharedState().keySet());
+
+				previousStateHandles.add(stateHandle);
+				backend.notifyCheckpointComplete(checkpointId);
+
+				//-----------------------------------------------------------------
+
+				if (previousStateHandles.size() > 1) {
+					checkRemove(previousStateHandles.remove(), sharedStateRegistry);
+				}
+			}
+
+			while (!previousStateHandles.isEmpty()) {
+
+				reset(sharedStateRegistry);
+
+				checkRemove(previousStateHandles.remove(), sharedStateRegistry);
+			}
+
+			backend.close();
+			backend.dispose();
+		}
+	}
+
+	private void checkRemove(IncrementalKeyedStateHandle remove, SharedStateRegistry registry) {
+		remove.unregisterSharedStates(registry);
+		for (StateHandleID id : remove.getReferencedSharedState().keySet()) {
+			verify(registry).releaseReference(
+				remove.createSharedStateRegistryKeyFromFileName(id));
+		}
+	}
 
 	private void runStateUpdates() throws Exception{
 		for (int i = 50; i < 150; ++i) {
