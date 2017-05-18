@@ -235,13 +235,6 @@ public class IncrementalKeyedStateHandle implements KeyedStateHandle {
 	}
 
 	/**
-	 * TODO remove!!!
-	 */
-	public void setSharedStateRegistry(SharedStateRegistry ssr) {
-		this.sharedStateRegistry = ssr;
-	}
-
-	/**
 	 * This method is should only be called in tests! This should never serve as key in a hash map.
 	 */
 	@VisibleForTesting

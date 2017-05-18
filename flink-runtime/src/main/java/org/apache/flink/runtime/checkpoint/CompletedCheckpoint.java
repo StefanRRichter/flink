@@ -21,8 +21,6 @@ package org.apache.flink.runtime.checkpoint;
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.runtime.jobgraph.JobStatus;
 import org.apache.flink.runtime.jobgraph.OperatorID;
-import org.apache.flink.runtime.state.IncrementalKeyedStateHandle;
-import org.apache.flink.runtime.state.KeyedStateHandle;
 import org.apache.flink.runtime.state.SharedStateRegistry;
 import org.apache.flink.runtime.state.StateUtil;
 import org.apache.flink.runtime.state.StreamStateHandle;
@@ -301,20 +299,5 @@ public class CompletedCheckpoint implements Serializable {
 	@Override
 	public String toString() {
 		return String.format("Checkpoint %d @ %d for %s", checkpointID, timestamp, job);
-	}
-
-	public void setSharedStateRegistry(SharedStateRegistry ssr) {
-		for (OperatorState operatorState : operatorStates.values()) {
-			for (OperatorSubtaskState subtaskState : operatorState.getSubtaskStates().values()) {
-				if(subtaskState != null) {
-					KeyedStateHandle managedKeyedState = subtaskState.getManagedKeyedState();
-					if(managedKeyedState instanceof IncrementalKeyedStateHandle) {
-						((IncrementalKeyedStateHandle) managedKeyedState).setSharedStateRegistry(ssr);
-					}
-				}
-			}
-
-		}
-
 	}
 }
