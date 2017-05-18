@@ -42,7 +42,6 @@ import org.apache.flink.runtime.state.VoidNamespace;
 import org.apache.flink.runtime.state.VoidNamespaceSerializer;
 import org.apache.flink.runtime.state.filesystem.FsStateBackend;
 import org.apache.flink.runtime.util.BlockerCheckpointStreamFactory;
-import org.junit.Assert;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
@@ -392,32 +391,16 @@ public class RocksDBStateBackendTest extends StateBackendTestBase<RocksDBStateBa
 				snapshot.run();
 
 				IncrementalKeyedStateHandle stateHandle = (IncrementalKeyedStateHandle) snapshot.get();
-				Map<StateHandleID, StreamStateHandle> referencedSharedState =
-					new HashMap<>(stateHandle.getReferencedSharedState());
-				Map<StateHandleID, StreamStateHandle> createdSharedState =
-					new HashMap<>(stateHandle.getCreatedSharedState());
-				final int combinedSize = createdSharedState.size() + referencedSharedState.size();
-				Map<StateHandleID, StreamStateHandle> combined = new HashMap<>(combinedSize);
-				combined.putAll(createdSharedState);
-				combined.putAll(referencedSharedState);
+				Map<StateHandleID, StreamStateHandle> sharedState =
+					new HashMap<>(stateHandle.getSharedState());
 
 				stateHandle.registerSharedStates(sharedStateRegistry);
 
-				for (Map.Entry<StateHandleID, StreamStateHandle> e : createdSharedState.entrySet()) {
-					verify(sharedStateRegistry).registerNewReference(
+				for (Map.Entry<StateHandleID, StreamStateHandle> e : sharedState.entrySet()) {
+					verify(sharedStateRegistry).registerReference(
 						stateHandle.createSharedStateRegistryKeyFromFileName(e.getKey()),
 						e.getValue());
 				}
-
-				for (StateHandleID id : referencedSharedState.keySet()) {
-					verify(sharedStateRegistry).obtainReference(
-						stateHandle.createSharedStateRegistryKeyFromFileName(id));
-				}
-
-				// check transfer created -> referenced inside the incremental state handle
-				Assert.assertEquals(0, stateHandle.getCreatedSharedState().size());
-				Assert.assertEquals(combinedSize, stateHandle.getReferencedSharedState().size());
-				Assert.assertEquals(combined.keySet(), stateHandle.getReferencedSharedState().keySet());
 
 				previousStateHandles.add(stateHandle);
 				backend.notifyCheckpointComplete(checkpointId);
@@ -441,10 +424,16 @@ public class RocksDBStateBackendTest extends StateBackendTestBase<RocksDBStateBa
 		}
 	}
 
-	private void checkRemove(IncrementalKeyedStateHandle remove, SharedStateRegistry registry) {
-		remove.unregisterSharedStates(registry);
-		for (StateHandleID id : remove.getReferencedSharedState().keySet()) {
-			verify(registry).releaseReference(
+	private void checkRemove(IncrementalKeyedStateHandle remove, SharedStateRegistry registry) throws Exception {
+		for (StateHandleID id : remove.getSharedState().keySet()) {
+			verify(registry, times(0)).unregisterReference(
+				remove.createSharedStateRegistryKeyFromFileName(id));
+		}
+
+		remove.discardState();
+
+		for (StateHandleID id : remove.getSharedState().keySet()) {
+			verify(registry).unregisterReference(
 				remove.createSharedStateRegistryKeyFromFileName(id));
 		}
 	}

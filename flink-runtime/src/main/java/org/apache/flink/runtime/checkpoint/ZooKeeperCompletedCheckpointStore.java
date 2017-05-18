@@ -197,13 +197,13 @@ public class ZooKeeperCompletedCheckpointStore extends AbstractCompletedCheckpoi
 		final String path = checkpointIdToPath(checkpoint.getCheckpointID());
 		final RetrievableStateHandle<CompletedCheckpoint> stateHandle;
 
-		// First add the new one. If it fails, we don't want to loose existing data.
+		// Register all shared states in the checkpoint
+		checkpoint.registerSharedStates(sharedStateRegistry);
+
+		// Now add the new one. If it fails, we don't want to loose existing data.
 		stateHandle = checkpointsInZooKeeper.addAndLock(path, checkpoint);
 
 		checkpointStateHandles.addLast(new Tuple2<>(stateHandle, path));
-
-		// Register all shared states in the checkpoint
-		checkpoint.registerSharedStates(sharedStateRegistry);
 
 		// Everything worked, let's remove a previous checkpoint if necessary.
 		while (checkpointStateHandles.size() > maxNumberOfCheckpointsToRetain) {
