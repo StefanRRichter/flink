@@ -1102,7 +1102,7 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 				// at this point we are transferring ownership over snapshotInProgressList for cleanup to the thread
 				Runnable runnable = runAsyncCheckpointingAndAcknowledge();
 				runnable.run();
-				
+
 				failed = false;
 
 				if (LOG.isDebugEnabled()) {
