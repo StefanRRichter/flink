@@ -829,7 +829,9 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 			assert (Thread.holdsLock(stateBackend.asyncSnapshotLock));
 
 			// use the last completed checkpoint as the comparison base.
-			baseSstFiles = stateBackend.materializedSstFiles.get(stateBackend.lastCompletedCheckpointId);
+			synchronized (stateBackend.materializedSstFiles) {
+				baseSstFiles = stateBackend.materializedSstFiles.get(stateBackend.lastCompletedCheckpointId);
+			}
 
 			// save meta data
 			for (Map.Entry<String, Tuple2<ColumnFamilyHandle, RegisteredKeyedBackendStateMetaInfo<?, ?>>> stateMetaInfoEntry
@@ -888,7 +890,7 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 
 
 
-			synchronized (stateBackend.asyncSnapshotLock) {
+			synchronized (stateBackend.materializedSstFiles) {
 				stateBackend.materializedSstFiles.put(checkpointId, sstFiles.keySet());
 			}
 
@@ -971,7 +973,7 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 
 	@Override
 	public void notifyCheckpointComplete(long completedCheckpointId) {
-		synchronized (asyncSnapshotLock) {
+		synchronized (materializedSstFiles) {
 			if (completedCheckpointId < lastCompletedCheckpointId) {
 				return;
 			}
@@ -1430,7 +1432,9 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 
 
 					// use the restore sst files as the base for succeeding checkpoints
-					stateBackend.materializedSstFiles.put(restoreStateHandle.getCheckpointId(), sstFiles.keySet());
+					synchronized (stateBackend.materializedSstFiles) {
+						stateBackend.materializedSstFiles.put(restoreStateHandle.getCheckpointId(), sstFiles.keySet());
+					}
 
 					stateBackend.lastCompletedCheckpointId = restoreStateHandle.getCheckpointId();
 				}
