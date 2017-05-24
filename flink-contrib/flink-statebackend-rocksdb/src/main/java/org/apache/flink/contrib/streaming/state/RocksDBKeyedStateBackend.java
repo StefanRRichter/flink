@@ -155,7 +155,7 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 	 * Information about the k/v states as we create them. This is used to retrieve the
 	 * column family that is used for a state and also for sanity checks when restoring.
 	 */
-	private Map<String, Tuple2<ColumnFamilyHandle, RegisteredKeyedBackendStateMetaInfo<?, ?>>> kvStateInformation;
+	private final Map<String, Tuple2<ColumnFamilyHandle, RegisteredKeyedBackendStateMetaInfo<?, ?>>> kvStateInformation;
 
 	/**
 	 * Map of state names to their corresponding restored state meta info.
@@ -163,7 +163,7 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 	 * TODO this map can be removed when eager-state registration is in place.
 	 * TODO we currently need this cached to check state migration strategies when new serializers are registered.
 	 */
-	private Map<String, RegisteredKeyedBackendStateMetaInfo.Snapshot<?, ?>> restoredKvStateMetaInfos;
+	private final Map<String, RegisteredKeyedBackendStateMetaInfo.Snapshot<?, ?>> restoredKvStateMetaInfos;
 
 	/** Number of bytes required to prefix the key groups. */
 	private final int keyGroupPrefixBytes;
@@ -172,7 +172,7 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 	private final boolean enableIncrementalCheckpointing;
 
 	/** The state handle ids of all sst files materialized in snapshots for previous checkpoints */
-	private final SortedMap<Long, Set<StateHandleID>> materializedSstFiles = new TreeMap<>();
+	private final SortedMap<Long, Set<StateHandleID>> materializedSstFiles;
 
 	/** The identifier of the last completed checkpoint */
 	private long lastCompletedCheckpointId = -1;
@@ -221,8 +221,10 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 			throw new IOException("Error cleaning RocksDB data directory.", e);
 		}
 
-		keyGroupPrefixBytes = getNumberOfKeyGroups() > (Byte.MAX_VALUE + 1) ? 2 : 1;
-		kvStateInformation = new HashMap<>();
+		this.keyGroupPrefixBytes = getNumberOfKeyGroups() > (Byte.MAX_VALUE + 1) ? 2 : 1;
+		this.kvStateInformation = new HashMap<>();
+		this.restoredKvStateMetaInfos = new HashMap<>();
+		this.materializedSstFiles = new TreeMap<>();
 	}
 
 	/**
@@ -249,6 +251,7 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 				}
 
 				kvStateInformation.clear();
+				restoredKvStateMetaInfos.clear();
 
 				try {
 					db.close();
@@ -943,6 +946,10 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 			LOG.debug("Restoring snapshot from state handles: {}.", restoreState);
 		}
 
+		// clear all meta data
+		kvStateInformation.clear();
+		restoredKvStateMetaInfos.clear();
+
 		try {
 			if (restoreState == null || restoreState.isEmpty()) {
 				createDB();
@@ -1125,13 +1132,15 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 
 			List<RegisteredKeyedBackendStateMetaInfo.Snapshot<?, ?>> restoredMetaInfos =
 					serializationProxy.getStateMetaInfoSnapshots();
-
 			currentStateHandleKVStateColumnFamilies = new ArrayList<>(restoredMetaInfos.size());
-			rocksDBKeyedStateBackend.restoredKvStateMetaInfos = new HashMap<>(restoredMetaInfos.size());
+			//rocksDBKeyedStateBackend.restoredKvStateMetaInfos = new HashMap<>(restoredMetaInfos.size());
 
 			for (RegisteredKeyedBackendStateMetaInfo.Snapshot<?, ?> restoredMetaInfo : restoredMetaInfos) {
 
-				if (!rocksDBKeyedStateBackend.kvStateInformation.containsKey(restoredMetaInfo.getName())) {
+				Tuple2<ColumnFamilyHandle, RegisteredKeyedBackendStateMetaInfo<?, ?>> registeredColumn =
+					rocksDBKeyedStateBackend.kvStateInformation.get(restoredMetaInfo.getName());
+
+				if (registeredColumn == null) {
 					ColumnFamilyDescriptor columnFamilyDescriptor = new ColumnFamilyDescriptor(
 						restoredMetaInfo.getName().getBytes(ConfigConstants.DEFAULT_CHARSET),
 						rocksDBKeyedStateBackend.columnOptions);
@@ -1147,14 +1156,13 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 
 					ColumnFamilyHandle columnFamily = rocksDBKeyedStateBackend.db.createColumnFamily(columnFamilyDescriptor);
 
-					rocksDBKeyedStateBackend.kvStateInformation.put(
-						stateMetaInfo.getName(),
-						new Tuple2<ColumnFamilyHandle, RegisteredKeyedBackendStateMetaInfo<?, ?>>(columnFamily, stateMetaInfo));
+					registeredColumn = new Tuple2<ColumnFamilyHandle, RegisteredKeyedBackendStateMetaInfo<?, ?>>(columnFamily, stateMetaInfo);
+					rocksDBKeyedStateBackend.kvStateInformation.put(stateMetaInfo.getName(), registeredColumn);
 
-					currentStateHandleKVStateColumnFamilies.add(columnFamily);
 				} else {
 					// TODO with eager state registration in place, check here for serializer migration strategies
 				}
+				currentStateHandleKVStateColumnFamilies.add(registeredColumn.f0);
 			}
 		}
 
@@ -1312,8 +1320,6 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 					readMetaData(restoreStateHandle.getMetaStateHandle());
 
 				List<ColumnFamilyDescriptor> columnFamilyDescriptors = new ArrayList<>();
-
-				stateBackend.restoredKvStateMetaInfos = new HashMap<>(stateMetaInfoSnapshots.size());
 
 				for (RegisteredKeyedBackendStateMetaInfo.Snapshot<?, ?> stateMetaInfoSnapshot : stateMetaInfoSnapshots) {
 
@@ -1889,11 +1895,6 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 
 		Preconditions.checkState(1 == namedStates.size(), "Only one element expected here.");
 		DataInputView inputView = namedStates.values().iterator().next().stateHandle.getState(userCodeClassLoader);
-
-		// clear k/v state information before filling it
-		kvStateInformation.clear();
-
-		restoredKvStateMetaInfos = new HashMap<>(namedStates.size());
 
 		// first get the column family mapping
 		int numColumns = inputView.readInt();
