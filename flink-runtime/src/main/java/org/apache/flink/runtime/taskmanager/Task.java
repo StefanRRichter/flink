@@ -243,8 +243,11 @@ public class Task implements Runnable, TaskActions {
 	/** The observed exception, in case the task execution failed */
 	private volatile Throwable failureCause;
 
-	/** Serial executor for asynchronous calls (checkpoints, etc), lazily initialized */
-	private volatile ExecutorService asyncCallDispatcher;
+	/** Serial executor for non-blocking, asynchronous calls */
+	private final ExecutorService asyncNonBlockingCallDispatcher;
+
+	/** Executor for blocking, asynchronous calls */
+	private final ExecutorService asyncBlockingCallDispatcher;
 
 	/**
 	 * The handles to the states that the task was initialized with. Will be set
@@ -396,6 +399,17 @@ public class Task implements Runnable, TaskActions {
 
 		// finally, create the executing thread, but do not start it
 		executingThread = new Thread(TASK_THREADS_GROUP, this, taskNameWithSubtask);
+
+		this.asyncNonBlockingCallDispatcher = Executors.newSingleThreadExecutor(
+			new DispatcherThreadFactory(
+				TASK_THREADS_GROUP,
+				"Non-blocking async calls on " + taskNameWithSubtask));
+
+		this.asyncBlockingCallDispatcher = Executors.newFixedThreadPool(
+			Math.max(2, Runtime.getRuntime().availableProcessors() / 2),
+			new DispatcherThreadFactory(
+				TASK_THREADS_GROUP,
+				"Blocking async calls calls on " + taskNameWithSubtask));
 	}
 
 	// ------------------------------------------------------------------------
@@ -810,7 +824,7 @@ public class Task implements Runnable, TaskActions {
 
 				// stop the async dispatcher.
 				// copy dispatcher reference to stack, against concurrent release
-				ExecutorService dispatcher = this.asyncCallDispatcher;
+				ExecutorService dispatcher = this.asyncNonBlockingCallDispatcher;
 				if (dispatcher != null && !dispatcher.isShutdown()) {
 					dispatcher.shutdownNow();
 				}
@@ -975,7 +989,11 @@ public class Task implements Runnable, TaskActions {
 					}
 				}
 			};
-			executeAsyncCallRunnable(runnable, String.format("Stopping source task %s (%s).", taskNameWithSubtask, executionId));
+
+			executeAsyncCallRunnable(
+				asyncNonBlockingCallDispatcher,
+				runnable,
+				String.format("Stopping source task %s (%s).", taskNameWithSubtask, executionId));
 		} else {
 			throw new UnsupportedOperationException(String.format("Stopping not supported by task %s (%s).", taskNameWithSubtask, executionId));
 		}
@@ -1179,7 +1197,7 @@ public class Task implements Runnable, TaskActions {
 					public void run() {
 						// activate safety net for checkpointing thread
 						LOG.debug("Creating FileSystem stream leak safety net for {}", Thread.currentThread().getName());
-						FileSystemSafetyNet.setSafetyNetCloseableRegistryForThread(safetyNetCloseableRegistry);
+						FileSystemSafetyNet.initializeSafetyNetForThread();
 
 						try {
 							boolean success = statefulTask.triggerCheckpoint(checkpointMetaData, checkpointOptions);
@@ -1202,11 +1220,16 @@ public class Task implements Runnable, TaskActions {
 						} finally {
 							// close and de-activate safety net for checkpointing thread
 							LOG.debug("Ensuring all FileSystem streams are closed for {}",
-									Thread.currentThread().getName());
+								Thread.currentThread().getName());
+							FileSystemSafetyNet.closeSafetyNetAndGuardedResourcesForThread();
 						}
 					}
 				};
-				executeAsyncCallRunnable(runnable, String.format("Checkpoint Trigger for %s (%s).", taskNameWithSubtask, executionId));
+
+				executeAsyncCallRunnable(
+					asyncBlockingCallDispatcher,
+					runnable,
+					String.format("Checkpoint Trigger for %s (%s).", taskNameWithSubtask, executionId));
 			}
 			else {
 				checkpointResponder.declineCheckpoint(jobId, executionId, checkpointID,
@@ -1252,7 +1275,11 @@ public class Task implements Runnable, TaskActions {
 						}
 					}
 				};
-				executeAsyncCallRunnable(runnable, "Checkpoint Confirmation for " + taskName);
+
+				executeAsyncCallRunnable(
+					asyncNonBlockingCallDispatcher,
+					runnable,
+					"Checkpoint Confirmation for " + taskName);
 			}
 			else {
 				LOG.error("Task received a checkpoint commit notification, but is not a checkpoint committing task - {}.",
@@ -1330,36 +1357,19 @@ public class Task implements Runnable, TaskActions {
 	 * @param runnable The async call runnable.
 	 * @param callName The name of the call, for logging purposes.
 	 */
-	private void executeAsyncCallRunnable(Runnable runnable, String callName) {
+	private void executeAsyncCallRunnable(ExecutorService executor, Runnable runnable, String callName) {
 		// make sure the executor is initialized. lock against concurrent calls to this function
 		synchronized (this) {
+
 			if (executionState != ExecutionState.RUNNING) {
 				return;
-			}
-			
-			// get ourselves a reference on the stack that cannot be concurrently modified
-			ExecutorService executor = this.asyncCallDispatcher;
-			if (executor == null) {
-				// first time use, initialize
-				executor = Executors.newSingleThreadExecutor(
-						new DispatcherThreadFactory(TASK_THREADS_GROUP, "Async calls on " + taskNameWithSubtask));
-				this.asyncCallDispatcher = executor;
-				
-				// double-check for execution state, and make sure we clean up after ourselves
-				// if we created the dispatcher while the task was concurrently canceled
-				if (executionState != ExecutionState.RUNNING) {
-					executor.shutdown();
-					asyncCallDispatcher = null;
-					return;
-				}
 			}
 
 			LOG.debug("Invoking async call {} on task {}", callName, taskNameWithSubtask);
 
 			try {
 				executor.submit(runnable);
-			}
-			catch (RejectedExecutionException e) {
+			} catch (RejectedExecutionException e) {
 				// may be that we are concurrently finished or canceled.
 				// if not, report that something is fishy
 				if (executionState == ExecutionState.RUNNING) {

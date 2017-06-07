@@ -116,16 +116,6 @@ public class FileSystemSafetyNet {
 		return REGISTRIES.get();
 	}
 
-	/**
-	 * Sets the active safety-net registry for the current thread.
-	 * @deprecated This method should be removed after FLINK-6684 is implemented.
-	 */
-	@Deprecated
-	@Internal
-	public static void setSafetyNetCloseableRegistryForThread(SafetyNetCloseableRegistry registry) {
-		REGISTRIES.set(registry);
-	}
-
 	// ------------------------------------------------------------------------
 	//  Utilities
 	// ------------------------------------------------------------------------
