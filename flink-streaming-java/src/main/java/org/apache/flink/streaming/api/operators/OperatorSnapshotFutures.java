@@ -28,18 +28,18 @@ import java.util.concurrent.RunnableFuture;
 /**
  * Result of {@link StreamOperator#snapshotState}.
  */
-public class OperatorSnapshotResult {
+public class OperatorSnapshotFutures {
 
 	private RunnableFuture<KeyedStateHandle> keyedStateManagedFuture;
 	private RunnableFuture<KeyedStateHandle> keyedStateRawFuture;
 	private RunnableFuture<OperatorStateHandle> operatorStateManagedFuture;
 	private RunnableFuture<OperatorStateHandle> operatorStateRawFuture;
 
-	public OperatorSnapshotResult() {
+	public OperatorSnapshotFutures() {
 		this(null, null, null, null);
 	}
 
-	public OperatorSnapshotResult(
+	public OperatorSnapshotFutures(
 			RunnableFuture<KeyedStateHandle> keyedStateManagedFuture,
 			RunnableFuture<KeyedStateHandle> keyedStateRawFuture,
 			RunnableFuture<OperatorStateHandle> operatorStateManagedFuture,
@@ -86,7 +86,7 @@ public class OperatorSnapshotResult {
 		Exception exception = null;
 
 		try {
-			StateUtil.discardStateFuture(getKeyedStateManagedFuture());
+			StateUtil.cancelStateFuture(getKeyedStateManagedFuture());
 		} catch (Exception e) {
 			exception = ExceptionUtils.firstOrSuppressed(
 				new Exception("Could not properly cancel managed keyed state future.", e),
@@ -94,7 +94,7 @@ public class OperatorSnapshotResult {
 		}
 
 		try {
-			StateUtil.discardStateFuture(getOperatorStateManagedFuture());
+			StateUtil.cancelStateFuture(getOperatorStateManagedFuture());
 		} catch (Exception e) {
 			exception = ExceptionUtils.firstOrSuppressed(
 				new Exception("Could not properly cancel managed operator state future.", e),
@@ -102,7 +102,7 @@ public class OperatorSnapshotResult {
 		}
 
 		try {
-			StateUtil.discardStateFuture(getKeyedStateRawFuture());
+			StateUtil.cancelStateFuture(getKeyedStateRawFuture());
 		} catch (Exception e) {
 			exception = ExceptionUtils.firstOrSuppressed(
 				new Exception("Could not properly cancel raw keyed state future.", e),
@@ -110,7 +110,7 @@ public class OperatorSnapshotResult {
 		}
 
 		try {
-			StateUtil.discardStateFuture(getOperatorStateRawFuture());
+			StateUtil.cancelStateFuture(getOperatorStateRawFuture());
 		} catch (Exception e) {
 			exception = ExceptionUtils.firstOrSuppressed(
 				new Exception("Could not properly cancel raw operator state future.", e),

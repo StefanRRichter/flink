@@ -98,7 +98,7 @@ public interface StreamOperator<OUT> extends Serializable {
 	 *
 	 * @throws Exception exception that happened during snapshotting.
 	 */
-	OperatorSnapshotResult snapshotState(
+	OperatorSnapshotFutures snapshotState(
 		long checkpointId,
 		long timestamp,
 		CheckpointOptions checkpointOptions) throws Exception;

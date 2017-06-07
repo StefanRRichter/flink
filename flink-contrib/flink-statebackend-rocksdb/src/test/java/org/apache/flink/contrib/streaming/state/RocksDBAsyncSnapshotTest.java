@@ -56,7 +56,6 @@ import org.apache.flink.streaming.runtime.tasks.OneInputStreamTaskTestHarness;
 import org.apache.flink.streaming.runtime.tasks.StreamMockEnvironment;
 import org.apache.flink.streaming.runtime.tasks.StreamTask;
 import org.apache.flink.util.FutureUtil;
-
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.LocalFileSystem;
@@ -80,6 +79,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.RunnableFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.fail;
@@ -184,7 +184,21 @@ public class RocksDBAsyncSnapshotTest {
 			}
 		}
 
-		task.triggerCheckpoint(new CheckpointMetaData(42, 17), CheckpointOptions.forFullCheckpoint());
+		final AtomicReference<Exception> threadException = new AtomicReference<>(null);
+
+		Thread checkpointRunner = new Thread() {
+			@Override
+			public void run() {
+
+				try {
+					task.triggerCheckpoint(new CheckpointMetaData(42, 17), CheckpointOptions.forFullCheckpoint());
+				} catch (Exception e) {
+					threadException.set(e);
+				}
+			}
+		};
+
+		checkpointRunner.start();
 
 		testHarness.processElement(new StreamRecord<>("Wohoo", 0));
 
@@ -193,6 +207,12 @@ public class RocksDBAsyncSnapshotTest {
 
 		// wait for the checkpoint to go through
 		ensureCheckpointLatch.await();
+
+		checkpointRunner.join();
+
+		if (threadException.get() != null) {
+			throw threadException.get();
+		}
 
 		testHarness.endInput();
 
