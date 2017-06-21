@@ -1091,6 +1091,7 @@ public class CheckpointCoordinator {
 		CompletedCheckpoint savepoint = SavepointLoader.loadAndValidateSavepoint(
 				job, tasks, savepointPath, userClassLoader, allowNonRestored);
 
+		savepoint.registerSharedStatesAfterRestored(sharedStateRegistry);
 		completedCheckpointStore.addCheckpoint(savepoint);
 		
 		// Reset the checkpoint ID counter
@@ -1098,7 +1099,7 @@ public class CheckpointCoordinator {
 		checkpointIdCounter.setCount(nextCheckpointId);
 		
 		LOG.info("Reset the checkpoint ID to {}.", nextCheckpointId);
-		
+
 		return restoreLatestCheckpointedState(tasks, true, allowNonRestored);
 	}
 

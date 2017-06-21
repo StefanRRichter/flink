@@ -20,6 +20,7 @@ package org.apache.flink.runtime.state;
 
 import org.apache.flink.runtime.concurrent.Executors;
 import org.apache.flink.util.Preconditions;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -83,11 +84,16 @@ public class SharedStateRegistry {
 			entry = registeredStates.get(registrationKey);
 
 			if (entry == null) {
+
+				// Additional check that should never fail, because only state handles that are not placeholders should
+				// ever be inserted to the registry.
+				Preconditions.checkState(!isPlaceholder(state), "Attempt to reference unknown state: " + registrationKey);
+
 				entry = new SharedStateRegistry.SharedStateEntry(state);
 				registeredStates.put(registrationKey, entry);
 			} else {
 				// delete if this is a real duplicate
-				if (!Objects.equals(state, entry.state)) {
+				if (!Objects.equals(state, entry.stateHandle)) {
 					scheduledStateDeletion = state;
 				}
 				entry.increaseReferenceCount();
@@ -95,6 +101,7 @@ public class SharedStateRegistry {
 		}
 
 		scheduleAsyncDelete(scheduledStateDeletion);
+
 		return new Result(entry);
 	}
 
@@ -124,7 +131,7 @@ public class SharedStateRegistry {
 			// Remove the state from the registry when it's not referenced any more.
 			if (entry.getReferenceCount() <= 0) {
 				registeredStates.remove(registrationKey);
-				scheduledStateDeletion = entry.getState();
+				scheduledStateDeletion = entry.getStateHandle();
 				result = new Result(null, 0);
 			} else {
 				scheduledStateDeletion = null;
@@ -142,6 +149,7 @@ public class SharedStateRegistry {
 	 * @param stateHandles The shared states to register.
 	 */
 	public void registerAll(Iterable<? extends CompositeStateHandle> stateHandles) {
+
 		if (stateHandles == null) {
 			return;
 		}
@@ -171,18 +179,18 @@ public class SharedStateRegistry {
 	private static class SharedStateEntry {
 
 		/** The shared state handle */
-		private final StreamStateHandle state;
+		private final StreamStateHandle stateHandle;
 
 		/** The current reference count of the state handle */
 		private int referenceCount;
 
 		SharedStateEntry(StreamStateHandle value) {
-			this.state = value;
+			this.stateHandle = value;
 			this.referenceCount = 1;
 		}
 
-		StreamStateHandle getState() {
-			return state;
+		StreamStateHandle getStateHandle() {
+			return stateHandle;
 		}
 
 		int getReferenceCount() {
@@ -195,6 +203,14 @@ public class SharedStateRegistry {
 
 		void decreaseReferenceCount() {
 			--referenceCount;
+		}
+
+		@Override
+		public String toString() {
+			return "SharedStateEntry{" +
+				"stateHandle=" + stateHandle +
+				", referenceCount=" + referenceCount +
+				'}';
 		}
 	}
 
@@ -210,7 +226,7 @@ public class SharedStateRegistry {
 		private final int referenceCount;
 
 		private Result(SharedStateEntry sharedStateEntry) {
-			this.reference = sharedStateEntry.getState();
+			this.reference = sharedStateEntry.getStateHandle();
 			this.referenceCount = sharedStateEntry.getReferenceCount();
 		}
 
@@ -227,6 +243,14 @@ public class SharedStateRegistry {
 
 		public int getReferenceCount() {
 			return referenceCount;
+		}
+
+		@Override
+		public String toString() {
+			return "Result{" +
+				"reference=" + reference +
+				", referenceCount=" + referenceCount +
+				'}';
 		}
 	}
 

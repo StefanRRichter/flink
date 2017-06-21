@@ -185,6 +185,9 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 	/** The identifier of the last completed checkpoint. */
 	private long lastCompletedCheckpointId = -1;
 
+	/** Unique ID of this backend */
+	private UUID backendUID;
+
 	private static final String SST_FILE_SUFFIX = ".sst";
 
 	public RocksDBKeyedStateBackend(
@@ -233,6 +236,7 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 		this.kvStateInformation = new HashMap<>();
 		this.restoredKvStateMetaInfos = new HashMap<>();
 		this.materializedSstFiles = new TreeMap<>();
+		this.backendUID = UUID.randomUUID();
 	}
 
 	/**
@@ -926,7 +930,7 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 			}
 
 			return new IncrementalKeyedStateHandle(
-				stateBackend.operatorIdentifier,
+				stateBackend.backendUID,
 				stateBackend.keyGroupRange,
 				checkpointId,
 				sstFiles,
@@ -1341,6 +1345,8 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 		private void restoreInstance(
 				IncrementalKeyedStateHandle restoreStateHandle,
 				boolean hasExtraKeys) throws Exception {
+
+			stateBackend.backendUID = restoreStateHandle.getBackendIdentifier();
 
 			// read state data
 			Path restoreInstancePath = new Path(

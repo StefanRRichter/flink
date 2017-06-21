@@ -45,6 +45,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 /**
  * (De)serializer for checkpoint metadata format version 2.
@@ -320,7 +321,7 @@ class SavepointV2Serializer implements SavepointSerializer<SavepointV2> {
 			dos.writeByte(INCREMENTAL_KEY_GROUPS_HANDLE);
 
 			dos.writeLong(incrementalKeyedStateHandle.getCheckpointId());
-			dos.writeUTF(incrementalKeyedStateHandle.getOperatorIdentifier());
+			dos.writeUTF(String.valueOf(incrementalKeyedStateHandle.getBackendIdentifier()));
 			dos.writeInt(incrementalKeyedStateHandle.getKeyGroupRange().getStartKeyGroup());
 			dos.writeInt(incrementalKeyedStateHandle.getKeyGroupRange().getNumberOfKeyGroups());
 
@@ -391,7 +392,7 @@ class SavepointV2Serializer implements SavepointSerializer<SavepointV2> {
 			Map<StateHandleID, StreamStateHandle> privateStates = deserializeStreamStateHandleMap(dis);
 
 			return new IncrementalKeyedStateHandle(
-				operatorId,
+				UUID.fromString(operatorId),
 				keyGroupRange,
 				checkpointId,
 				sharedStates,
