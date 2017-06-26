@@ -1256,7 +1256,7 @@ public class CheckpointCoordinator {
 			final JobID jobId,
 			final ExecutionAttemptID executionAttemptID,
 			final long checkpointId,
-			final SubtaskState subtaskState) {
+			final TaskStateSnapshot subtaskState) {
 
 		if (subtaskState != null) {
 			executor.execute(new Runnable() {
