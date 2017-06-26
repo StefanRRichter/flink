@@ -25,13 +25,19 @@ import org.apache.flink.runtime.state.SharedStateRegistry;
 import org.apache.flink.runtime.state.StateObject;
 import org.apache.flink.runtime.state.StateUtil;
 import org.apache.flink.runtime.state.StreamStateHandle;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Arrays;
 
 /**
- * Container for the state of one parallel subtask of an operator. This is part of the {@link OperatorState}.
+ * This class encapsulates the state for one parallel instance of an operator. The complete state of a (logical)
+ * operator (e.g. a flatmap operator) consists of the union of all {@link OperatorSubtaskState}s from all
+ * parallel tasks that physically execute parallelized, physical instances of the operator.
+ * <p>
+ * The full state of the logical operator is represented by {@link OperatorState} which consists of
+ * {@link OperatorSubtaskState}s.
  */
 public class OperatorSubtaskState implements CompositeStateHandle {
 
@@ -75,6 +81,10 @@ public class OperatorSubtaskState implements CompositeStateHandle {
 	 */
 	private final long stateSize;
 
+	public OperatorSubtaskState() {
+		this(null, null, null, null, null);
+	}
+
 	public OperatorSubtaskState(
 		StreamStateHandle legacyOperatorState,
 		OperatorStateHandle managedOperatorState,
@@ -115,18 +125,30 @@ public class OperatorSubtaskState implements CompositeStateHandle {
 		return legacyOperatorState;
 	}
 
+	/**
+	 * Returns a handle to the managed operator state.
+	 */
 	public OperatorStateHandle getManagedOperatorState() {
 		return managedOperatorState;
 	}
 
+	/**
+	 * Returns a handle to the raw operator state.
+	 */
 	public OperatorStateHandle getRawOperatorState() {
 		return rawOperatorState;
 	}
 
+	/**
+	 * Returns a handle to the managed keyed state.
+	 */
 	public KeyedStateHandle getManagedKeyedState() {
 		return managedKeyedState;
 	}
 
+	/**
+	 * Returns a handle to the raw keyed state.
+	 */
 	public KeyedStateHandle getRawKeyedState() {
 		return rawKeyedState;
 	}
@@ -226,5 +248,13 @@ public class OperatorSubtaskState implements CompositeStateHandle {
 			", keyedStateFromStream=" + rawKeyedState +
 			", stateSize=" + stateSize +
 			'}';
+	}
+
+	public boolean hasState() {
+		return legacyOperatorState != null
+			|| managedOperatorState != null
+			|| rawOperatorState != null
+			|| managedKeyedState != null
+			|| rawKeyedState != null;
 	}
 }

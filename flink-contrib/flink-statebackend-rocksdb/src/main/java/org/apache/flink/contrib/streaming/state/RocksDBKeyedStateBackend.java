@@ -185,7 +185,7 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 	/** The identifier of the last completed checkpoint. */
 	private long lastCompletedCheckpointId = -1;
 
-	/** Unique ID of this backend */
+	/** Unique ID of this backend. */
 	private UUID backendUID;
 
 	private static final String SST_FILE_SUFFIX = ".sst";
