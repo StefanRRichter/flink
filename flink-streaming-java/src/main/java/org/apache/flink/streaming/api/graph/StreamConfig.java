@@ -215,7 +215,7 @@ public class StreamConfig implements Serializable {
 		}
 	}
 
-	public <T> T getStreamOperator(ClassLoader cl) {
+	public <T extends StreamOperator<?>> T getStreamOperator(ClassLoader cl) {
 		try {
 			return InstantiationUtil.readObjectFromConfig(this.config, SERIALIZEDUDF, cl);
 		}
@@ -423,7 +423,7 @@ public class StreamConfig implements Serializable {
 	}
 
 	public void setOperatorName(String name) {
-		this.config.setString(OPERATOR_ID, name);
+		this.config.setString(OPERATOR_NAME, name);
 	}
 
 	public String getOperatorName() {

@@ -25,6 +25,7 @@ import org.apache.flink.runtime.state.SharedStateRegistry;
 import org.apache.flink.runtime.state.StateObject;
 import org.apache.flink.runtime.state.StateUtil;
 import org.apache.flink.runtime.state.StreamStateHandle;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -74,6 +75,10 @@ public class OperatorSubtaskState implements CompositeStateHandle {
 	 * gathering stats.
 	 */
 	private final long stateSize;
+
+	public OperatorSubtaskState() {
+		this(null, null, null, null, null);
+	}
 
 	public OperatorSubtaskState(
 		StreamStateHandle legacyOperatorState,
@@ -133,6 +138,7 @@ public class OperatorSubtaskState implements CompositeStateHandle {
 
 	@Override
 	public void discardState() {
+//		Thread.dumpStack();
 		try {
 			StateUtil.bestEffortDiscardAllStateObjects(
 				Arrays.asList(
@@ -226,5 +232,13 @@ public class OperatorSubtaskState implements CompositeStateHandle {
 			", keyedStateFromStream=" + rawKeyedState +
 			", stateSize=" + stateSize +
 			'}';
+	}
+
+	public boolean hasState() {
+		return legacyOperatorState != null
+			|| managedOperatorState != null
+			|| rawOperatorState != null
+			|| managedKeyedState != null
+			|| rawKeyedState != null;
 	}
 }

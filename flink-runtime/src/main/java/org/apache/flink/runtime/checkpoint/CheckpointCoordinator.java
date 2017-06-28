@@ -46,10 +46,12 @@ import org.apache.flink.runtime.state.TaskStateHandles;
 import org.apache.flink.runtime.taskmanager.DispatcherThreadFactory;
 import org.apache.flink.util.Preconditions;
 import org.apache.flink.util.StringUtils;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.annotation.Nullable;
+
 import java.util.ArrayDeque;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -1226,7 +1228,7 @@ public class CheckpointCoordinator {
 			final JobID jobId,
 			final ExecutionAttemptID executionAttemptID,
 			final long checkpointId,
-			final SubtaskState subtaskState) {
+			final TaskOperatorSubtaskStates subtaskState) {
 
 		if (subtaskState != null) {
 			executor.execute(new Runnable() {

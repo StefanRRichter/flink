@@ -20,7 +20,10 @@ package org.apache.flink.runtime.checkpoint;
 
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.runtime.executiongraph.ExecutionAttemptID;
+import org.apache.flink.runtime.jobgraph.OperatorID;
 import org.apache.flink.runtime.rpc.RpcGateway;
+
+import java.util.Map;
 
 public interface CheckpointCoordinatorGateway extends RpcGateway {
 
@@ -29,7 +32,7 @@ public interface CheckpointCoordinatorGateway extends RpcGateway {
 			final ExecutionAttemptID executionAttemptID,
 			final long checkpointId,
 			final CheckpointMetrics checkpointMetrics,
-			final SubtaskState subtaskState);
+			final TaskOperatorSubtaskStates subtaskState);
 
 	void declineCheckpoint(
 			JobID jobID,
