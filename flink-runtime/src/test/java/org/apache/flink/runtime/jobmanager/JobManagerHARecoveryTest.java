@@ -570,12 +570,7 @@ public class JobManagerHARecoveryTest extends TestLogger {
 			TaskStateSnapshot checkpointStateHandles = new TaskStateSnapshot();
 			checkpointStateHandles.putSubtaskStateByOperatorID(
 				OperatorID.fromJobVertexID(getEnvironment().getJobVertexId()),
-				new OperatorSubtaskState(
-					byteStreamStateHandle,
-					null,
-					null,
-					null,
-					null)
+				new OperatorSubtaskState(byteStreamStateHandle)
 			);
 
 			getEnvironment().acknowledgeCheckpoint(

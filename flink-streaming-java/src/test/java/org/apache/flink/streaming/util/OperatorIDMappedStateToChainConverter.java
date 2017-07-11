@@ -63,14 +63,14 @@ public class OperatorIDMappedStateToChainConverter {
 		for (int i = 1; i < chainLength; ++i) {
 			OperatorSubtaskState subtaskState = subtaskStates.getSubtaskStateByOperatorID(operatorIDsInChainOrder.get(i));
 			legacyStateChain.add(subtaskState.getLegacyOperatorState());
-			managedOpState.add(singletonListOrNull(subtaskState.getManagedOperatorState()));
-			rawOpState.add(singletonListOrNull(subtaskState.getRawOperatorState()));
+			managedOpState.add(subtaskState.getManagedOperatorState());
+			rawOpState.add(subtaskState.getRawOperatorState());
 		}
 
 		OperatorSubtaskState subtaskState = subtaskStates.getSubtaskStateByOperatorID(operatorIDsInChainOrder.get(0));
 		legacyStateChain.add(subtaskState.getLegacyOperatorState());
-		managedOpState.add(singletonListOrNull(subtaskState.getManagedOperatorState()));
-		rawOpState.add(singletonListOrNull(subtaskState.getRawOperatorState()));
+		managedOpState.add(subtaskState.getManagedOperatorState());
+		rawOpState.add(subtaskState.getRawOperatorState());
 
 		ChainedStateHandle<StreamStateHandle> legacyChainedStateHandle = new ChainedStateHandle<>(legacyStateChain);
 
@@ -78,8 +78,8 @@ public class OperatorIDMappedStateToChainConverter {
 			legacyChainedStateHandle,
 			managedOpState,
 			rawOpState,
-			singletonListOrNull(subtaskState.getManagedKeyedState()),
-			singletonListOrNull(subtaskState.getRawKeyedState())
+			subtaskState.getManagedKeyedState(),
+			subtaskState.getRawKeyedState()
 		);
 
 		return taskStateHandles;

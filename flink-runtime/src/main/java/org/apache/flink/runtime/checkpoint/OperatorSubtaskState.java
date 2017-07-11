@@ -18,6 +18,7 @@
 
 package org.apache.flink.runtime.checkpoint;
 
+import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.runtime.state.CompositeStateHandle;
 import org.apache.flink.runtime.state.KeyedStateHandle;
 import org.apache.flink.runtime.state.OperatorStateHandle;
@@ -85,6 +86,20 @@ public class OperatorSubtaskState implements CompositeStateHandle {
 	 */
 	private final long stateSize;
 
+	@VisibleForTesting
+	public OperatorSubtaskState(StreamStateHandle legacyOperatorState) {
+		this.legacyOperatorState = legacyOperatorState;
+		this.managedOperatorState = Collections.emptyList();
+		this.rawOperatorState = Collections.emptyList();
+		this.managedKeyedState = Collections.emptyList();
+		this.rawKeyedState = Collections.emptyList();
+		try {
+			this.stateSize = getSizeNullSafe(legacyOperatorState);
+		} catch (Exception e) {
+			throw new RuntimeException("Failed to get state size.", e);
+		}
+	}
+
 	public OperatorSubtaskState() {
 		this.legacyOperatorState = null;
 		this.managedOperatorState = Collections.emptyList();
@@ -108,7 +123,7 @@ public class OperatorSubtaskState implements CompositeStateHandle {
 		this.rawKeyedState = Preconditions.checkNotNull(rawKeyedState);
 
 		try {
-			long calculateStateSize = sumAllSizes(legacyOperatorState);
+			long calculateStateSize = getSizeNullSafe(legacyOperatorState);
 			calculateStateSize += sumAllSizes(managedOperatorState);
 			calculateStateSize += sumAllSizes(rawOperatorState);
 			calculateStateSize += sumAllSizes(managedKeyedState);
@@ -134,16 +149,15 @@ public class OperatorSubtaskState implements CompositeStateHandle {
 	}
 
 	private static long sumAllSizes(Collection<? extends StateObject> stateObject) throws Exception {
-
 		long size = 0L;
 		for (StateObject object : stateObject) {
-			size += sumAllSizes(object);
+			size += getSizeNullSafe(object);
 		}
 
 		return size;
 	}
 
-	private static long sumAllSizes(StateObject stateObject) throws Exception {
+	private static long getSizeNullSafe(StateObject stateObject) throws Exception {
 		return stateObject != null ? stateObject.getStateSize() : 0L;
 	}
 

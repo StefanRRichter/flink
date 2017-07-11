@@ -263,9 +263,9 @@ public class CheckpointStateRestoreTest {
 		Map<OperatorID, OperatorState> checkpointTaskStates = new HashMap<>();
 		{
 			OperatorState taskState = new OperatorState(operatorId1, 3, 3);
-			taskState.putState(0, new OperatorSubtaskState(serializedState, null, null, null, null));
-			taskState.putState(1, new OperatorSubtaskState(serializedState, null, null, null, null));
-			taskState.putState(2, new OperatorSubtaskState(serializedState, null, null, null, null));
+			taskState.putState(0, new OperatorSubtaskState(serializedState));
+			taskState.putState(1, new OperatorSubtaskState(serializedState));
+			taskState.putState(2, new OperatorSubtaskState(serializedState));
 
 			checkpointTaskStates.put(operatorId1, taskState);
 		}
@@ -292,7 +292,7 @@ public class CheckpointStateRestoreTest {
 		// There is no task for this
 		{
 			OperatorState taskState = new OperatorState(newOperatorID, 1, 1);
-			taskState.putState(0, new OperatorSubtaskState(serializedState, null, null, null, null));
+			taskState.putState(0, new OperatorSubtaskState(serializedState));
 
 			checkpointTaskStates.put(newOperatorID, taskState);
 		}
