@@ -240,12 +240,12 @@ public class StateAssignmentOperation {
 			List<Collection<OperatorStateHandle>> subManagedOperatorState,
 			List<Collection<OperatorStateHandle>> subRawOperatorState) {
 
-		if (newMangedOperatorStates.get(operatorIndex) != null) {
+		if (newMangedOperatorStates.get(operatorIndex) != null && !newMangedOperatorStates.get(operatorIndex).isEmpty()) {
 			subManagedOperatorState.add(newMangedOperatorStates.get(operatorIndex).get(subTaskIndex));
 		} else {
 			subManagedOperatorState.add(null);
 		}
-		if (newRawOperatorStates.get(operatorIndex) != null) {
+		if (newRawOperatorStates.get(operatorIndex) != null && !newRawOperatorStates.get(operatorIndex).isEmpty()) {
 			subRawOperatorState.add(newRawOperatorStates.get(operatorIndex).get(subTaskIndex));
 		} else {
 			subRawOperatorState.add(null);
@@ -583,20 +583,23 @@ public class StateAssignmentOperation {
 			List<Collection<OperatorStateHandle>> repackStream = new ArrayList<>(newParallelism);
 			for (OperatorStateHandle operatorStateHandle : chainOpParallelStates) {
 
-				Map<String, OperatorStateHandle.StateMetaInfo> partitionOffsets =
+				if (operatorStateHandle != null) {
+					Map<String, OperatorStateHandle.StateMetaInfo> partitionOffsets =
 						operatorStateHandle.getStateNameToPartitionOffsets();
 
-				for (OperatorStateHandle.StateMetaInfo metaInfo : partitionOffsets.values()) {
 
-					// if we find any broadcast state, we cannot take the shortcut and need to go through repartitioning
-					if (OperatorStateHandle.Mode.BROADCAST.equals(metaInfo.getDistributionMode())) {
-						return opStateRepartitioner.repartitionState(
+					for (OperatorStateHandle.StateMetaInfo metaInfo : partitionOffsets.values()) {
+
+						// if we find any broadcast state, we cannot take the shortcut and need to go through repartitioning
+						if (OperatorStateHandle.Mode.BROADCAST.equals(metaInfo.getDistributionMode())) {
+							return opStateRepartitioner.repartitionState(
 								chainOpParallelStates,
 								newParallelism);
+						}
 					}
-				}
 
-				repackStream.add(Collections.singletonList(operatorStateHandle));
+					repackStream.add(Collections.singletonList(operatorStateHandle));
+				}
 			}
 			return repackStream;
 		}
