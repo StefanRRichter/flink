@@ -676,6 +676,7 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 			StreamOperator<?> operator = allOperators[chainIdx];
 			if (null != operator) {
 				if (restored && restoreStateHandles != null) {
+					operator.initializeState(restoreStateHandles.getStateByOperatorID(operator.getOperatorID()));
 					operator.initializeState(new OperatorStateHandles(restoreStateHandles, chainIdx));
 				} else {
 					operator.initializeState(null);
