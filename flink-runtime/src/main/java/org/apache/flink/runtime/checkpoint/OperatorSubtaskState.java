@@ -88,6 +88,7 @@ public class OperatorSubtaskState implements CompositeStateHandle {
 
 	@VisibleForTesting
 	public OperatorSubtaskState(StreamStateHandle legacyOperatorState) {
+
 		this.legacyOperatorState = legacyOperatorState;
 		this.managedOperatorState = Collections.emptyList();
 		this.rawOperatorState = Collections.emptyList();
@@ -101,12 +102,7 @@ public class OperatorSubtaskState implements CompositeStateHandle {
 	}
 
 	public OperatorSubtaskState() {
-		this.legacyOperatorState = null;
-		this.managedOperatorState = Collections.emptyList();
-		this.rawOperatorState = Collections.emptyList();
-		this.managedKeyedState = Collections.emptyList();
-		this.rawKeyedState = Collections.emptyList();
-		this.stateSize = 0L;
+		this(null);
 	}
 
 	public OperatorSubtaskState(

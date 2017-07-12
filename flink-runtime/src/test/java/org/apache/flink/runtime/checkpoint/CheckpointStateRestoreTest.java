@@ -151,7 +151,7 @@ public class CheckpointStateRestoreTest {
 					Collections.<Collection<OperatorStateHandle>>singletonList(null),
 					Collections.<Collection<OperatorStateHandle>>singletonList(null),
 					Collections.singletonList(serializedKeyGroupStates),
-					null);
+					Collections.<KeyedStateHandle>singletonList(null));
 
 			BaseMatcher<TaskStateHandles> matcher = new BaseMatcher<TaskStateHandles>() {
 				@Override

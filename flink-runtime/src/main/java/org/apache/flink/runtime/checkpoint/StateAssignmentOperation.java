@@ -216,8 +216,8 @@ public class StateAssignmentOperation {
 					new ChainedStateHandle<>(subNonPartitionableState),
 					subManagedOperatorState,
 					subRawOperatorState,
-					subKeyedState != null ? subKeyedState.f0 : null,
-					subKeyedState != null ? subKeyedState.f1 : null);
+					subKeyedState != null ? subKeyedState.f0 : Collections.<KeyedStateHandle>emptyList(),
+					subKeyedState != null ? subKeyedState.f1 : Collections.<KeyedStateHandle>emptyList());
 
 				currentExecutionAttempt.setInitialState(taskStateHandles);
 			}

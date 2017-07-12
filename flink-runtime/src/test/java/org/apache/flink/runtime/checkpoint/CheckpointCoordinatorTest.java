@@ -2688,8 +2688,8 @@ public class CheckpointCoordinatorTest extends TestLogger {
 			List<Collection<OperatorStateHandle>> actualSubManagedOperatorState = taskStateHandles.getManagedOperatorState();
 			List<Collection<OperatorStateHandle>> actualSubRawOperatorState = taskStateHandles.getRawOperatorState();
 
-			assertNull(taskStateHandles.getManagedKeyedState());
-			assertNull(taskStateHandles.getRawKeyedState());
+			assertTrue(taskStateHandles.getManagedKeyedState().isEmpty());
+			assertTrue(taskStateHandles.getRawKeyedState().isEmpty());
 
 			// operator5
 			{
