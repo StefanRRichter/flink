@@ -18,10 +18,10 @@
 
 package org.apache.flink.runtime.checkpoint;
 
+import org.apache.flink.annotation.Internal;
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.api.common.time.Time;
-import org.apache.flink.configuration.ConfigConstants;
 import org.apache.flink.configuration.CoreOptions;
 import org.apache.flink.runtime.checkpoint.hooks.MasterHooks;
 import org.apache.flink.runtime.checkpoint.savepoint.SavepointLoader;
@@ -46,10 +46,12 @@ import org.apache.flink.runtime.state.TaskStateHandles;
 import org.apache.flink.runtime.taskmanager.DispatcherThreadFactory;
 import org.apache.flink.util.Preconditions;
 import org.apache.flink.util.StringUtils;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.annotation.Nullable;
+
 import java.util.ArrayDeque;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -414,6 +416,36 @@ public class CheckpointCoordinator {
 	 */
 	public boolean triggerCheckpoint(long timestamp, boolean isPeriodic) {
 		return triggerCheckpoint(timestamp, checkpointProperties, checkpointDirectory, isPeriodic).isSuccess();
+	}
+
+	/**
+	 * Test method to trigger a checkpoint/savepoint.
+	 *
+	 * @param timestamp The timestamp for the checkpoint.
+	 * @param options The checkpoint options.
+	 * @return A future to the completed checkpoint
+	 */
+	@VisibleForTesting
+	@Internal
+	public Future<CompletedCheckpoint> triggerCheckpoint(long timestamp, CheckpointOptions options) throws Exception {
+		switch (options.getCheckpointType()) {
+			case SAVEPOINT:
+				return triggerSavepoint(timestamp, options.getTargetLocation());
+
+			case FULL_CHECKPOINT:
+				CheckpointTriggerResult triggerResult =
+					triggerCheckpoint(timestamp, checkpointProperties, checkpointDirectory, false);
+
+				if (triggerResult.isSuccess()) {
+					return triggerResult.getPendingCheckpoint().getCompletionFuture();
+				} else {
+					Throwable cause = new Exception("Failed to trigger checkpoint: " + triggerResult.getFailureReason().message());
+					return FlinkCompletableFuture.completedExceptionally(cause);
+				}
+
+			default:
+				throw new IllegalArgumentException("Unknown checkpoint type: " + options.getCheckpointType());
+		}
 	}
 
 	@VisibleForTesting
