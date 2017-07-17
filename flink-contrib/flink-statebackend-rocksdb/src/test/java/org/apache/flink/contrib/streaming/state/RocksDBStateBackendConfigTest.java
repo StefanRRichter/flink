@@ -266,9 +266,9 @@ public class RocksDBStateBackendConfigTest {
 				ColumnFamilyOptions colCreated = rocksDbBackend.getColumnOptions()) {
 
 			// check that our instance uses something that we configured
-			assertEquals(true, optCreated.disableDataSync());
+			assertEquals(false, optCreated.useFsync());
 			// just ensure that we pickend an option that actually differs from the reference.
-			assertEquals(false, optReference.disableDataSync());
+			assertEquals(true, optReference.useFsync());
 
 			assertEquals(CompactionStyle.LEVEL, colCreated.compactionStyle());
 		}

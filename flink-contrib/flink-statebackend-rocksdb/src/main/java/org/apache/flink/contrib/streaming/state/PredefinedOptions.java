@@ -46,8 +46,7 @@ public enum PredefinedOptions {
 		@Override
 		public DBOptions createDBOptions() {
 			return new DBOptions()
-					.setUseFsync(false)
-					.setDisableDataSync(true);
+					.setUseFsync(false);
 		}
 
 		@Override
@@ -86,7 +85,6 @@ public enum PredefinedOptions {
 			return new DBOptions()
 					.setIncreaseParallelism(4)
 					.setUseFsync(false)
-					.setDisableDataSync(true)
 					.setMaxOpenFiles(-1);
 		}
 
@@ -133,7 +131,6 @@ public enum PredefinedOptions {
 			return new DBOptions()
 					.setIncreaseParallelism(4)
 					.setUseFsync(false)
-					.setDisableDataSync(true)
 					.setMaxOpenFiles(-1);
 		}
 
@@ -186,7 +183,6 @@ public enum PredefinedOptions {
 			return new DBOptions()
 					.setIncreaseParallelism(4)
 					.setUseFsync(false)
-					.setDisableDataSync(true)
 					.setMaxOpenFiles(-1);
 		}
 

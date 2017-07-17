@@ -74,7 +74,6 @@ public class RocksDBPerformanceTest extends TestLogger {
 					.setIncreaseParallelism(4)
 					.setUseFsync(false)
 					.setMaxOpenFiles(-1)
-					.setDisableDataSync(true)
 					.setCreateIfMissing(true)
 					.setMergeOperator(new StringAppendOperator());
 
@@ -152,7 +151,6 @@ public class RocksDBPerformanceTest extends TestLogger {
 					.setIncreaseParallelism(4)
 					.setUseFsync(false)
 					.setMaxOpenFiles(-1)
-					.setDisableDataSync(true)
 					.setCreateIfMissing(true)
 					.setMergeOperator(new StringAppendOperator());
 
