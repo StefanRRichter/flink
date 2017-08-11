@@ -105,7 +105,9 @@ import java.io.ObjectInputStream;
 import java.io.OutputStream;
 import java.nio.file.Files;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -137,6 +139,9 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 
 	/** The name of the merge operator in RocksDB. Do not change except you know exactly what you do. */
 	public static final String MERGE_OPERATOR_NAME = "stringappendtest";
+
+	/** Bytes for the name of the column decriptor for the default column family. */
+	public static final byte[] DEFAULT_COLUMN_FAMILY_NAME_BYTES = "default".getBytes(ConfigConstants.DEFAULT_CHARSET);
 
 	private final String operatorIdentifier;
 
@@ -196,7 +201,7 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 	private final SortedMap<Long, Set<StateHandleID>> materializedSstFiles;
 
 	/** The identifier of the last completed checkpoint. */
-	private long lastCompletedCheckpointId = -1;
+	private long lastCompletedCheckpointId = -1L;
 
 	/** Unique ID of this backend. */
 	private UUID backendUID;
@@ -274,7 +279,6 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 				// DB is closed. So we start with the ones created by Flink...
 				for (Tuple2<ColumnFamilyHandle, RegisteredKeyedBackendStateMetaInfo<?, ?>> columnMetaData :
 					kvStateInformation.values()) {
-
 					IOUtils.closeQuietly(columnMetaData.f0);
 				}
 
@@ -1045,9 +1049,9 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 	}
 
 	private void createDB() throws IOException {
-		db = openDB(instanceRocksDBPath.getAbsolutePath(),
-			new ArrayList<ColumnFamilyDescriptor>(),
-			null);
+		List<ColumnFamilyHandle> columnFamilyHandles = new ArrayList<>(1);
+		this.db = openDB(instanceRocksDBPath.getAbsolutePath(), Collections.emptyList(), columnFamilyHandles);
+		this.defaultColumnFamily = columnFamilyHandles.get(0);
 	}
 
 	private RocksDB openDB(
@@ -1055,37 +1059,29 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 			List<ColumnFamilyDescriptor> stateColumnFamilyDescriptors,
 			List<ColumnFamilyHandle> stateColumnFamilyHandles) throws IOException {
 
-		List<ColumnFamilyDescriptor> columnFamilyDescriptors = new ArrayList<>(stateColumnFamilyDescriptors);
+		List<ColumnFamilyDescriptor> columnFamilyDescriptors =
+			new ArrayList<>(1 + stateColumnFamilyDescriptors.size());
+
+		columnFamilyDescriptors.addAll(stateColumnFamilyDescriptors);
 
 		// we add the required descriptor for the default CF in last position.
-		columnFamilyDescriptors.add(
-			new ColumnFamilyDescriptor(
-				"default".getBytes(ConfigConstants.DEFAULT_CHARSET), columnOptions));
-
-		List<ColumnFamilyHandle> columnFamilyHandles = new ArrayList<>(columnFamilyDescriptors.size());
+		columnFamilyDescriptors.add(new ColumnFamilyDescriptor(DEFAULT_COLUMN_FAMILY_NAME_BYTES, columnOptions));
 
 		RocksDB db;
 
 		try {
 			db = RocksDB.open(
-					Preconditions.checkNotNull(dbOptions),
-					Preconditions.checkNotNull(path),
-					columnFamilyDescriptors,
-					columnFamilyHandles);
+				Preconditions.checkNotNull(dbOptions),
+				Preconditions.checkNotNull(path),
+				columnFamilyDescriptors,
+				stateColumnFamilyHandles);
 		} catch (RocksDBException e) {
 			throw new IOException("Error while opening RocksDB instance.", e);
 		}
 
-		final int defaultColumnFamilyIndex = columnFamilyHandles.size() - 1;
-
-		// extract the default column family.
-		defaultColumnFamily = columnFamilyHandles.get(defaultColumnFamilyIndex);
-
-		if (stateColumnFamilyHandles != null) {
-			// return all CFs except the default CF which is kept separately because it is not used in Flink operations.
-			stateColumnFamilyHandles.addAll(
-				columnFamilyHandles.subList(0, defaultColumnFamilyIndex));
-		}
+		// requested + default CF
+		Preconditions.checkState(1 + stateColumnFamilyDescriptors.size() == stateColumnFamilyHandles.size(),
+			"Not all requested column family handles have been created");
 
 		return db;
 	}
@@ -1209,8 +1205,10 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 					rocksDBKeyedStateBackend.kvStateInformation.get(restoredMetaInfo.getName());
 
 				if (registeredColumn == null) {
+					byte[] nameBytes = restoredMetaInfo.getName().getBytes(ConfigConstants.DEFAULT_CHARSET);
+
 					ColumnFamilyDescriptor columnFamilyDescriptor = new ColumnFamilyDescriptor(
-						restoredMetaInfo.getName().getBytes(ConfigConstants.DEFAULT_CHARSET),
+						nameBytes,
 						rocksDBKeyedStateBackend.columnOptions);
 
 					RegisteredKeyedBackendStateMetaInfo<?, ?> stateMetaInfo =
@@ -1224,7 +1222,7 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 
 					ColumnFamilyHandle columnFamily = rocksDBKeyedStateBackend.db.createColumnFamily(columnFamilyDescriptor);
 
-					registeredColumn = new Tuple2<ColumnFamilyHandle, RegisteredKeyedBackendStateMetaInfo<?, ?>>(columnFamily, stateMetaInfo);
+					registeredColumn = new Tuple2<>(columnFamily, stateMetaInfo);
 					rocksDBKeyedStateBackend.kvStateInformation.put(stateMetaInfo.getName(), registeredColumn);
 
 				} else {
@@ -1390,7 +1388,8 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 				List<RegisteredKeyedBackendStateMetaInfo.Snapshot<?, ?>> stateMetaInfoSnapshots =
 					readMetaData(restoreStateHandle.getMetaStateHandle());
 
-				List<ColumnFamilyDescriptor> columnFamilyDescriptors = new ArrayList<>();
+				List<ColumnFamilyDescriptor> columnFamilyDescriptors =
+					new ArrayList<>(1 + stateMetaInfoSnapshots.size());
 
 				for (RegisteredKeyedBackendStateMetaInfo.Snapshot<?, ?> stateMetaInfoSnapshot : stateMetaInfoSnapshots) {
 
@@ -1404,69 +1403,78 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 
 				if (hasExtraKeys) {
 
-					List<ColumnFamilyHandle> columnFamilyHandles = new ArrayList<>();
+					List<ColumnFamilyHandle> columnFamilyHandles =
+						new ArrayList<>(1 + columnFamilyDescriptors.size());
 
 					try (RocksDB restoreDb = stateBackend.openDB(
-							restoreInstancePath.getPath(),
-							columnFamilyDescriptors,
-							columnFamilyHandles)) {
+						restoreInstancePath.getPath(),
+						columnFamilyDescriptors,
+						columnFamilyHandles)) {
 
-						for (int i = 0; i < columnFamilyHandles.size(); ++i) {
-							ColumnFamilyHandle columnFamilyHandle = columnFamilyHandles.get(i);
-							ColumnFamilyDescriptor columnFamilyDescriptor = columnFamilyDescriptors.get(i);
-							RegisteredKeyedBackendStateMetaInfo.Snapshot<?, ?> stateMetaInfoSnapshot = stateMetaInfoSnapshots.get(i);
+						try {
+							// iterating only the requested descriptors automatically skips the default column family handle
+							for (int i = 0; i < columnFamilyDescriptors.size(); ++i) {
+								ColumnFamilyHandle columnFamilyHandle = columnFamilyHandles.get(i);
+								ColumnFamilyDescriptor columnFamilyDescriptor = columnFamilyDescriptors.get(i);
+								RegisteredKeyedBackendStateMetaInfo.Snapshot<?, ?> stateMetaInfoSnapshot = stateMetaInfoSnapshots.get(i);
 
-							Tuple2<ColumnFamilyHandle, RegisteredKeyedBackendStateMetaInfo<?, ?>> registeredStateMetaInfoEntry =
-								stateBackend.kvStateInformation.get(stateMetaInfoSnapshot.getName());
+								Tuple2<ColumnFamilyHandle, RegisteredKeyedBackendStateMetaInfo<?, ?>> registeredStateMetaInfoEntry =
+									stateBackend.kvStateInformation.get(stateMetaInfoSnapshot.getName());
 
-							if (null == registeredStateMetaInfoEntry) {
+								if (null == registeredStateMetaInfoEntry) {
 
-								RegisteredKeyedBackendStateMetaInfo<?, ?> stateMetaInfo =
-									new RegisteredKeyedBackendStateMetaInfo<>(
-										stateMetaInfoSnapshot.getStateType(),
+									RegisteredKeyedBackendStateMetaInfo<?, ?> stateMetaInfo =
+										new RegisteredKeyedBackendStateMetaInfo<>(
+											stateMetaInfoSnapshot.getStateType(),
+											stateMetaInfoSnapshot.getName(),
+											stateMetaInfoSnapshot.getNamespaceSerializer(),
+											stateMetaInfoSnapshot.getStateSerializer());
+
+									registeredStateMetaInfoEntry =
+										new Tuple2<>(
+											stateBackend.db.createColumnFamily(columnFamilyDescriptor),
+											stateMetaInfo);
+
+									stateBackend.kvStateInformation.put(
 										stateMetaInfoSnapshot.getName(),
-										stateMetaInfoSnapshot.getNamespaceSerializer(),
-										stateMetaInfoSnapshot.getStateSerializer());
-
-								registeredStateMetaInfoEntry =
-									new Tuple2<ColumnFamilyHandle, RegisteredKeyedBackendStateMetaInfo<?, ?>>(
-										stateBackend.db.createColumnFamily(columnFamilyDescriptor),
-										stateMetaInfo);
-
-								stateBackend.kvStateInformation.put(
-									stateMetaInfoSnapshot.getName(),
-									registeredStateMetaInfoEntry);
-							}
-
-							ColumnFamilyHandle targetColumnFamilyHandle = registeredStateMetaInfoEntry.f0;
-
-							try (RocksIterator iterator = restoreDb.newIterator(columnFamilyHandle)) {
-
-								int startKeyGroup = stateBackend.getKeyGroupRange().getStartKeyGroup();
-								byte[] startKeyGroupPrefixBytes = new byte[stateBackend.keyGroupPrefixBytes];
-								for (int j = 0; j < stateBackend.keyGroupPrefixBytes; ++j) {
-									startKeyGroupPrefixBytes[j] = (byte) (startKeyGroup >>> ((stateBackend.keyGroupPrefixBytes - j - 1) * Byte.SIZE));
+										registeredStateMetaInfoEntry);
 								}
 
-								iterator.seek(startKeyGroupPrefixBytes);
+								ColumnFamilyHandle targetColumnFamilyHandle = registeredStateMetaInfoEntry.f0;
 
-								while (iterator.isValid()) {
+								try (RocksIterator iterator = restoreDb.newIterator(columnFamilyHandle)) {
 
-									int keyGroup = 0;
+									int startKeyGroup = stateBackend.getKeyGroupRange().getStartKeyGroup();
+									byte[] startKeyGroupPrefixBytes = new byte[stateBackend.keyGroupPrefixBytes];
 									for (int j = 0; j < stateBackend.keyGroupPrefixBytes; ++j) {
-										keyGroup = (keyGroup << Byte.SIZE) + iterator.key()[j];
+										startKeyGroupPrefixBytes[j] = (byte) (startKeyGroup >>> ((stateBackend.keyGroupPrefixBytes - j - 1) * Byte.SIZE));
 									}
 
-									if (stateBackend.keyGroupRange.contains(keyGroup)) {
-										stateBackend.db.put(targetColumnFamilyHandle,
-											iterator.key(), iterator.value());
-									}
+									iterator.seek(startKeyGroupPrefixBytes);
 
-									iterator.next();
-								}
+									while (iterator.isValid()) {
+
+										int keyGroup = 0;
+										for (int j = 0; j < stateBackend.keyGroupPrefixBytes; ++j) {
+											keyGroup = (keyGroup << Byte.SIZE) + iterator.key()[j];
+										}
+
+										if (stateBackend.keyGroupRange.contains(keyGroup)) {
+											stateBackend.db.put(targetColumnFamilyHandle,
+												iterator.key(), iterator.value());
+										}
+
+										iterator.next();
+									}
+								} // releases native iterator resources
+							}
+						} finally {
+							//release native tmp db column family resources
+							for (ColumnFamilyHandle columnFamilyHandle : columnFamilyHandles) {
+								IOUtils.closeQuietly(columnFamilyHandle);
 							}
 						}
-					}
+					} // releases native tmp db resources
 				} else {
 					// pick up again the old backend id, so the we can reference existing state
 					stateBackend.backendUID = restoreStateHandle.getBackendIdentifier();
@@ -1482,10 +1490,15 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 					createFileHardLinksInRestorePath(sstFiles, restoreInstancePath);
 					createFileHardLinksInRestorePath(miscFiles, restoreInstancePath);
 
-					List<ColumnFamilyHandle> columnFamilyHandles = new ArrayList<>();
+					List<ColumnFamilyHandle> columnFamilyHandles =
+						new ArrayList<>(1 + columnFamilyDescriptors.size());
+
 					stateBackend.db = stateBackend.openDB(
 						stateBackend.instanceRocksDBPath.getAbsolutePath(),
 						columnFamilyDescriptors, columnFamilyHandles);
+
+					// extract and store the default column family which is located at the last index
+					stateBackend.defaultColumnFamily = columnFamilyHandles.remove(columnFamilyHandles.size() - 1);
 
 					for (int i = 0; i < columnFamilyDescriptors.size(); ++i) {
 						RegisteredKeyedBackendStateMetaInfo.Snapshot<?, ?> stateMetaInfoSnapshot = stateMetaInfoSnapshots.get(i);
@@ -1500,8 +1513,7 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 
 						stateBackend.kvStateInformation.put(
 							stateMetaInfoSnapshot.getName(),
-							new Tuple2<ColumnFamilyHandle, RegisteredKeyedBackendStateMetaInfo<?, ?>>(
-								columnFamilyHandle, stateMetaInfo));
+							new Tuple2<>(columnFamilyHandle, stateMetaInfo));
 					}
 
 					// use the restore sst files as the base for succeeding checkpoints
@@ -1636,19 +1648,25 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 			}
 		}
 
-		ColumnFamilyDescriptor columnDescriptor = new ColumnFamilyDescriptor(
-				descriptor.getName().getBytes(ConfigConstants.DEFAULT_CHARSET), columnOptions);
+		byte[] nameBytes = descriptor.getName().getBytes(ConfigConstants.DEFAULT_CHARSET);
+		Preconditions.checkState(!Arrays.equals(DEFAULT_COLUMN_FAMILY_NAME_BYTES, nameBytes),
+			"The chosen state name 'default' collides with the name of the default column family!");
+
+		ColumnFamilyDescriptor columnDescriptor = new ColumnFamilyDescriptor(nameBytes, columnOptions);
+
+		final ColumnFamilyHandle columnFamily;
 
 		try {
-			ColumnFamilyHandle columnFamily = db.createColumnFamily(columnDescriptor);
-			Tuple2<ColumnFamilyHandle, RegisteredKeyedBackendStateMetaInfo<N, S>> tuple =
-					new Tuple2<>(columnFamily, newMetaInfo);
-			Map rawAccess = kvStateInformation;
-			rawAccess.put(descriptor.getName(), tuple);
-			return columnFamily;
+			columnFamily = db.createColumnFamily(columnDescriptor);
 		} catch (RocksDBException e) {
 			throw new IOException("Error creating ColumnFamilyHandle.", e);
 		}
+
+		Tuple2<ColumnFamilyHandle, RegisteredKeyedBackendStateMetaInfo<N, S>> tuple =
+			new Tuple2<>(columnFamily, newMetaInfo);
+		Map rawAccess = kvStateInformation;
+		rawAccess.put(descriptor.getName(), tuple);
+		return columnFamily;
 	}
 
 	@Override
