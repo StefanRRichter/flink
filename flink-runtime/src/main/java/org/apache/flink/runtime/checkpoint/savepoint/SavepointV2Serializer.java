@@ -33,6 +33,7 @@ import org.apache.flink.runtime.state.StateHandleID;
 import org.apache.flink.runtime.state.StreamStateHandle;
 import org.apache.flink.runtime.state.filesystem.FileStateHandle;
 import org.apache.flink.runtime.state.memory.ByteStreamStateHandle;
+import org.apache.flink.util.Preconditions;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -256,13 +257,8 @@ class SavepointV2Serializer implements SavepointSerializer<SavepointV2> {
 
 		dos.writeLong(-1);
 
-		StreamStateHandle nonPartitionableState = subtaskState.getLegacyOperatorState();
-
-		int len = nonPartitionableState != null ? 1 : 0;
+		int len = 0;
 		dos.writeInt(len);
-		if (len == 1) {
-			serializeStreamStateHandle(nonPartitionableState, dos);
-		}
 
 		OperatorStateHandle operatorStateBackend = extractSingleton(subtaskState.getManagedOperatorState());
 
@@ -291,8 +287,10 @@ class SavepointV2Serializer implements SavepointSerializer<SavepointV2> {
 		// Duration field has been removed from SubtaskState
 		long ignoredDuration = dis.readLong();
 
+		//for compatibility
 		int len = dis.readInt();
-		StreamStateHandle nonPartitionableState = len == 0 ? null : deserializeStreamStateHandle(dis);
+		Preconditions.checkState(len == 0,
+			"Support for non-partitionable state (Flink <= 1.1) was dropped. Cannot restore!");
 
 		len = dis.readInt();
 		OperatorStateHandle operatorStateBackend = len == 0 ? null : deserializeOperatorStateHandle(dis);
@@ -305,7 +303,6 @@ class SavepointV2Serializer implements SavepointSerializer<SavepointV2> {
 		KeyedStateHandle keyedStateStream = deserializeKeyedStateHandle(dis);
 
 		return new OperatorSubtaskState(
-				nonPartitionableState,
 				operatorStateBackend,
 				operatorStateStream,
 				keyedStateBackend,

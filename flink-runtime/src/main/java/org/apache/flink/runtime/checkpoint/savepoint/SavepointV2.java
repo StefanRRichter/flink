@@ -240,7 +240,6 @@ public class SavepointV2 implements Savepoint {
 						}
 
 						OperatorSubtaskState operatorSubtaskState = new OperatorSubtaskState(
-							nonPartitionedState != null ? nonPartitionedState.get(operatorIndex) : null,
 							partitioneableState != null ? partitioneableState.get(operatorIndex) : null,
 							rawOperatorState != null ? rawOperatorState.get(operatorIndex) : null,
 							managedKeyedState,

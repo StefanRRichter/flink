@@ -28,8 +28,6 @@ import org.apache.flink.api.common.typeutils.base.IntSerializer;
 import org.apache.flink.api.common.typeutils.base.StringSerializer;
 import org.apache.flink.api.java.functions.KeySelector;
 import org.apache.flink.configuration.Configuration;
-import org.apache.flink.core.fs.FSDataInputStream;
-import org.apache.flink.core.fs.FSDataOutputStream;
 import org.apache.flink.core.testutils.OneShotLatch;
 import org.apache.flink.runtime.checkpoint.CheckpointMetaData;
 import org.apache.flink.runtime.checkpoint.CheckpointMetrics;
@@ -47,21 +45,18 @@ import org.apache.flink.streaming.api.graph.StreamEdge;
 import org.apache.flink.streaming.api.graph.StreamNode;
 import org.apache.flink.streaming.api.operators.AbstractStreamOperator;
 import org.apache.flink.streaming.api.operators.OneInputStreamOperator;
-import org.apache.flink.streaming.api.operators.StreamCheckpointedOperator;
 import org.apache.flink.streaming.api.operators.StreamMap;
 import org.apache.flink.streaming.api.watermark.Watermark;
 import org.apache.flink.streaming.runtime.partitioner.BroadcastPartitioner;
 import org.apache.flink.streaming.runtime.streamrecord.StreamRecord;
 import org.apache.flink.streaming.runtime.streamstatus.StreamStatus;
 import org.apache.flink.streaming.util.TestHarnessUtil;
-import org.apache.flink.util.InstantiationUtil;
 import org.apache.flink.util.Preconditions;
 import org.apache.flink.util.TestLogger;
 
 import org.junit.Assert;
 import org.junit.Test;
 
-import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -69,7 +64,6 @@ import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
-import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.TimeUnit;
@@ -78,7 +72,6 @@ import scala.concurrent.duration.Deadline;
 import scala.concurrent.duration.FiniteDuration;
 
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -272,6 +265,7 @@ public class OneInputStreamTaskTest extends TestLogger {
 		StreamConfig tailOperatorConfig = new StreamConfig(new Configuration());
 
 		headOperatorConfig.setStreamOperator(headOperator);
+		headOperatorConfig.setOperatorID(new OperatorID(42L, 42L));
 		headOperatorConfig.setChainStart();
 		headOperatorConfig.setChainIndex(0);
 		headOperatorConfig.setChainedOutputs(Collections.singletonList(new StreamEdge(
@@ -284,6 +278,7 @@ public class OneInputStreamTaskTest extends TestLogger {
 		)));
 
 		watermarkOperatorConfig.setStreamOperator(watermarkOperator);
+		watermarkOperatorConfig.setOperatorID(new OperatorID(4711L, 42L));
 		watermarkOperatorConfig.setTypeSerializerIn1(StringSerializer.INSTANCE);
 		watermarkOperatorConfig.setChainIndex(1);
 		watermarkOperatorConfig.setChainedOutputs(Collections.singletonList(new StreamEdge(
@@ -305,6 +300,7 @@ public class OneInputStreamTaskTest extends TestLogger {
 			null));
 
 		tailOperatorConfig.setStreamOperator(tailOperator);
+		tailOperatorConfig.setOperatorID(new OperatorID(123L, 123L));
 		tailOperatorConfig.setTypeSerializerIn1(StringSerializer.INSTANCE);
 		tailOperatorConfig.setBufferTimeout(0);
 		tailOperatorConfig.setChainIndex(2);
@@ -547,13 +543,11 @@ public class OneInputStreamTaskTest extends TestLogger {
 
 		long checkpointId = 1L;
 		long checkpointTimestamp = 1L;
-		long recoveryTimestamp = 3L;
-		long seed = 2L;
 		int numberChainedTasks = 11;
 
 		StreamConfig streamConfig = testHarness.getStreamConfig();
 
-		configureChainedTestingStreamOperator(streamConfig, numberChainedTasks, seed, recoveryTimestamp);
+		configureChainedTestingStreamOperator(streamConfig, numberChainedTasks);
 
 		AcknowledgeStreamMockEnvironment env = new AcknowledgeStreamMockEnvironment(
 			testHarness.jobConfig,
@@ -591,7 +585,7 @@ public class OneInputStreamTaskTest extends TestLogger {
 
 		StreamConfig restoredTaskStreamConfig = restoredTaskHarness.getStreamConfig();
 
-		configureChainedTestingStreamOperator(restoredTaskStreamConfig, numberChainedTasks, seed, recoveryTimestamp);
+		configureChainedTestingStreamOperator(restoredTaskStreamConfig, numberChainedTasks);
 
 		TaskStateSnapshot stateHandles = env.getCheckpointStateHandles();
 		Assert.assertEquals(numberChainedTasks, stateHandles.getSubtaskStateMappings().size());
@@ -617,16 +611,12 @@ public class OneInputStreamTaskTest extends TestLogger {
 
 	private void configureChainedTestingStreamOperator(
 		StreamConfig streamConfig,
-		int numberChainedTasks,
-		long seed,
-		long recoveryTimestamp) {
+		int numberChainedTasks) {
 
 		Preconditions.checkArgument(numberChainedTasks >= 1, "The operator chain must at least " +
 			"contain one operator.");
 
-		Random random = new Random(seed);
-
-		TestingStreamOperator<Integer, Integer> previousOperator = new TestingStreamOperator<>(random.nextLong(), recoveryTimestamp);
+		TestingStreamOperator<Integer, Integer> previousOperator = new TestingStreamOperator<>();
 		streamConfig.setStreamOperator(previousOperator);
 		streamConfig.setOperatorID(new OperatorID(0L, 0L));
 
@@ -635,7 +625,7 @@ public class OneInputStreamTaskTest extends TestLogger {
 		List<StreamEdge> outputEdges = new ArrayList<>(numberChainedTasks - 1);
 
 		for (int chainedIndex = 1; chainedIndex < numberChainedTasks; chainedIndex++) {
-			TestingStreamOperator<Integer, Integer> chainedOperator = new TestingStreamOperator<>(random.nextLong(), recoveryTimestamp);
+			TestingStreamOperator<Integer, Integer> chainedOperator = new TestingStreamOperator<>();
 			StreamConfig chainedConfig = new StreamConfig(new Configuration());
 			chainedConfig.setStreamOperator(chainedOperator);
 			chainedConfig.setOperatorID(new OperatorID(0L, chainedIndex));
@@ -722,17 +712,12 @@ public class OneInputStreamTaskTest extends TestLogger {
 
 	private static class TestingStreamOperator<IN, OUT>
 			extends AbstractStreamOperator<OUT>
-			implements OneInputStreamOperator<IN, OUT>, StreamCheckpointedOperator {
+			implements OneInputStreamOperator<IN, OUT> {
 
 		private static final long serialVersionUID = 774614855940397174L;
 
 		public static int numberRestoreCalls = 0;
 		public static int numberSnapshotCalls = 0;
-
-		private final long seed;
-		private final long recoveryTimestamp;
-
-		private transient Random random;
 
 		@Override
 		public void open() throws Exception {
@@ -770,59 +755,14 @@ public class OneInputStreamTaskTest extends TestLogger {
 
 		@Override
 		public void initializeState(StateInitializationContext context) throws Exception {
-
-		}
-
-		TestingStreamOperator(long seed, long recoveryTimestamp) {
-			this.seed = seed;
-			this.recoveryTimestamp = recoveryTimestamp;
+			if (context.isRestored()) {
+				++numberRestoreCalls;
+			}
 		}
 
 		@Override
 		public void processElement(StreamRecord<IN> element) throws Exception {
 
-		}
-
-		@Override
-		public void snapshotState(FSDataOutputStream out, long checkpointId, long timestamp) throws Exception {
-			if (random == null) {
-				random = new Random(seed);
-			}
-
-			Serializable functionState = generateFunctionState();
-			Integer operatorState = generateOperatorState();
-
-			InstantiationUtil.serializeObject(out, functionState);
-			InstantiationUtil.serializeObject(out, operatorState);
-		}
-
-		@Override
-		public void restoreState(FSDataInputStream in) throws Exception {
-			numberRestoreCalls++;
-
-			if (random == null) {
-				random = new Random(seed);
-			}
-
-			assertEquals(this.recoveryTimestamp, recoveryTimestamp);
-
-			assertNotNull(in);
-
-			ClassLoader cl = Thread.currentThread().getContextClassLoader();
-
-			Serializable functionState = InstantiationUtil.deserializeObject(in, cl);
-			Integer operatorState = InstantiationUtil.deserializeObject(in, cl);
-
-			assertEquals(random.nextInt(), functionState);
-			assertEquals(random.nextInt(), (int) operatorState);
-		}
-
-		private Serializable generateFunctionState() {
-			return random.nextInt();
-		}
-
-		private Integer generateOperatorState() {
-			return random.nextInt();
 		}
 	}
 

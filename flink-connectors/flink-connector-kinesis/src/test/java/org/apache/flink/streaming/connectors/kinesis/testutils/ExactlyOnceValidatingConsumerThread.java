@@ -21,7 +21,6 @@ import org.apache.flink.api.common.functions.FlatMapFunction;
 import org.apache.flink.api.common.functions.RichFlatMapFunction;
 import org.apache.flink.api.common.restartstrategy.RestartStrategies;
 import org.apache.flink.configuration.Configuration;
-import org.apache.flink.streaming.api.checkpoint.Checkpointed;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.streaming.connectors.kinesis.FlinkKinesisConsumer;
@@ -95,7 +94,7 @@ public class ExactlyOnceValidatingConsumerThread {
 		return new Thread(exactlyOnceValidationConsumer);
 	}
 
-	private static class ExactlyOnceValidatingMapper implements FlatMapFunction<String, String>, Checkpointed<BitSet> {
+	private static class ExactlyOnceValidatingMapper implements FlatMapFunction<String, String> {
 
 		private static final Logger LOG = LoggerFactory.getLogger(ExactlyOnceValidatingMapper.class);
 
@@ -123,16 +122,6 @@ public class ExactlyOnceValidatingConsumerThread {
 			if (validator.nextClearBit(0) == totalEventCount) {
 				throw new SuccessException();
 			}
-		}
-
-		@Override
-		public BitSet snapshotState(long checkpointId, long checkpointTimestamp) throws Exception {
-			return validator;
-		}
-
-		@Override
-		public void restoreState(BitSet state) throws Exception {
-			this.validator = state;
 		}
 	}
 

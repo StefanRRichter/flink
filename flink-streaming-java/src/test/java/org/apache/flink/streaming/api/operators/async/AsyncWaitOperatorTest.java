@@ -500,8 +500,9 @@ public class AsyncWaitOperatorTest extends TestLogger {
 			AsyncDataStream.OutputMode.ORDERED);
 
 		final StreamConfig streamConfig = testHarness.getStreamConfig();
+		final OperatorID operatorID = new OperatorID(42L, 4711L);
 		streamConfig.setStreamOperator(operator);
-		streamConfig.setOperatorID(new OperatorID(42L, 4711L));
+		streamConfig.setOperatorID(operatorID);
 
 		final AcknowledgeStreamMockEnvironment env = new AcknowledgeStreamMockEnvironment(
 				testHarness.jobConfig,
@@ -555,6 +556,7 @@ public class AsyncWaitOperatorTest extends TestLogger {
 			AsyncDataStream.OutputMode.ORDERED);
 
 		restoredTaskHarness.getStreamConfig().setStreamOperator(restoredOperator);
+		restoredTaskHarness.getStreamConfig().setOperatorID(operatorID);
 
 		restoredTaskHarness.invoke();
 		restoredTaskHarness.waitForTaskRunning();

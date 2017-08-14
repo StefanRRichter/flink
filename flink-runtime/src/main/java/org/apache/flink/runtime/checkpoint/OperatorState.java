@@ -102,15 +102,6 @@ public class OperatorState implements CompositeStateHandle {
 		return maxParallelism;
 	}
 
-	public boolean hasNonPartitionedState() {
-		for (OperatorSubtaskState sts : operatorSubtaskStates.values()) {
-			if (sts != null && sts.getLegacyOperatorState() != null) {
-				return true;
-			}
-		}
-		return false;
-	}
-
 	@Override
 	public void discardState() throws Exception {
 		for (OperatorSubtaskState operatorSubtaskState : operatorSubtaskStates.values()) {
