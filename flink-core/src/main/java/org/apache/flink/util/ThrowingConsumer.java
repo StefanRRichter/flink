@@ -16,20 +16,22 @@
  * limitations under the License.
  */
 
-package org.apache.flink.migration.runtime.state.memory;
-
-import org.apache.flink.annotation.Internal;
-import org.apache.flink.runtime.state.heap.HeapKeyedStateBackend;
-import org.apache.flink.runtime.state.heap.StateTable;
-import org.apache.flink.util.Migration;
-
-import java.io.IOException;
+package org.apache.flink.util;
 
 /**
- * @deprecated Internal class for savepoint backwards compatibility. Don't use for other purposes.
+ * This interface is basically Java's {@link java.util.function.Consumer} interface enhanced with the ability to throw
+ * an exception.
+ *
+ * @param <T> type of the consumed elements.
  */
-@Deprecated
-@Internal
-public interface MigrationRestoreSnapshot<K, N, S> extends Migration {
-	StateTable<K, N, S> deserialize(String stateName, HeapKeyedStateBackend<K> stateBackend) throws IOException;
+@FunctionalInterface
+public interface ThrowingConsumer<T> {
+
+	/**
+	 * Performs this operation on the given argument.
+	 *
+	 * @param t the input argument
+	 * @throws Exception on errors during consumption
+	 */
+	void accept(T t) throws Exception;
 }
