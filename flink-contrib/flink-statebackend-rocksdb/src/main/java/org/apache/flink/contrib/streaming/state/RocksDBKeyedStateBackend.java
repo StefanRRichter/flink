@@ -111,6 +111,8 @@ import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.FutureTask;
 import java.util.concurrent.RunnableFuture;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * A {@link AbstractKeyedStateBackend} that stores its state in {@code RocksDB} and will serialize state to
@@ -128,6 +130,13 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 
 	/** The name of the merge operator in RocksDB. Do not change except you know exactly what you do. */
 	public static final String MERGE_OPERATOR_NAME = "stringappendtest";
+
+	/** Prefix for the subdirectories that contain a local RocksDB checkpoint. */
+	private static final String LOCAL_ROCKSDB_BACKUP_DIRECTORY_PREFIX = "chk-";
+
+	/** Patter to match local RocksDB backup directories. */
+	private static final Pattern LOCAL_ROCKSDB_BACKUP_DIRECTORY_PATTERN =
+		Pattern.compile("^" + LOCAL_ROCKSDB_BACKUP_DIRECTORY_PREFIX + "([0-9]*)$");
 
 	/** File suffix of sstable files. */
 	private static final String SST_FILE_SUFFIX = ".sst";
@@ -750,6 +759,10 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 		}
 	}
 
+	private Path getLocalBackupPathForCheckpointId(long checkpointId) {
+		return new Path(instanceBasePath.getAbsolutePath(), LOCAL_ROCKSDB_BACKUP_DIRECTORY_PREFIX + checkpointId);
+	}
+
 	private static final class RocksDBIncrementalSnapshotOperation<K> {
 
 		/** The backend which we snapshot. */
@@ -770,7 +783,10 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 		/** The state meta data. */
 		private final List<RegisteredKeyedBackendStateMetaInfo.Snapshot<?, ?>> stateMetaInfoSnapshots = new ArrayList<>();
 
+		/** Local filesystem for the RocksDB backup. */
 		private FileSystem backupFileSystem;
+
+		/** Local path for the RocksDB backup. */
 		private Path backupPath;
 
 		// Registry for all opened i/o streams
@@ -892,7 +908,7 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 			}
 
 			// save state data
-			backupPath = new Path(stateBackend.instanceBasePath.getAbsolutePath(), "chk-" + checkpointId);
+			backupPath = stateBackend.getLocalBackupPathForCheckpointId(checkpointId);
 			backupFileSystem = backupPath.getFileSystem();
 			if (backupFileSystem.exists(backupPath)) {
 				throw new IllegalStateException("Unexpected existence of the backup directory.");
@@ -1021,7 +1037,13 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 
 	@Override
 	public void notifyCheckpointComplete(long completedCheckpointId) {
+
+		if (!enableIncrementalCheckpointing) {
+			return;
+		}
+
 		synchronized (materializedSstFiles) {
+
 			if (completedCheckpointId < lastCompletedCheckpointId) {
 				return;
 			}
@@ -1029,6 +1051,44 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 			materializedSstFiles.keySet().removeIf(checkpointId -> checkpointId < completedCheckpointId);
 
 			lastCompletedCheckpointId = completedCheckpointId;
+		}
+
+//TODO!!!
+//		cleanupBackupDirectoriesForReleasedCheckpoints(completedCheckpointId);
+	}
+
+	private void cleanupBackupDirectoriesForReleasedCheckpoints(long completedCheckpointId) {
+
+		try {
+
+			Path backupDirectoryRoot = new Path(instanceBasePath.getAbsolutePath());
+			FileSystem rootFileSystem = backupDirectoryRoot.getFileSystem();
+			FileStatus[] fileStatuses = rootFileSystem.listStatus(backupDirectoryRoot);
+
+			// we search and delete local checkpoint directories of released checkpoints (w.r.t completedCheckpointId)
+			for (FileStatus fileStatus : fileStatuses) {
+
+				if (fileStatus.isDir()) {
+					Path localCheckpointPath = fileStatus.getPath();
+					String subDirName = localCheckpointPath.getName();
+					Matcher matcher = LOCAL_ROCKSDB_BACKUP_DIRECTORY_PATTERN.matcher(subDirName);
+
+					if (matcher.matches()) {
+						long extractedCheckpointId = Long.parseLong(matcher.group(1));
+
+						if (extractedCheckpointId < completedCheckpointId) {
+
+							try {
+								rootFileSystem.delete(localCheckpointPath, true);
+							} catch (IOException e) {
+								LOG.warn("Cannot cleanup local RocksDB checkpoint directory.", e);
+							}
+						}
+					}
+				}
+			}
+		} catch (IOException e) {
+			LOG.warn("Cannot list files in RocksDB instance base path. ", e);
 		}
 	}
 

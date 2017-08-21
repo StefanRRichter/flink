@@ -436,7 +436,7 @@ public abstract class AbstractStreamOperator<OUT>
 	}
 
 	@Override
-	public void notifyOfCompletedCheckpoint(long checkpointId) throws Exception {
+	public void notifyCheckpointComplete(long checkpointId) throws Exception {
 		if (keyedStateBackend != null) {
 			keyedStateBackend.notifyCheckpointComplete(checkpointId);
 		}
