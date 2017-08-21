@@ -305,14 +305,15 @@ public class HeapKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 
 		final Map<String, Integer> kVStateToId = new HashMap<>(stateTables.size());
 
-		final Map<StateTable<K, ?, ?>, StateTableSnapshot> cowStateStableSnapshots = new HashedMap(stateTables.size());
+		final Map<String, StateTableSnapshot> cowStateStableSnapshots = new HashedMap(stateTables.size());
 
 		for (Map.Entry<String, StateTable<K, ?, ?>> kvState : stateTables.entrySet()) {
 			kVStateToId.put(kvState.getKey(), kVStateToId.size());
 			StateTable<K, ?, ?> stateTable = kvState.getValue();
+
 			if (null != stateTable) {
 				metaInfoSnapshots.add(stateTable.getMetaInfo().snapshot());
-				cowStateStableSnapshots.put(stateTable, stateTable.createSnapshot());
+				cowStateStableSnapshots.put(kvState.getKey(), stateTable.createSnapshot());
 			}
 		}
 
@@ -334,6 +335,7 @@ public class HeapKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 
 				@Override
 				public KeyGroupsStateHandle performOperation() throws Exception {
+
 					long asyncStartTime = System.currentTimeMillis();
 
 					CheckpointStreamFactory.CheckpointStateOutputStream stream = getIoHandle();
@@ -351,7 +353,7 @@ public class HeapKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 							OutputStream kgCompressionOut = keyGroupCompressionDecorator.decorateWithCompression(stream);
 							DataOutputViewStreamWrapper kgCompressionView = new DataOutputViewStreamWrapper(kgCompressionOut);
 							kgCompressionView.writeShort(kVStateToId.get(kvState.getKey()));
-							cowStateStableSnapshots.get(kvState.getValue()).writeMappingsInKeyGroup(kgCompressionView, keyGroupId);
+							cowStateStableSnapshots.get(kvState.getKey()).writeMappingsInKeyGroup(kgCompressionView, keyGroupId);
 							kgCompressionOut.close(); // this will just close the outer stream
 						}
 					}
@@ -371,6 +373,14 @@ public class HeapKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 					final KeyGroupsStateHandle keyGroupsStateHandle = new KeyGroupsStateHandle(offsets, streamStateHandle);
 
 					return keyGroupsStateHandle;
+				}
+
+				@Override
+				protected void doAdditionalCleanupWhenDone(boolean canceled) {
+					super.doAdditionalCleanupWhenDone(canceled);
+					for (StateTableSnapshot tableSnapshot : cowStateStableSnapshots.values()) {
+						tableSnapshot.release();
+					}
 				}
 			};
 
