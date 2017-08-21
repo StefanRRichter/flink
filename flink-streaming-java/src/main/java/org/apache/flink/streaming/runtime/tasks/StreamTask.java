@@ -630,7 +630,7 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 
 				for (StreamOperator<?> operator : operatorChain.getAllOperators()) {
 					if (operator != null) {
-						operator.notifyOfCompletedCheckpoint(checkpointId);
+						operator.notifyCheckpointComplete(checkpointId);
 					}
 				}
 			}
@@ -741,7 +741,7 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 				keyGroupRange,
 				getEnvironment().getTaskKvStateRegistry());
 
-		// let keyed state backend participate in the operator lifecycle, i.e. make it responsive to cancelation
+		// let keyed state backend participate in the operator lifecycle, i.e. make it responsive to cancellation
 		cancelables.registerCloseable(keyedStateBackend);
 
 		// restore if we have some old state
@@ -883,7 +883,7 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 				}
 
 				final long asyncEndNanos = System.nanoTime();
-				final long asyncDurationMillis = (asyncEndNanos - asyncStartNanos) / 1_000_000;
+				final long asyncDurationMillis = (asyncEndNanos - asyncStartNanos) / 1_000_000L;
 
 				checkpointMetrics.setAsyncDurationMillis(asyncDurationMillis);
 
