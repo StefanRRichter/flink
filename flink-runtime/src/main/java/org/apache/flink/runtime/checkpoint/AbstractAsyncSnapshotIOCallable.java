@@ -18,13 +18,14 @@
 
 package org.apache.flink.runtime.checkpoint;
 
-import org.apache.commons.io.IOUtils;
 import org.apache.flink.core.fs.CloseableRegistry;
 import org.apache.flink.runtime.io.async.AbstractAsyncIOCallable;
 import org.apache.flink.runtime.state.CheckpointStreamFactory;
 import org.apache.flink.runtime.state.StateObject;
 import org.apache.flink.runtime.state.StreamStateHandle;
 import org.apache.flink.util.Preconditions;
+
+import org.apache.commons.io.IOUtils;
 
 import java.io.IOException;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -82,7 +83,14 @@ public abstract class AbstractAsyncSnapshotIOCallable<H extends StateObject>
 				closeStreamOnCancelRegistry.unregisterClosable(stream);
 				IOUtils.closeQuietly(stream);
 			}
+
 		}
+
+		doAdditionalCleanupWhenDone(canceled);
+	}
+
+	protected void doAdditionalCleanupWhenDone(boolean canceled) {
+
 	}
 
 	protected boolean checkStreamClosedAndDoTransitionToOpen() {
