@@ -1189,7 +1189,7 @@ class TaskManager(
         tdd.getProducedPartitions,
         tdd.getInputGates,
         tdd.getTargetSlotNumber,
-        tdd.getTaskStateHandles,
+        tdd.getTaskRestore,
         memoryManager,
         ioManager,
         network,

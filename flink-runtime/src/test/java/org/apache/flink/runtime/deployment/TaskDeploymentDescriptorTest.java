@@ -23,6 +23,7 @@ import org.apache.flink.api.common.JobID;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.core.testutils.CommonTestUtils;
 import org.apache.flink.runtime.blob.BlobKey;
+import org.apache.flink.runtime.checkpoint.TaskRestore;
 import org.apache.flink.runtime.checkpoint.TaskStateSnapshot;
 import org.apache.flink.runtime.clusterframework.types.AllocationID;
 import org.apache.flink.runtime.executiongraph.ExecutionAttemptID;
@@ -74,6 +75,7 @@ public class TaskDeploymentDescriptorTest {
 				vertexID, taskName, currentNumberOfSubtasks, numberOfKeyGroups, invokableClass.getName(), taskConfiguration));
 			final int targetSlotNumber = 47;
 			final TaskStateSnapshot taskStateHandles = new TaskStateSnapshot();
+			final TaskRestore taskRestore = new TaskRestore(1L, taskStateHandles);
 
 			final TaskDeploymentDescriptor orig = new TaskDeploymentDescriptor(
 				serializedJobInformation,
@@ -83,7 +85,7 @@ public class TaskDeploymentDescriptorTest {
 				indexInSubtaskGroup,
 				attemptNumber,
 				targetSlotNumber,
-				taskStateHandles,
+				taskRestore,
 				producedResults,
 				inputGates);
 
@@ -92,7 +94,7 @@ public class TaskDeploymentDescriptorTest {
 			assertFalse(orig.getSerializedJobInformation() == copy.getSerializedJobInformation());
 			assertFalse(orig.getSerializedTaskInformation() == copy.getSerializedTaskInformation());
 			assertFalse(orig.getExecutionAttemptId() == copy.getExecutionAttemptId());
-			assertFalse(orig.getTaskStateHandles() == copy.getTaskStateHandles());
+			assertFalse(orig.getTaskRestore() == copy.getTaskRestore());
 			assertFalse(orig.getProducedPartitions() == copy.getProducedPartitions());
 			assertFalse(orig.getInputGates() == copy.getInputGates());
 
@@ -103,7 +105,8 @@ public class TaskDeploymentDescriptorTest {
 			assertEquals(orig.getSubtaskIndex(), copy.getSubtaskIndex());
 			assertEquals(orig.getAttemptNumber(), copy.getAttemptNumber());
 			assertEquals(orig.getTargetSlotNumber(), copy.getTargetSlotNumber());
-			assertEquals(orig.getTaskStateHandles(), copy.getTaskStateHandles());
+			assertEquals(orig.getTaskRestore().getRestoreCheckpointId(), copy.getTaskRestore().getRestoreCheckpointId());
+			assertEquals(orig.getTaskRestore().getTaskStateSnapshot(), copy.getTaskRestore().getTaskStateSnapshot());
 			assertEquals(orig.getProducedPartitions(), copy.getProducedPartitions());
 			assertEquals(orig.getInputGates(), copy.getInputGates());
 		}
