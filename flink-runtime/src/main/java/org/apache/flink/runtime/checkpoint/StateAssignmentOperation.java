@@ -51,13 +51,17 @@ public class StateAssignmentOperation {
 
 	private final Map<JobVertexID, ExecutionJobVertex> tasks;
 	private final Map<OperatorID, OperatorState> operatorStates;
+
+	private final long restoreCheckpointId;
 	private final boolean allowNonRestoredState;
 
 	public StateAssignmentOperation(
-			Map<JobVertexID, ExecutionJobVertex> tasks,
-			Map<OperatorID, OperatorState> operatorStates,
-			boolean allowNonRestoredState) {
+		long restoreCheckpointId,
+		Map<JobVertexID, ExecutionJobVertex> tasks,
+		Map<OperatorID, OperatorState> operatorStates,
+		boolean allowNonRestoredState) {
 
+		this.restoreCheckpointId = restoreCheckpointId;
 		this.tasks = Preconditions.checkNotNull(tasks);
 		this.operatorStates = Preconditions.checkNotNull(operatorStates);
 		this.allowNonRestoredState = allowNonRestoredState;
@@ -222,7 +226,8 @@ public class StateAssignmentOperation {
 					taskState.putSubtaskStateByOperatorID(operatorID, operatorSubtaskState);
 				}
 
-				currentExecutionAttempt.setInitialState(taskState);
+				TaskRestore taskRestore = new TaskRestore(restoreCheckpointId, taskState);
+				currentExecutionAttempt.setInitialState(taskRestore);
 			}
 		}
 	}
