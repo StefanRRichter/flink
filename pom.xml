@@ -70,8 +70,8 @@ under the License.
 		<module>flink-tests</module>
 		<module>flink-test-utils-parent</module>
 		<module>flink-libraries</module>
-		<module>flink-scala-shell</module>
-		<module>flink-quickstart</module>
+		<!--<module>flink-scala-shell</module>-->
+		<!--<module>flink-quickstart</module>-->
 		<module>flink-contrib</module>
 		<module>flink-dist</module>
 		<module>flink-mesos</module>

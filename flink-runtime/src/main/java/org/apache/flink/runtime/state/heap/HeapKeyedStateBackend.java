@@ -51,9 +51,13 @@ import org.apache.flink.runtime.state.KeyedBackendSerializationProxy;
 import org.apache.flink.runtime.state.KeyedStateHandle;
 import org.apache.flink.runtime.state.RegisteredKeyedBackendStateMetaInfo;
 import org.apache.flink.runtime.state.SnappyStreamCompressionDecorator;
+import org.apache.flink.runtime.state.StateImageMetaData;
 import org.apache.flink.runtime.state.StreamCompressionDecorator;
 import org.apache.flink.runtime.state.StreamStateHandle;
 import org.apache.flink.runtime.state.UncompressedStreamCompressionDecorator;
+import org.apache.flink.runtime.state.image.HeapFullKeyedStateImage;
+import org.apache.flink.runtime.state.image.KeyedBackendStateImage;
+import org.apache.flink.runtime.state.image.backends.HeapKeyedBackendImageRestore;
 import org.apache.flink.runtime.state.internal.InternalAggregatingState;
 import org.apache.flink.runtime.state.internal.InternalFoldingState;
 import org.apache.flink.runtime.state.internal.InternalListState;
@@ -73,6 +77,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -86,7 +91,7 @@ import java.util.concurrent.RunnableFuture;
  *
  * @param <K> The key by which state is keyed.
  */
-public class HeapKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
+public class HeapKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> implements HeapKeyedBackendImageRestore {
 
 	private static final Logger LOG = LoggerFactory.getLogger(HeapKeyedStateBackend.class);
 
@@ -284,15 +289,25 @@ public class HeapKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 	}
 
 	@Override
+	public void restoreStateFromImage(KeyedBackendStateImage keyedBackendStateImage) throws Exception {
+		keyedBackendStateImage.restoreHeap(this);
+	}
+
+	@Override
+	public void restoreFullFromFile(HeapFullKeyedStateImage image) throws Exception {
+		restore(image.getKeyedStateHandles());
+	}
+
+	@Override
 	@SuppressWarnings("unchecked")
-	public  RunnableFuture<KeyedStateHandle> snapshot(
+	public RunnableFuture<Collection<KeyedBackendStateImage>> snapshot(
 			final long checkpointId,
 			final long timestamp,
 			final CheckpointStreamFactory streamFactory,
 			CheckpointOptions checkpointOptions) throws Exception {
 
 		if (!hasRegisteredState()) {
-			return DoneFuture.nullValue();
+			return DoneFuture.emptyCollectionValue();
 		}
 
 		long syncStartTime = System.currentTimeMillis();
@@ -326,15 +341,15 @@ public class HeapKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 		//--------------------------------------------------- this becomes the end of sync part
 
 		// implementation of the async IO operation, based on FutureTask
-		final AbstractAsyncSnapshotIOCallable<KeyedStateHandle> ioCallable =
-			new AbstractAsyncSnapshotIOCallable<KeyedStateHandle>(
+		final AbstractAsyncSnapshotIOCallable<Collection<KeyedBackendStateImage>> ioCallable =
+			new AbstractAsyncSnapshotIOCallable<Collection<KeyedBackendStateImage>>(
 				checkpointId,
 				timestamp,
 				streamFactory,
 				cancelStreamRegistry) {
 
 				@Override
-				public KeyGroupsStateHandle performOperation() throws Exception {
+				public Collection<KeyedBackendStateImage> performOperation() throws Exception {
 
 					long asyncStartTime = System.currentTimeMillis();
 
@@ -372,7 +387,12 @@ public class HeapKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 					KeyGroupRangeOffsets offsets = new KeyGroupRangeOffsets(keyGroupRange, keyGroupRangeOffsets);
 					final KeyGroupsStateHandle keyGroupsStateHandle = new KeyGroupsStateHandle(offsets, streamStateHandle);
 
-					return keyGroupsStateHandle;
+					HeapFullKeyedStateImage stateImage =
+						new HeapFullKeyedStateImage(
+							new StateImageMetaData(StateImageMetaData.LocalityHint.DFS),
+							Collections.singletonList(keyGroupsStateHandle));
+
+					return Collections.singletonList(stateImage);
 				}
 
 				@Override
@@ -384,7 +404,8 @@ public class HeapKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 				}
 			};
 
-		AsyncStoppableTaskWithCallback<KeyedStateHandle> task = AsyncStoppableTaskWithCallback.from(ioCallable);
+		AsyncStoppableTaskWithCallback<Collection<KeyedBackendStateImage>> task =
+			AsyncStoppableTaskWithCallback.from(ioCallable);
 
 		if (!asynchronousSnapshots) {
 			task.run();
@@ -396,9 +417,7 @@ public class HeapKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 		return task;
 	}
 
-	@SuppressWarnings("deprecation")
-	@Override
-	public void restore(Collection<KeyedStateHandle> restoredState) throws Exception {
+	private void restore(Collection<KeyedStateHandle> restoredState) throws Exception {
 		if (restoredState == null || restoredState.isEmpty()) {
 			return;
 		}

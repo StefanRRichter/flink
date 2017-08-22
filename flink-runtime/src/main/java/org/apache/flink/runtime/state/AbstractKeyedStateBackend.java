@@ -39,6 +39,7 @@ import org.apache.flink.api.common.typeutils.TypeSerializer;
 import org.apache.flink.core.fs.CloseableRegistry;
 import org.apache.flink.runtime.checkpoint.CheckpointOptions;
 import org.apache.flink.runtime.query.TaskKvStateRegistry;
+import org.apache.flink.runtime.state.image.KeyedBackendStateImage;
 import org.apache.flink.runtime.state.internal.InternalAggregatingState;
 import org.apache.flink.runtime.state.internal.InternalFoldingState;
 import org.apache.flink.runtime.state.internal.InternalKvState;
@@ -51,6 +52,7 @@ import org.apache.flink.util.Preconditions;
 
 import java.io.Closeable;
 import java.io.IOException;
+import java.util.Collection;
 import java.util.HashMap;
 
 import static org.apache.flink.util.Preconditions.checkNotNull;
@@ -61,8 +63,11 @@ import static org.apache.flink.util.Preconditions.checkNotNull;
  *
  * @param <K> Type of the key by which state is keyed.
  */
-public abstract class AbstractKeyedStateBackend<K>
-		implements KeyedStateBackend<K>, Snapshotable<KeyedStateHandle>, Closeable, CheckpointListener {
+public abstract class AbstractKeyedStateBackend<K> implements
+	KeyedStateBackend<K>,
+	Snapshotable<Collection<KeyedBackendStateImage>>,
+	Closeable,
+	CheckpointListener {
 
 	/** {@link TypeSerializer} for our key. */
 	protected final TypeSerializer<K> keySerializer;
@@ -398,6 +403,8 @@ public abstract class AbstractKeyedStateBackend<K>
 
 		return state;
 	}
+
+	public abstract void restoreStateFromImage(KeyedBackendStateImage keyedBackendStateImage) throws Exception;
 
 	@Override
 	public void close() throws IOException {

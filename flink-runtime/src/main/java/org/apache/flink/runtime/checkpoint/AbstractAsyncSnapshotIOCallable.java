@@ -21,7 +21,6 @@ package org.apache.flink.runtime.checkpoint;
 import org.apache.flink.core.fs.CloseableRegistry;
 import org.apache.flink.runtime.io.async.AbstractAsyncIOCallable;
 import org.apache.flink.runtime.state.CheckpointStreamFactory;
-import org.apache.flink.runtime.state.StateObject;
 import org.apache.flink.runtime.state.StreamStateHandle;
 import org.apache.flink.util.Preconditions;
 
@@ -35,8 +34,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * {@link java.util.zip.CheckedOutputStream}. This includes participating in lifecycle management
  * through a {@link CloseableRegistry}.
  */
-public abstract class AbstractAsyncSnapshotIOCallable<H extends StateObject>
-	extends AbstractAsyncIOCallable<H, CheckpointStreamFactory.CheckpointStateOutputStream> {
+public abstract class AbstractAsyncSnapshotIOCallable<T>
+	extends AbstractAsyncIOCallable<T, CheckpointStreamFactory.CheckpointStateOutputStream> {
 
 	protected final  long checkpointId;
 	protected final  long timestamp;

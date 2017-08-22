@@ -17,6 +17,8 @@
  */
 package org.apache.flink.runtime.state;
 
+import java.util.Collection;
+import java.util.Collections;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.RunnableFuture;
@@ -31,7 +33,8 @@ import java.util.concurrent.TimeoutException;
  */
 public class DoneFuture<T> implements RunnableFuture<T> {
 
-	private static final DoneFuture<?> NULL_FUTURE = new DoneFuture<Object>(null);
+	private static final DoneFuture<?> NULL_FUTURE = new DoneFuture<>(null);
+	private static final DoneFuture<?> EMPTY_COLLECTION_FUTURE = new DoneFuture<Object>(Collections.emptyList());
 
 	private final T payload;
 
@@ -74,5 +77,10 @@ public class DoneFuture<T> implements RunnableFuture<T> {
 	@SuppressWarnings("unchecked")
 	public static <T> DoneFuture<T> nullValue() {
 		return (DoneFuture<T>) NULL_FUTURE;
+	}
+
+	@SuppressWarnings("unchecked")
+	public static <T> DoneFuture<Collection<T>> emptyCollectionValue() {
+		return (DoneFuture<Collection<T>>) EMPTY_COLLECTION_FUTURE;
 	}
 }
