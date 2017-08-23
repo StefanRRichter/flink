@@ -18,30 +18,43 @@
 
 package org.apache.flink.runtime.state;
 
+import org.apache.flink.api.common.JobID;
+import org.apache.flink.runtime.executiongraph.ExecutionAttemptID;
 import org.apache.flink.runtime.taskmanager.CheckpointResponder;
 import org.apache.flink.util.Preconditions;
 
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.List;
+import java.util.HashMap;
+import java.util.Map;
 
 public class TaskStateManager {
 
-	private final CheckpointResponder checkpointResponder;
-	private final List<SlotStateManager> slotStateManagers;
+	private final Map<JobID, SlotStateManager> slotStateManagers;
 
-	public TaskStateManager(CheckpointResponder checkpointResponder, int numSlots) {
-
-		this.checkpointResponder = Preconditions.checkNotNull(checkpointResponder);
-
-		SlotStateManager[] slotStateManagersArray = new SlotStateManager[numSlots];
-		for (int i = 0; i < slotStateManagersArray.length; ++i) {
-			slotStateManagersArray[i] = new SlotStateManager();
-		}
-		this.slotStateManagers = Collections.unmodifiableList(Arrays.asList(slotStateManagersArray));
+	public TaskStateManager() {
+		this.slotStateManagers = new HashMap<>();
 	}
 
-	public SlotStateManager getSlotStateManager(int slot) {
-		return slotStateManagers.get(slot);
+	public SlotStateManager getSlotStateManager(
+		JobID jobId,
+		ExecutionAttemptID executionAttemptId,
+		CheckpointResponder checkpointResponder) {
+
+		Preconditions.checkNotNull(jobId);
+		Preconditions.checkNotNull(executionAttemptId);
+		Preconditions.checkNotNull(checkpointResponder);
+
+		SlotStateManager previousSlotStateManager = slotStateManagers.get(jobId);
+
+		SlotStateManager newSlotStateManager = new SlotStateManager(jobId, executionAttemptId, checkpointResponder);
+
+		if (previousSlotStateManager != null) {
+			//TODO transfer state from previous to new.
+		}
+
+		return newSlotStateManager;
+	}
+
+	public SlotStateManager release(JobID jobID) {
+		return slotStateManagers.remove(jobID);
 	}
 }

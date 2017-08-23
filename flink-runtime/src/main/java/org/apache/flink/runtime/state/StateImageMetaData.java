@@ -22,7 +22,10 @@ import java.io.Serializable;
 
 public class StateImageMetaData implements Serializable {
 
-	public StateImageMetaData(LocalityHint localityHint) {
+	public static final StateImageMetaData PRIMARY_DFS = new StateImageMetaData(true, LocalityHint.DFS);
+
+	public StateImageMetaData(boolean primary, LocalityHint localityHint) {
+		this.primary = true;
 		this.localityHint = localityHint;
 	}
 
@@ -31,15 +34,21 @@ public class StateImageMetaData implements Serializable {
 	}
 
 	private final LocalityHint localityHint;
+	private boolean primary;
 
 	public LocalityHint getLocalityHint() {
 		return localityHint;
+	}
+
+	public boolean isPrimary() {
+		return primary;
 	}
 
 	@Override
 	public String toString() {
 		return "StateImageMetaData{" +
 			"localityHint=" + localityHint +
+			", primary=" + primary +
 			'}';
 	}
 }

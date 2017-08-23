@@ -37,6 +37,7 @@ import org.apache.flink.runtime.jobgraph.tasks.InputSplitProvider;
 import org.apache.flink.runtime.memory.MemoryManager;
 import org.apache.flink.runtime.metrics.groups.TaskMetricGroup;
 import org.apache.flink.runtime.query.TaskKvStateRegistry;
+import org.apache.flink.runtime.state.SlotStateManager;
 
 import java.util.Map;
 import java.util.concurrent.Future;
@@ -63,6 +64,7 @@ public class RuntimeEnvironment implements Environment {
 	private final MemoryManager memManager;
 	private final IOManager ioManager;
 	private final BroadcastVariableManager bcVarManager;
+	private final SlotStateManager slotStateManager;
 	private final InputSplitProvider splitProvider;
 	
 	private final Map<String, Future<Path>> distCacheEntries;
@@ -95,6 +97,7 @@ public class RuntimeEnvironment implements Environment {
 			MemoryManager memManager,
 			IOManager ioManager,
 			BroadcastVariableManager bcVarManager,
+			SlotStateManager slotStateManager,
 			AccumulatorRegistry accumulatorRegistry,
 			TaskKvStateRegistry kvStateRegistry,
 			InputSplitProvider splitProvider,
@@ -117,6 +120,7 @@ public class RuntimeEnvironment implements Environment {
 		this.memManager = checkNotNull(memManager);
 		this.ioManager = checkNotNull(ioManager);
 		this.bcVarManager = checkNotNull(bcVarManager);
+		this.slotStateManager = checkNotNull(slotStateManager);
 		this.accumulatorRegistry = checkNotNull(accumulatorRegistry);
 		this.kvStateRegistry = checkNotNull(kvStateRegistry);
 		this.splitProvider = checkNotNull(splitProvider);
@@ -194,6 +198,11 @@ public class RuntimeEnvironment implements Environment {
 	@Override
 	public BroadcastVariableManager getBroadcastVariableManager() {
 		return bcVarManager;
+	}
+
+	@Override
+	public SlotStateManager getSlotStateManager() {
+		return slotStateManager;
 	}
 
 	@Override

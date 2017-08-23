@@ -219,7 +219,7 @@ public class RocksDBListStateTest {
 				new KeyGroupRange(2, 3),
 				mock(TaskKvStateRegistry.class));
 
-		keyedBackend.restore(null);
+		keyedBackend.restoreStateFromImage(null);
 
 		return keyedBackend;
 	}

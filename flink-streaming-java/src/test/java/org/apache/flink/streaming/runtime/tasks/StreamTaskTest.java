@@ -66,8 +66,10 @@ import org.apache.flink.runtime.state.KeyGroupRange;
 import org.apache.flink.runtime.state.KeyedStateHandle;
 import org.apache.flink.runtime.state.OperatorStateBackend;
 import org.apache.flink.runtime.state.OperatorStateHandle;
+import org.apache.flink.runtime.state.SlotStateManager;
 import org.apache.flink.runtime.state.StateBackendFactory;
 import org.apache.flink.runtime.state.StreamStateHandle;
+import org.apache.flink.runtime.state.image.KeyedBackendStateImage;
 import org.apache.flink.runtime.taskmanager.CheckpointResponder;
 import org.apache.flink.runtime.taskmanager.Task;
 import org.apache.flink.runtime.taskmanager.TaskExecutionState;
@@ -107,6 +109,7 @@ import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.net.URL;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
@@ -455,7 +458,9 @@ public class StreamTaskTest extends TestLogger {
 
 		StreamOperator<?> streamOperator = mock(StreamOperator.class);
 
-		KeyedStateHandle managedKeyedStateHandle = mock(KeyedStateHandle.class);
+		Collection<KeyedBackendStateImage> managedKeyedStateHandle =
+			Collections.singletonList(mock(KeyedBackendStateImage.class));
+
 		KeyedStateHandle rawKeyedStateHandle = mock(KeyedStateHandle.class);
 		OperatorStateHandle managedOperatorStateHandle = mock(OperatorStateHandle.class);
 		OperatorStateHandle rawOperatorStateHandle = mock(OperatorStateHandle.class);
@@ -512,7 +517,10 @@ public class StreamTaskTest extends TestLogger {
 		assertEquals(Collections.singletonList(rawOperatorStateHandle), subtaskState.getRawOperatorState());
 
 		// check that the state handles have not been discarded
-		verify(managedKeyedStateHandle, never()).discardState();
+		for (KeyedBackendStateImage stateImage : managedKeyedStateHandle) {
+			verify(stateImage, never()).discardState();
+		}
+
 		verify(rawKeyedStateHandle, never()).discardState();
 		verify(managedOperatorStateHandle, never()).discardState();
 		verify(rawOperatorStateHandle, never()).discardState();
@@ -523,7 +531,9 @@ public class StreamTaskTest extends TestLogger {
 
 		// canceling the stream task after it has acknowledged the checkpoint should not discard
 		// the state handles
-		verify(managedKeyedStateHandle, never()).discardState();
+		for (KeyedBackendStateImage stateImage : managedKeyedStateHandle) {
+			verify(stateImage, never()).discardState();
+		}
 		verify(rawKeyedStateHandle, never()).discardState();
 		verify(managedOperatorStateHandle, never()).discardState();
 		verify(rawOperatorStateHandle, never()).discardState();
@@ -580,7 +590,9 @@ public class StreamTaskTest extends TestLogger {
 		final OperatorID operatorID = new OperatorID();
 		when(streamOperator.getOperatorID()).thenReturn(operatorID);
 
-		KeyedStateHandle managedKeyedStateHandle = mock(KeyedStateHandle.class);
+		Collection<KeyedBackendStateImage> managedKeyedStateHandle =
+			Collections.singletonList(mock(KeyedBackendStateImage.class));
+
 		KeyedStateHandle rawKeyedStateHandle = mock(KeyedStateHandle.class);
 		OperatorStateHandle managedOperatorStateHandle = mock(OperatorStateHandle.class);
 		OperatorStateHandle rawOperatorStateHandle = mock(OperatorStateHandle.class);
@@ -640,7 +652,9 @@ public class StreamTaskTest extends TestLogger {
 		verify(mockEnvironment, never()).acknowledgeCheckpoint(eq(checkpointId), any(CheckpointMetrics.class), any(TaskStateSnapshot.class));
 
 		// check that the state handles have been discarded
-		verify(managedKeyedStateHandle).discardState();
+		for (KeyedBackendStateImage stateImage : managedKeyedStateHandle) {
+			verify(stateImage).discardState();
+		}
 		verify(rawKeyedStateHandle).discardState();
 		verify(managedOperatorStateHandle).discardState();
 		verify(rawOperatorStateHandle).discardState();
@@ -812,6 +826,7 @@ public class StreamTaskTest extends TestLogger {
 			mock(IOManager.class),
 			network,
 			mock(BroadcastVariableManager.class),
+			mock(SlotStateManager.class),
 			mock(TaskManagerActions.class),
 			mock(InputSplitProvider.class),
 			mock(CheckpointResponder.class),

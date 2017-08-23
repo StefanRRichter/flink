@@ -290,7 +290,9 @@ public class HeapKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> imple
 
 	@Override
 	public void restoreStateFromImage(KeyedBackendStateImage keyedBackendStateImage) throws Exception {
-		keyedBackendStateImage.restoreHeap(this);
+		if (keyedBackendStateImage != null) {
+			keyedBackendStateImage.restoreHeap(this);
+		}
 	}
 
 	@Override
@@ -389,7 +391,7 @@ public class HeapKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> imple
 
 					HeapFullKeyedStateImage stateImage =
 						new HeapFullKeyedStateImage(
-							new StateImageMetaData(StateImageMetaData.LocalityHint.DFS),
+							new StateImageMetaData(true, StateImageMetaData.LocalityHint.DFS),
 							Collections.singletonList(keyGroupsStateHandle));
 
 					return Collections.singletonList(stateImage);

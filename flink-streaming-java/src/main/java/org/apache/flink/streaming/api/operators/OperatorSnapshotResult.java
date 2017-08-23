@@ -21,8 +21,10 @@ package org.apache.flink.streaming.api.operators;
 import org.apache.flink.runtime.state.KeyedStateHandle;
 import org.apache.flink.runtime.state.OperatorStateHandle;
 import org.apache.flink.runtime.state.StateUtil;
+import org.apache.flink.runtime.state.image.KeyedBackendStateImage;
 import org.apache.flink.util.ExceptionUtils;
 
+import java.util.Collection;
 import java.util.concurrent.RunnableFuture;
 
 /**
@@ -30,7 +32,7 @@ import java.util.concurrent.RunnableFuture;
  */
 public class OperatorSnapshotResult {
 
-	private RunnableFuture<KeyedStateHandle> keyedStateManagedFuture;
+	private RunnableFuture<Collection<KeyedBackendStateImage>> keyedStateManagedFuture;
 	private RunnableFuture<KeyedStateHandle> keyedStateRawFuture;
 	private RunnableFuture<OperatorStateHandle> operatorStateManagedFuture;
 	private RunnableFuture<OperatorStateHandle> operatorStateRawFuture;
@@ -40,21 +42,22 @@ public class OperatorSnapshotResult {
 	}
 
 	public OperatorSnapshotResult(
-			RunnableFuture<KeyedStateHandle> keyedStateManagedFuture,
-			RunnableFuture<KeyedStateHandle> keyedStateRawFuture,
-			RunnableFuture<OperatorStateHandle> operatorStateManagedFuture,
-			RunnableFuture<OperatorStateHandle> operatorStateRawFuture) {
+		RunnableFuture<Collection<KeyedBackendStateImage>> keyedStateManagedFuture,
+		RunnableFuture<KeyedStateHandle> keyedStateRawFuture,
+		RunnableFuture<OperatorStateHandle> operatorStateManagedFuture,
+		RunnableFuture<OperatorStateHandle> operatorStateRawFuture) {
+
 		this.keyedStateManagedFuture = keyedStateManagedFuture;
 		this.keyedStateRawFuture = keyedStateRawFuture;
 		this.operatorStateManagedFuture = operatorStateManagedFuture;
 		this.operatorStateRawFuture = operatorStateRawFuture;
 	}
 
-	public RunnableFuture<KeyedStateHandle> getKeyedStateManagedFuture() {
+	public RunnableFuture<Collection<KeyedBackendStateImage>> getKeyedStateManagedFuture() {
 		return keyedStateManagedFuture;
 	}
 
-	public void setKeyedStateManagedFuture(RunnableFuture<KeyedStateHandle> keyedStateManagedFuture) {
+	public void setKeyedStateManagedFuture(RunnableFuture<Collection<KeyedBackendStateImage>> keyedStateManagedFuture) {
 		this.keyedStateManagedFuture = keyedStateManagedFuture;
 	}
 
@@ -86,7 +89,7 @@ public class OperatorSnapshotResult {
 		Exception exception = null;
 
 		try {
-			StateUtil.discardStateFuture(getKeyedStateManagedFuture());
+			StateUtil.discardStateCollectionFuture(getKeyedStateManagedFuture());
 		} catch (Exception e) {
 			exception = ExceptionUtils.firstOrSuppressed(
 				new Exception("Could not properly cancel managed keyed state future.", e),

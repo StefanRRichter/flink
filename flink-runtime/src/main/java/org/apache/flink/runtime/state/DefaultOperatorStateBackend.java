@@ -295,6 +295,7 @@ public class DefaultOperatorStateBackend implements OperatorStateBackend {
 		return task;
 	}
 
+	@Override
 	public void restore(Collection<OperatorStateHandle> restoreSnapshots) throws Exception {
 
 		if (null == restoreSnapshots) {

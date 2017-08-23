@@ -43,7 +43,10 @@ import org.apache.flink.runtime.state.KeyGroupRange;
 import org.apache.flink.runtime.state.KeyedStateHandle;
 import org.apache.flink.runtime.state.OperatorStateBackend;
 import org.apache.flink.runtime.state.OperatorStateHandle;
+import org.apache.flink.runtime.state.OperatorSubtaskStateReport;
+import org.apache.flink.runtime.state.SlotStateManager;
 import org.apache.flink.runtime.state.StateBackend;
+import org.apache.flink.runtime.state.image.KeyedBackendStateImage;
 import org.apache.flink.runtime.taskmanager.DispatcherThreadFactory;
 import org.apache.flink.streaming.api.TimeCharacteristic;
 import org.apache.flink.streaming.api.graph.StreamConfig;
@@ -53,6 +56,7 @@ import org.apache.flink.streaming.api.operators.StreamOperator;
 import org.apache.flink.streaming.runtime.io.RecordWriterOutput;
 import org.apache.flink.streaming.runtime.streamrecord.StreamRecord;
 import org.apache.flink.streaming.runtime.streamstatus.StreamStatusMaintainer;
+import org.apache.flink.streaming.util.StateHandleToStateImageConverter;
 import org.apache.flink.util.ExceptionUtils;
 import org.apache.flink.util.FutureUtil;
 import org.apache.flink.util.Preconditions;
@@ -750,8 +754,13 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 				taskStateSnapshot.getSubtaskStateByOperatorID(headOperator.getOperatorID());
 			restoreKeyedStateHandles = stateByOperatorID != null ? stateByOperatorID.getManagedKeyedState() : null;
 		}
+		KeyedBackendStateImage stateImage = null;
+		if (restoreKeyedStateHandles != null && !restoreKeyedStateHandles.isEmpty()) {
+			//TODO!!!!!!!!! remove ugly winning
+			stateImage = StateHandleToStateImageConverter.convert(keyedStateBackend, restoreKeyedStateHandles);
+		}
 
-		keyedStateBackend.restore(restoreKeyedStateHandles);
+		keyedStateBackend.restoreStateFromImage(stateImage);
 
 		@SuppressWarnings("unchecked")
 		AbstractKeyedStateBackend<K> typedBackend = (AbstractKeyedStateBackend<K>) keyedStateBackend;
@@ -859,25 +868,24 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 		@Override
 		public void run() {
 			FileSystemSafetyNet.initializeSafetyNetForThread();
+			final long checkpointId = checkpointMetaData.getCheckpointId();
 			try {
-				boolean hasState = false;
-				final TaskStateSnapshot taskOperatorSubtaskStates =
-					new TaskStateSnapshot(operatorSnapshotsInProgress.size());
+
+				Map<OperatorID, OperatorSubtaskStateReport> stateReportsByOperator =
+					new HashMap<>(operatorSnapshotsInProgress.size());
 
 				for (Map.Entry<OperatorID, OperatorSnapshotResult> entry : operatorSnapshotsInProgress.entrySet()) {
-
 					OperatorID operatorID = entry.getKey();
 					OperatorSnapshotResult snapshotInProgress = entry.getValue();
 
-					OperatorSubtaskState operatorSubtaskState = new OperatorSubtaskState(
+					OperatorSubtaskStateReport operatorSubtaskStateReport = new OperatorSubtaskStateReport(
 						FutureUtil.runIfNotDoneAndGet(snapshotInProgress.getOperatorStateManagedFuture()),
 						FutureUtil.runIfNotDoneAndGet(snapshotInProgress.getOperatorStateRawFuture()),
 						FutureUtil.runIfNotDoneAndGet(snapshotInProgress.getKeyedStateManagedFuture()),
 						FutureUtil.runIfNotDoneAndGet(snapshotInProgress.getKeyedStateRawFuture())
 					);
 
-					hasState |= operatorSubtaskState.hasState();
-					taskOperatorSubtaskStates.putSubtaskStateByOperatorID(operatorID, operatorSubtaskState);
+					stateReportsByOperator.put(operatorID, operatorSubtaskStateReport);
 				}
 
 				final long asyncEndNanos = System.nanoTime();
@@ -888,26 +896,19 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 				if (asyncCheckpointState.compareAndSet(CheckpointingOperation.AsynCheckpointState.RUNNING,
 						CheckpointingOperation.AsynCheckpointState.COMPLETED)) {
 
-					TaskStateSnapshot acknowledgedState = hasState ? taskOperatorSubtaskStates : null;
-
-					// we signal stateless tasks by reporting null, so that there are no attempts to assign empty state
-					// to stateless tasks on restore. This enables simple job modifications that only concern
-					// stateless without the need to assign them uids to match their (always empty) states.
-					owner.getEnvironment().acknowledgeCheckpoint(
-						checkpointMetaData.getCheckpointId(),
-						checkpointMetrics,
-						acknowledgedState);
+					SlotStateManager slotStateManager = owner.getEnvironment().getSlotStateManager();
+					slotStateManager.reportStates(checkpointMetaData, checkpointMetrics, stateReportsByOperator);
 
 					LOG.debug("{} - finished asynchronous part of checkpoint {}. Asynchronous duration: {} ms",
-						owner.getName(), checkpointMetaData.getCheckpointId(), asyncDurationMillis);
+						owner.getName(), checkpointId, asyncDurationMillis);
 
 					LOG.trace("{} - reported the following states in snapshot for checkpoint {}: {}.",
-						owner.getName(), checkpointMetaData.getCheckpointId(), acknowledgedState);
+						owner.getName(), checkpointId, stateReportsByOperator);
 
 				} else {
 					LOG.debug("{} - asynchronous part of checkpoint {} could not be completed because it was closed before.",
 						owner.getName(),
-						checkpointMetaData.getCheckpointId());
+						checkpointId);
 				}
 			} catch (Exception e) {
 				// the state is completed if an exception occurred in the acknowledgeCheckpoint call
@@ -925,7 +926,7 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 				// registers the exception and tries to fail the whole task
 				AsynchronousException asyncException = new AsynchronousException(
 					new Exception(
-						"Could not materialize checkpoint " + checkpointMetaData.getCheckpointId() +
+						"Could not materialize checkpoint " + checkpointId +
 							" for operator " + owner.getName() + '.',
 						e));
 

@@ -50,6 +50,7 @@ import org.apache.flink.runtime.jobgraph.tasks.InputSplitProvider;
 import org.apache.flink.runtime.memory.MemoryManager;
 import org.apache.flink.runtime.operators.testutils.UnregisteredTaskMetricsGroup;
 import org.apache.flink.runtime.query.TaskKvStateRegistry;
+import org.apache.flink.runtime.state.SlotStateManager;
 import org.apache.flink.runtime.taskexecutor.TaskManagerConfiguration;
 import org.apache.flink.runtime.taskmanager.CheckpointResponder;
 import org.apache.flink.runtime.taskmanager.Task;
@@ -160,6 +161,8 @@ public class JvmExitOnFatalErrorTest {
 
 				final Executor executor = Executors.newCachedThreadPool();
 
+				final SlotStateManager slotStateManager = new SlotStateManager(jid, executionAttemptID, mock(CheckpointResponder.class));
+
 				Task task = new Task(
 						jobInformation,
 						taskInformation,
@@ -175,6 +178,7 @@ public class JvmExitOnFatalErrorTest {
 						ioManager,
 						networkEnvironment,
 						new BroadcastVariableManager(),
+						slotStateManager,
 						new NoOpTaskManagerActions(),
 						new NoOpInputSplitProvider(),
 						new NoOpCheckpointResponder(),

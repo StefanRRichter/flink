@@ -223,7 +223,8 @@ public class AbstractStreamOperatorTestHarness<OUT> {
 					mockTask.getCancelables().registerClosable(osb);
 
 					if (null != stateHandles) {
-						osb.restore(stateHandles);
+						//TODO!!!!!!!!! also call if is null?
+//						osb.restore(stateHandles);
 					}
 
 					return osb;
@@ -461,7 +462,8 @@ public class AbstractStreamOperatorTestHarness<OUT> {
 			timestamp,
 			CheckpointOptions.forFullCheckpoint());
 
-		KeyedStateHandle keyedManaged = FutureUtil.runIfNotDoneAndGet(operatorStateResult.getKeyedStateManagedFuture());
+		//TODO!!!!!!!!!!!!!!
+		KeyedStateHandle keyedManaged = null;//FutureUtil.runIfNotDoneAndGet(operatorStateResult.getKeyedStateManagedFuture());
 		KeyedStateHandle keyedRaw = FutureUtil.runIfNotDoneAndGet(operatorStateResult.getKeyedStateRawFuture());
 
 		OperatorStateHandle opManaged = FutureUtil.runIfNotDoneAndGet(operatorStateResult.getOperatorStateManagedFuture());

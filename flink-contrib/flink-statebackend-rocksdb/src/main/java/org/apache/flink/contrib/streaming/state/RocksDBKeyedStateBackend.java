@@ -614,7 +614,7 @@ public class RocksDBKeyedStateBackend<K>
 		public Collection<KeyedBackendStateImage> getSnapshotResultStateHandle() {
 
 			KeyedBackendStateImage stateImage = new RocksDBFullKeyedStateImage(
-				new StateImageMetaData(StateImageMetaData.LocalityHint.DFS),
+				new StateImageMetaData(true, StateImageMetaData.LocalityHint.DFS),
 				Collections.singletonList(snapshotResultStateHandle));
 
 			return Collections.singletonList(stateImage);
@@ -981,7 +981,7 @@ public class RocksDBKeyedStateBackend<K>
 
 			RocksDBIncrementalKeyedStateImage stateImage =
 				new RocksDBIncrementalKeyedStateImage(
-					new StateImageMetaData(StateImageMetaData.LocalityHint.DFS),
+					new StateImageMetaData(true, StateImageMetaData.LocalityHint.DFS),
 					Collections.singletonList(incrementalKeyedStateHandle));
 			return Collections.singletonList(stateImage);
 		}

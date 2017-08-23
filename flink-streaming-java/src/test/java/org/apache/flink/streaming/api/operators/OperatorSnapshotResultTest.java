@@ -20,10 +20,13 @@ package org.apache.flink.streaming.api.operators;
 
 import org.apache.flink.runtime.state.KeyedStateHandle;
 import org.apache.flink.runtime.state.OperatorStateHandle;
+import org.apache.flink.runtime.state.image.KeyedBackendStateImage;
 import org.apache.flink.util.TestLogger;
 
 import org.junit.Test;
 
+import java.util.Collection;
+import java.util.Collections;
 import java.util.concurrent.RunnableFuture;
 
 import static org.mockito.Mockito.mock;
@@ -45,9 +48,9 @@ public class OperatorSnapshotResultTest extends TestLogger {
 
 		operatorSnapshotResult.cancel();
 
-		KeyedStateHandle keyedManagedStateHandle = mock(KeyedStateHandle.class);
-		RunnableFuture<KeyedStateHandle> keyedStateManagedFuture = mock(RunnableFuture.class);
-		when(keyedStateManagedFuture.get()).thenReturn(keyedManagedStateHandle);
+		KeyedBackendStateImage keyedManagedStateHandle = mock(KeyedBackendStateImage.class);
+		RunnableFuture<Collection<KeyedBackendStateImage>> keyedStateManagedFuture = mock(RunnableFuture.class);
+		when(keyedStateManagedFuture.get()).thenReturn(Collections.singletonList(keyedManagedStateHandle));
 
 		KeyedStateHandle keyedRawStateHandle = mock(KeyedStateHandle.class);
 		RunnableFuture<KeyedStateHandle> keyedStateRawFuture = mock(RunnableFuture.class);

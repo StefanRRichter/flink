@@ -1842,8 +1842,8 @@ public abstract class StateBackendTestBase<B extends AbstractStateBackend> exten
 		backend.dispose();
 
 		//TODO !!!!!!!???? revisit
-		RocksDBFullKeyedStateImage firstStateImage = new RocksDBFullKeyedStateImage(new StateImageMetaData(StateImageMetaData.LocalityHint.DFS), convertCollection(firstHalfKeyGroupStates));
-		RocksDBFullKeyedStateImage secondStateImage = new RocksDBFullKeyedStateImage(new StateImageMetaData(StateImageMetaData.LocalityHint.DFS), convertCollection(secondHalfKeyGroupStates));
+		RocksDBFullKeyedStateImage firstStateImage = new RocksDBFullKeyedStateImage(new StateImageMetaData(true, StateImageMetaData.LocalityHint.DFS), convertCollection(firstHalfKeyGroupStates));
+		RocksDBFullKeyedStateImage secondStateImage = new RocksDBFullKeyedStateImage(new StateImageMetaData(true, StateImageMetaData.LocalityHint.DFS), convertCollection(secondHalfKeyGroupStates));
 
 		// backend for the first half of the key group range
 		final AbstractKeyedStateBackend<Integer> firstHalfBackend = restoreKeyedBackend(
