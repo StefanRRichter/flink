@@ -404,7 +404,7 @@ public abstract class AbstractKeyedStateBackend<K> implements
 		return state;
 	}
 
-	public abstract void restoreStateFromImage(KeyedBackendStateImage keyedBackendStateImage) throws Exception;
+	public abstract void restoreStateFromImage(KeyedBackendStateImage<?> keyedBackendStateImage) throws Exception;
 
 	@Override
 	public void close() throws IOException {

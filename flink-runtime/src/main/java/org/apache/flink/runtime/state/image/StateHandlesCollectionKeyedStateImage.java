@@ -18,6 +18,7 @@
 
 package org.apache.flink.runtime.state.image;
 
+import org.apache.flink.runtime.state.AbstractKeyedStateBackend;
 import org.apache.flink.runtime.state.KeyedStateHandle;
 import org.apache.flink.runtime.state.StateImageMetaData;
 import org.apache.flink.runtime.state.StateObject;
@@ -27,7 +28,8 @@ import org.apache.flink.util.Preconditions;
 import java.util.Collection;
 import java.util.Collections;
 
-public abstract class StateHandlesCollectionKeyedStateImage<T extends KeyedStateHandle> extends KeyedBackendStateImage {
+public abstract class StateHandlesCollectionKeyedStateImage
+	<B extends AbstractKeyedStateBackend<?>, T extends KeyedStateHandle> extends KeyedBackendStateImage<B> {
 
 	private static final long serialVersionUID = 1L;
 

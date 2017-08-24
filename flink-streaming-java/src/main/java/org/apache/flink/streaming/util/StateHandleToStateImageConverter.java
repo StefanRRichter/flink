@@ -19,16 +19,11 @@
 package org.apache.flink.streaming.util;
 
 import org.apache.flink.runtime.state.AbstractKeyedStateBackend;
-import org.apache.flink.runtime.state.IncrementalKeyedStateHandle;
-import org.apache.flink.runtime.state.KeyGroupsStateHandle;
 import org.apache.flink.runtime.state.KeyedStateHandle;
 import org.apache.flink.runtime.state.StateImageMetaData;
+import org.apache.flink.runtime.state.heap.HeapKeyedStateBackend;
 import org.apache.flink.runtime.state.image.HeapFullKeyedStateImage;
 import org.apache.flink.runtime.state.image.KeyedBackendStateImage;
-import org.apache.flink.runtime.state.image.RocksDBFullKeyedStateImage;
-import org.apache.flink.runtime.state.image.RocksDBIncrementalKeyedStateImage;
-import org.apache.flink.runtime.state.image.backends.HeapKeyedBackendImageRestore;
-import org.apache.flink.runtime.state.image.backends.RocksDBKeyedStateImageRestore;
 
 import java.util.Collection;
 
@@ -47,19 +42,20 @@ public class StateHandleToStateImageConverter {
 			return null;
 		}
 
-		if (backend instanceof RocksDBKeyedStateImageRestore) {
-
-			KeyedStateHandle sampleStateHandle = stateHandles.iterator().next();
-
-			if(sampleStateHandle instanceof IncrementalKeyedStateHandle) {
-				return new RocksDBIncrementalKeyedStateImage(StateImageMetaData.PRIMARY_DFS, (Collection) stateHandles);
-			} else if (sampleStateHandle instanceof KeyGroupsStateHandle) {
-				return new RocksDBFullKeyedStateImage(StateImageMetaData.PRIMARY_DFS, (Collection) stateHandles);
-			} else {
-				throw new IllegalArgumentException("Unexpected state handle type: "+sampleStateHandle);
-			}
-
-		} else if (backend instanceof HeapKeyedBackendImageRestore) {
+//		if (backend instanceof RocksDBKeyedStateImageRestore) {
+//
+//			KeyedStateHandle sampleStateHandle = stateHandles.iterator().next();
+//
+//			if(sampleStateHandle instanceof IncrementalKeyedStateHandle) {
+//				return new RocksDBIncrementalKeyedStateImage(StateImageMetaData.PRIMARY_DFS, (Collection) stateHandles);
+//			} else if (sampleStateHandle instanceof KeyGroupsStateHandle) {
+//				return new RocksDBFullKeyedStateImage(StateImageMetaData.PRIMARY_DFS, (Collection) stateHandles);
+//			} else {
+//				throw new IllegalArgumentException("Unexpected state handle type: "+sampleStateHandle);
+//			}
+//
+//		} else
+		if (backend instanceof HeapKeyedStateBackend) {
 			return new HeapFullKeyedStateImage(StateImageMetaData.PRIMARY_DFS, stateHandles);
 		} else {
 			throw new IllegalArgumentException("Unexpected backend type: " + backend);

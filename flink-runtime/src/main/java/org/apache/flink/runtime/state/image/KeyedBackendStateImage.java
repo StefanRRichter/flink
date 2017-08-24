@@ -18,16 +18,17 @@
 
 package org.apache.flink.runtime.state.image;
 
+import org.apache.flink.runtime.state.AbstractKeyedStateBackend;
 import org.apache.flink.runtime.state.StateImageMetaData;
 import org.apache.flink.runtime.state.StateObject;
-import org.apache.flink.runtime.state.image.backends.HeapKeyedBackendImageRestore;
-import org.apache.flink.runtime.state.image.backends.RocksDBKeyedStateImageRestore;
 import org.apache.flink.util.Preconditions;
+
+import java.lang.reflect.Method;
 
 /**
  * TODO introduce RestoreException ?
  */
-public abstract class KeyedBackendStateImage implements StateObject {
+public abstract class KeyedBackendStateImage<T extends AbstractKeyedStateBackend<?>> implements StateObject {
 
 	private static final long serialVersionUID = 1L;
 
@@ -37,21 +38,58 @@ public abstract class KeyedBackendStateImage implements StateObject {
 		this.stateImageMetaData = Preconditions.checkNotNull(stateImageMetaData);
 	}
 
-	public void restoreHeap(HeapKeyedBackendImageRestore heapKeyedStateBackend) throws Exception {
-		throwUnsupportedOperationException(heapKeyedStateBackend);
+	public void restore(AbstractKeyedStateBackend<?> backend) throws Exception {
+		Method m = this.getClass().getDeclaredMethod("doRestore", backend.getClass());
+		m.invoke(this, backend);
 	}
 
-	public void restoreRocksDB(RocksDBKeyedStateImageRestore rocksDBKeyedStateBackend) throws Exception {
-		throwUnsupportedOperationException(rocksDBKeyedStateBackend);
-	}
+	abstract protected void doRestore(T backend) throws Exception;
 
 	public StateImageMetaData getStateImageMetaData() {
 		return stateImageMetaData;
 	}
-
-	private void throwUnsupportedOperationException(Object o) {
-		Preconditions.checkNotNull(o);
-		throw new UnsupportedOperationException(
-			"This state image does not support restoring to an instance of " + o.getClass().getSimpleName() + ".");
-	}
 }
+
+//
+//abstract class Restorer<B extends AbstractKeyedStateBackend<?>, I extends KeyedBackendStateImage> {
+//
+//	protected final Class<? extends B> backendClass;
+//	protected final Class<? extends I> imageClass;
+//
+//	protected Restorer(Class<? extends B> backendClass, Class<? extends I> imageClass) {
+//		this.backendClass = backendClass;
+//		this.imageClass = imageClass;
+//	}
+//
+//	void restore(AbstractKeyedStateBackend<?> backend, KeyedBackendStateImage image) {
+//		restoreInternal(getBackendClass().cast(backend), getImageClass().cast(image));
+//	}
+//
+//	abstract void restoreInternal(B b, I i);
+//
+//	public Class<? extends B> getBackendClass() {
+//		return backendClass;
+//	}
+//
+//	public Class<? extends I> getImageClass() {
+//		return imageClass;
+//	}
+//}
+//
+//class XXX {
+//
+//	Map<Tuple2<Class<?>, Class<?>>, Restorer<?, ?>> mappings;
+//
+//	<B extends AbstractKeyedStateBackend<?>, I extends KeyedBackendStateImage> void put(
+//		Class<? extends B> cB,
+//		Class<? extends I> cI,
+//		Restorer<B, I> r) {
+//
+//		mappings.put(new Tuple2<>(cB, cI), r);
+//	}
+//
+//	void restore(AbstractKeyedStateBackend b, KeyedBackendStateImage i) {
+//		mappings.get(new Tuple2<>(b.getClass(), i.getClass())).restore(b, i);
+//	}
+//}
+

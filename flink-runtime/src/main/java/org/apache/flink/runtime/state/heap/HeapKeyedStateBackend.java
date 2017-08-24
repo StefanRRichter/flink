@@ -57,7 +57,6 @@ import org.apache.flink.runtime.state.StreamStateHandle;
 import org.apache.flink.runtime.state.UncompressedStreamCompressionDecorator;
 import org.apache.flink.runtime.state.image.HeapFullKeyedStateImage;
 import org.apache.flink.runtime.state.image.KeyedBackendStateImage;
-import org.apache.flink.runtime.state.image.backends.HeapKeyedBackendImageRestore;
 import org.apache.flink.runtime.state.internal.InternalAggregatingState;
 import org.apache.flink.runtime.state.internal.InternalFoldingState;
 import org.apache.flink.runtime.state.internal.InternalListState;
@@ -91,7 +90,7 @@ import java.util.concurrent.RunnableFuture;
  *
  * @param <K> The key by which state is keyed.
  */
-public class HeapKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> implements HeapKeyedBackendImageRestore {
+public class HeapKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 
 	private static final Logger LOG = LoggerFactory.getLogger(HeapKeyedStateBackend.class);
 
@@ -289,13 +288,12 @@ public class HeapKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> imple
 	}
 
 	@Override
-	public void restoreStateFromImage(KeyedBackendStateImage keyedBackendStateImage) throws Exception {
+	public void restoreStateFromImage(KeyedBackendStateImage<?> keyedBackendStateImage) throws Exception {
 		if (keyedBackendStateImage != null) {
-			keyedBackendStateImage.restoreHeap(this);
+			keyedBackendStateImage.restore(this);
 		}
 	}
 
-	@Override
 	public void restoreFullFromFile(HeapFullKeyedStateImage image) throws Exception {
 		restore(image.getKeyedStateHandles());
 	}

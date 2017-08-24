@@ -32,6 +32,8 @@ import org.apache.flink.api.common.typeutils.UnloadableDummyTypeSerializer;
 import org.apache.flink.api.common.typeutils.base.array.BytePrimitiveArraySerializer;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.configuration.ConfigConstants;
+import org.apache.flink.contrib.streaming.state.image.RocksDBFullKeyedStateImage;
+import org.apache.flink.contrib.streaming.state.image.RocksDBIncrementalKeyedStateImage;
 import org.apache.flink.core.fs.CloseableRegistry;
 import org.apache.flink.core.fs.FSDataInputStream;
 import org.apache.flink.core.fs.FSDataOutputStream;
@@ -65,9 +67,6 @@ import org.apache.flink.runtime.state.StreamCompressionDecorator;
 import org.apache.flink.runtime.state.StreamStateHandle;
 import org.apache.flink.runtime.state.UncompressedStreamCompressionDecorator;
 import org.apache.flink.runtime.state.image.KeyedBackendStateImage;
-import org.apache.flink.runtime.state.image.RocksDBFullKeyedStateImage;
-import org.apache.flink.runtime.state.image.RocksDBIncrementalKeyedStateImage;
-import org.apache.flink.runtime.state.image.backends.RocksDBKeyedStateImageRestore;
 import org.apache.flink.runtime.state.internal.InternalAggregatingState;
 import org.apache.flink.runtime.state.internal.InternalFoldingState;
 import org.apache.flink.runtime.state.internal.InternalListState;
@@ -128,9 +127,7 @@ import java.util.regex.Pattern;
  + <a href="https://github.com/facebook/rocksdb/wiki/RocksJava-Basics#opening-a-database-with-column-families">
  * this document</a>.
  */
-public class RocksDBKeyedStateBackend<K>
-	extends AbstractKeyedStateBackend<K>
-	implements RocksDBKeyedStateImageRestore {
+public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 
 	private static final Logger LOG = LoggerFactory.getLogger(RocksDBKeyedStateBackend.class);
 
@@ -1770,7 +1767,7 @@ public class RocksDBKeyedStateBackend<K>
 	}
 
 	@Override
-	public void restoreStateFromImage(KeyedBackendStateImage keyedBackendStateImage) throws Exception {
+	public void restoreStateFromImage(KeyedBackendStateImage<?> keyedBackendStateImage) throws Exception {
 
 		LOG.info("Initializing RocksDB keyed state backend from state image.");
 
@@ -1786,7 +1783,7 @@ public class RocksDBKeyedStateBackend<K>
 			if (keyedBackendStateImage == null) {
 				createDB();
 			} else {
-				keyedBackendStateImage.restoreRocksDB(this);
+				keyedBackendStateImage.restore(this);
 			}
 		} catch (Exception ex) {
 			dispose();
@@ -1794,7 +1791,6 @@ public class RocksDBKeyedStateBackend<K>
 		}
 	}
 
-	@Override
 	public void restoreIncremental(RocksDBIncrementalKeyedStateImage image) throws Exception {
 		Preconditions.checkNotNull(image);
 		Collection<IncrementalKeyedStateHandle> stateHandles = image.getKeyedStateHandles();
@@ -1806,7 +1802,6 @@ public class RocksDBKeyedStateBackend<K>
 		}
 	}
 
-	@Override
 	public void restoreFull(RocksDBFullKeyedStateImage image) throws Exception {
 		Preconditions.checkNotNull(image);
 		Collection<KeyGroupsStateHandle> stateHandles = image.getKeyedStateHandles();

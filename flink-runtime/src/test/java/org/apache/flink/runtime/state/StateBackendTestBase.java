@@ -47,7 +47,6 @@ import org.apache.flink.core.memory.DataOutputViewStreamWrapper;
 import org.apache.flink.core.testutils.CheckedThread;
 import org.apache.flink.core.testutils.OneShotLatch;
 import org.apache.flink.runtime.checkpoint.CheckpointOptions;
-import org.apache.flink.runtime.checkpoint.StateAssignmentOperation;
 import org.apache.flink.runtime.execution.Environment;
 import org.apache.flink.runtime.operators.testutils.DummyEnvironment;
 import org.apache.flink.runtime.query.KvStateID;
@@ -58,8 +57,6 @@ import org.apache.flink.runtime.state.heap.AbstractHeapState;
 import org.apache.flink.runtime.state.heap.NestedMapsStateTable;
 import org.apache.flink.runtime.state.heap.StateTable;
 import org.apache.flink.runtime.state.image.KeyedBackendStateImage;
-import org.apache.flink.runtime.state.image.RocksDBFullKeyedStateImage;
-import org.apache.flink.runtime.state.image.RocksDBIncrementalKeyedStateImage;
 import org.apache.flink.runtime.state.internal.InternalKvState;
 import org.apache.flink.runtime.state.internal.InternalValueState;
 import org.apache.flink.runtime.util.BlockerCheckpointStreamFactory;
@@ -82,7 +79,6 @@ import org.junit.rules.ExpectedException;
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
@@ -533,14 +529,14 @@ public abstract class StateBackendTestBase<B extends AbstractStateBackend> exten
 
 			KeyedBackendStateImage stateImage = snapshot.iterator().next();
 			//TODO !!!!!!!!!!!! revisit
-			if (stateImage instanceof RocksDBIncrementalKeyedStateImage) {
-				Collection<IncrementalKeyedStateHandle> keyedStateHandles =
-					((RocksDBIncrementalKeyedStateImage) stateImage).getKeyedStateHandles();
-				for (IncrementalKeyedStateHandle handle : keyedStateHandles) {
-					handle.registerSharedStates(sharedStateRegistry);
-				}
-
-			}
+//			if (stateImage instanceof RocksDBIncrementalKeyedStateImage) {
+//				Collection<IncrementalKeyedStateHandle> keyedStateHandles =
+//					((RocksDBIncrementalKeyedStateImage) stateImage).getKeyedStateHandles();
+//				for (IncrementalKeyedStateHandle handle : keyedStateHandles) {
+//					handle.registerSharedStates(sharedStateRegistry);
+//				}
+//
+//			}
 			backend.dispose();
 
 			// ========== restore snapshot - should use default serializer (ONLY SERIALIZATION) ==========
@@ -568,14 +564,14 @@ public abstract class StateBackendTestBase<B extends AbstractStateBackend> exten
 
 			stateImage = snapshot2.iterator().next();
 			//TODO !!!!!!!!!!!! revisit
-			if (stateImage instanceof RocksDBIncrementalKeyedStateImage) {
-				Collection<IncrementalKeyedStateHandle> keyedStateHandles =
-					((RocksDBIncrementalKeyedStateImage) stateImage).getKeyedStateHandles();
-				for (IncrementalKeyedStateHandle handle : keyedStateHandles) {
-					handle.registerSharedStates(sharedStateRegistry);
-				}
-
-			}
+//			if (stateImage instanceof RocksDBIncrementalKeyedStateImage) {
+//				Collection<IncrementalKeyedStateHandle> keyedStateHandles =
+//					((RocksDBIncrementalKeyedStateImage) stateImage).getKeyedStateHandles();
+//				for (IncrementalKeyedStateHandle handle : keyedStateHandles) {
+//					handle.registerSharedStates(sharedStateRegistry);
+//				}
+//
+//			}
 			StateUtil.bestEffortDiscardAllStateObjects(snapshot);
 
 			backend.dispose();
@@ -653,14 +649,14 @@ public abstract class StateBackendTestBase<B extends AbstractStateBackend> exten
 
 			KeyedBackendStateImage stateImage = snapshot.iterator().next();
 			//TODO !!!!!!!!!!!! revisit
-			if (stateImage instanceof RocksDBIncrementalKeyedStateImage) {
-				Collection<IncrementalKeyedStateHandle> keyedStateHandles =
-					((RocksDBIncrementalKeyedStateImage) stateImage).getKeyedStateHandles();
-				for (IncrementalKeyedStateHandle handle : keyedStateHandles) {
-					handle.registerSharedStates(sharedStateRegistry);
-				}
-
-			}
+//			if (stateImage instanceof RocksDBIncrementalKeyedStateImage) {
+//				Collection<IncrementalKeyedStateHandle> keyedStateHandles =
+//					((RocksDBIncrementalKeyedStateImage) stateImage).getKeyedStateHandles();
+//				for (IncrementalKeyedStateHandle handle : keyedStateHandles) {
+//					handle.registerSharedStates(sharedStateRegistry);
+//				}
+//
+//			}
 			backend.dispose();
 
 			// ========== restore snapshot - should use specific serializer (ONLY SERIALIZATION) ==========
@@ -687,13 +683,13 @@ public abstract class StateBackendTestBase<B extends AbstractStateBackend> exten
 
 			stateImage = snapshot2.iterator().next();
 			//TODO !!!!!!!!!!!! revisit
-			if (stateImage instanceof RocksDBIncrementalKeyedStateImage) {
-				Collection<IncrementalKeyedStateHandle> keyedStateHandles =
-					((RocksDBIncrementalKeyedStateImage) stateImage).getKeyedStateHandles();
-				for (IncrementalKeyedStateHandle handle : keyedStateHandles) {
-					handle.registerSharedStates(sharedStateRegistry);
-				}
-			}
+//			if (stateImage instanceof RocksDBIncrementalKeyedStateImage) {
+//				Collection<IncrementalKeyedStateHandle> keyedStateHandles =
+//					((RocksDBIncrementalKeyedStateImage) stateImage).getKeyedStateHandles();
+//				for (IncrementalKeyedStateHandle handle : keyedStateHandles) {
+//					handle.registerSharedStates(sharedStateRegistry);
+//				}
+//			}
 
 			StateUtil.bestEffortDiscardAllStateObjects(snapshot);
 
@@ -1829,57 +1825,58 @@ public abstract class StateBackendTestBase<B extends AbstractStateBackend> exten
 
 		Collection<KeyedBackendStateImage> snapshot = FutureUtil.runIfNotDoneAndGet(backend.snapshot(0, 0, streamFactory, CheckpointOptions.forFullCheckpoint()));
 
-		RocksDBFullKeyedStateImage stateImage = (RocksDBFullKeyedStateImage) snapshot.iterator().next();
-
-		List<KeyedStateHandle> firstHalfKeyGroupStates = StateAssignmentOperation.getKeyedStateHandles(
-			stateImage.getKeyedStateHandles(),
-			KeyGroupRangeAssignment.computeKeyGroupRangeForOperatorIndex(MAX_PARALLELISM, 2, 0));
-
-		List<KeyedStateHandle> secondHalfKeyGroupStates = StateAssignmentOperation.getKeyedStateHandles(
-			stateImage.getKeyedStateHandles(),
-			KeyGroupRangeAssignment.computeKeyGroupRangeForOperatorIndex(MAX_PARALLELISM, 2, 1));
-
-		backend.dispose();
-
-		//TODO !!!!!!!???? revisit
-		RocksDBFullKeyedStateImage firstStateImage = new RocksDBFullKeyedStateImage(new StateImageMetaData(true, StateImageMetaData.LocalityHint.DFS), convertCollection(firstHalfKeyGroupStates));
-		RocksDBFullKeyedStateImage secondStateImage = new RocksDBFullKeyedStateImage(new StateImageMetaData(true, StateImageMetaData.LocalityHint.DFS), convertCollection(secondHalfKeyGroupStates));
-
-		// backend for the first half of the key group range
-		final AbstractKeyedStateBackend<Integer> firstHalfBackend = restoreKeyedBackend(
-			IntSerializer.INSTANCE,
-			MAX_PARALLELISM,
-			new KeyGroupRange(0, 4),
-			Collections.singletonList(firstStateImage),
-			new DummyEnvironment("test", 1, 0));
-
-		// backend for the second half of the key group range
-		final AbstractKeyedStateBackend<Integer> secondHalfBackend = restoreKeyedBackend(
-			IntSerializer.INSTANCE,
-			MAX_PARALLELISM,
-			new KeyGroupRange(5, 9),
-			Collections.singletonList(secondStateImage),
-			new DummyEnvironment("test", 1, 0));
-
-
-		ValueState<String> firstHalfState = firstHalfBackend.getPartitionedState(VoidNamespace.INSTANCE, VoidNamespaceSerializer.INSTANCE, kvId);
-
-		firstHalfBackend.setCurrentKey(keyInFirstHalf);
-		assertTrue(firstHalfState.value().equals("ShouldBeInFirstHalf"));
-
-		firstHalfBackend.setCurrentKey(keyInSecondHalf);
-		assertTrue(firstHalfState.value() == null);
-
-		ValueState<String> secondHalfState = secondHalfBackend.getPartitionedState(VoidNamespace.INSTANCE, VoidNamespaceSerializer.INSTANCE, kvId);
-
-		secondHalfBackend.setCurrentKey(keyInFirstHalf);
-		assertTrue(secondHalfState.value() == null);
-
-		secondHalfBackend.setCurrentKey(keyInSecondHalf);
-		assertTrue(secondHalfState.value().equals("ShouldBeInSecondHalf"));
-
-		firstHalfBackend.dispose();
-		secondHalfBackend.dispose();
+		//TODO!!!!!!!!!!!!!!
+//		RocksDBFullKeyedStateImage stateImage = (RocksDBFullKeyedStateImage) snapshot.iterator().next();
+//
+//		List<KeyedStateHandle> firstHalfKeyGroupStates = StateAssignmentOperation.getKeyedStateHandles(
+//			stateImage.getKeyedStateHandles(),
+//			KeyGroupRangeAssignment.computeKeyGroupRangeForOperatorIndex(MAX_PARALLELISM, 2, 0));
+//
+//		List<KeyedStateHandle> secondHalfKeyGroupStates = StateAssignmentOperation.getKeyedStateHandles(
+//			stateImage.getKeyedStateHandles(),
+//			KeyGroupRangeAssignment.computeKeyGroupRangeForOperatorIndex(MAX_PARALLELISM, 2, 1));
+//
+//		backend.dispose();
+//
+//		//TODO !!!!!!!???? revisit
+//		RocksDBFullKeyedStateImage firstStateImage = new RocksDBFullKeyedStateImage(new StateImageMetaData(true, StateImageMetaData.LocalityHint.DFS), convertCollection(firstHalfKeyGroupStates));
+//		RocksDBFullKeyedStateImage secondStateImage = new RocksDBFullKeyedStateImage(new StateImageMetaData(true, StateImageMetaData.LocalityHint.DFS), convertCollection(secondHalfKeyGroupStates));
+//
+//		// backend for the first half of the key group range
+//		final AbstractKeyedStateBackend<Integer> firstHalfBackend = restoreKeyedBackend(
+//			IntSerializer.INSTANCE,
+//			MAX_PARALLELISM,
+//			new KeyGroupRange(0, 4),
+//			Collections.singletonList(firstStateImage),
+//			new DummyEnvironment("test", 1, 0));
+//
+//		// backend for the second half of the key group range
+//		final AbstractKeyedStateBackend<Integer> secondHalfBackend = restoreKeyedBackend(
+//			IntSerializer.INSTANCE,
+//			MAX_PARALLELISM,
+//			new KeyGroupRange(5, 9),
+//			Collections.singletonList(secondStateImage),
+//			new DummyEnvironment("test", 1, 0));
+//
+//
+//		ValueState<String> firstHalfState = firstHalfBackend.getPartitionedState(VoidNamespace.INSTANCE, VoidNamespaceSerializer.INSTANCE, kvId);
+//
+//		firstHalfBackend.setCurrentKey(keyInFirstHalf);
+//		assertTrue(firstHalfState.value().equals("ShouldBeInFirstHalf"));
+//
+//		firstHalfBackend.setCurrentKey(keyInSecondHalf);
+//		assertTrue(firstHalfState.value() == null);
+//
+//		ValueState<String> secondHalfState = secondHalfBackend.getPartitionedState(VoidNamespace.INSTANCE, VoidNamespaceSerializer.INSTANCE, kvId);
+//
+//		secondHalfBackend.setCurrentKey(keyInFirstHalf);
+//		assertTrue(secondHalfState.value() == null);
+//
+//		secondHalfBackend.setCurrentKey(keyInSecondHalf);
+//		assertTrue(secondHalfState.value().equals("ShouldBeInSecondHalf"));
+//
+//		firstHalfBackend.dispose();
+//		secondHalfBackend.dispose();
 	}
 
 	static <IN, OUT> Collection<OUT> convertCollection(Collection<IN> in) {

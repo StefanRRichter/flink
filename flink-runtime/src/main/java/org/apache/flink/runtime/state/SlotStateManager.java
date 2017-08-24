@@ -87,7 +87,7 @@ public class SlotStateManager implements CheckpointListener {
 								"Primary image is not based on keyed state handles.");
 
 							Collection<? extends KeyedStateHandle> keyedStateHandles =
-								((StateHandlesCollectionKeyedStateImage<? extends KeyedStateHandle>) stateImage).getKeyedStateHandles();
+								((StateHandlesCollectionKeyedStateImage<?, ? extends KeyedStateHandle>) stateImage).getKeyedStateHandles();
 
 							Preconditions.checkState(keyedStateHandles.size() == 1,
 								"Found more than one state handle.");

@@ -20,11 +20,12 @@ package org.apache.flink.runtime.state.image;
 
 import org.apache.flink.runtime.state.KeyedStateHandle;
 import org.apache.flink.runtime.state.StateImageMetaData;
-import org.apache.flink.runtime.state.image.backends.HeapKeyedBackendImageRestore;
+import org.apache.flink.runtime.state.heap.HeapKeyedStateBackend;
 
 import java.util.Collection;
 
-public class HeapFullKeyedStateImage extends StateHandlesCollectionKeyedStateImage<KeyedStateHandle> {
+public class HeapFullKeyedStateImage
+	extends StateHandlesCollectionKeyedStateImage<HeapKeyedStateBackend<?>, KeyedStateHandle> {
 
 	private static final long serialVersionUID = 1L;
 
@@ -33,7 +34,7 @@ public class HeapFullKeyedStateImage extends StateHandlesCollectionKeyedStateIma
 	}
 
 	@Override
-	public void restoreHeap(HeapKeyedBackendImageRestore heapKeyedStateBackend) throws Exception {
-		heapKeyedStateBackend.restoreFullFromFile(this);
+	protected void doRestore(HeapKeyedStateBackend<?> backend) throws Exception {
+		backend.restoreFullFromFile(this);
 	}
 }

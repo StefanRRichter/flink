@@ -16,15 +16,16 @@
  * limitations under the License.
  */
 
-package org.apache.flink.runtime.state.image;
+package org.apache.flink.contrib.streaming.state.image;
 
+import org.apache.flink.contrib.streaming.state.RocksDBKeyedStateBackend;
 import org.apache.flink.runtime.state.KeyGroupsStateHandle;
 import org.apache.flink.runtime.state.StateImageMetaData;
-import org.apache.flink.runtime.state.image.backends.RocksDBKeyedStateImageRestore;
+import org.apache.flink.runtime.state.image.StateHandlesCollectionKeyedStateImage;
 
 import java.util.Collection;
 
-public class RocksDBFullKeyedStateImage extends StateHandlesCollectionKeyedStateImage<KeyGroupsStateHandle> {
+public class RocksDBFullKeyedStateImage extends StateHandlesCollectionKeyedStateImage<RocksDBKeyedStateBackend<?>, KeyGroupsStateHandle> {
 
 	private static final long serialVersionUID = 1L;
 
@@ -33,7 +34,7 @@ public class RocksDBFullKeyedStateImage extends StateHandlesCollectionKeyedState
 	}
 
 	@Override
-	public void restoreRocksDB(RocksDBKeyedStateImageRestore rocksDBKeyedStateBackend) throws Exception {
-		rocksDBKeyedStateBackend.restoreFull(this);
+	protected void doRestore(RocksDBKeyedStateBackend<?> backend) throws Exception {
+		backend.restoreFull(this);
 	}
 }
