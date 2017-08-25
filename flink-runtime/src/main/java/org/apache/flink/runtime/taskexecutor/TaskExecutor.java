@@ -65,6 +65,8 @@ import org.apache.flink.runtime.rpc.FatalErrorHandler;
 import org.apache.flink.runtime.rpc.RpcEndpoint;
 import org.apache.flink.runtime.rpc.RpcService;
 import org.apache.flink.runtime.rpc.akka.AkkaRpcServiceUtils;
+import org.apache.flink.runtime.state.SlotStateManager;
+import org.apache.flink.runtime.state.TaskStateManager;
 import org.apache.flink.runtime.taskexecutor.exceptions.CheckpointException;
 import org.apache.flink.runtime.taskexecutor.exceptions.PartitionException;
 import org.apache.flink.runtime.taskexecutor.exceptions.SlotAllocationException;
@@ -131,6 +133,9 @@ public class TaskExecutor extends RpcEndpoint implements TaskExecutorGateway {
 	/** The memory manager component in the task manager */
 	private final MemoryManager memoryManager;
 
+	/** The state manager for this task, providing state managers per slot. */
+	private final TaskStateManager taskStateManager;
+
 	/** The network component in the task manager */
 	private final NetworkEnvironment networkEnvironment;
 
@@ -176,6 +181,7 @@ public class TaskExecutor extends RpcEndpoint implements TaskExecutorGateway {
 			TaskManagerLocation taskManagerLocation,
 			MemoryManager memoryManager,
 			IOManager ioManager,
+			TaskStateManager taskStateManager,
 			NetworkEnvironment networkEnvironment,
 			HighAvailabilityServices haServices,
 			HeartbeatServices heartbeatServices,
@@ -195,6 +201,7 @@ public class TaskExecutor extends RpcEndpoint implements TaskExecutorGateway {
 		this.taskManagerConfiguration = checkNotNull(taskManagerConfiguration);
 		this.taskManagerLocation = checkNotNull(taskManagerLocation);
 		this.memoryManager = checkNotNull(memoryManager);
+		this.taskStateManager = checkNotNull(taskStateManager);
 		this.ioManager = checkNotNull(ioManager);
 		this.networkEnvironment = checkNotNull(networkEnvironment);
 		this.haServices = checkNotNull(haServices);
@@ -366,6 +373,9 @@ public class TaskExecutor extends RpcEndpoint implements TaskExecutorGateway {
 			ResultPartitionConsumableNotifier resultPartitionConsumableNotifier = jobManagerConnection.getResultPartitionConsumableNotifier();
 			PartitionProducerStateChecker partitionStateChecker = jobManagerConnection.getPartitionStateChecker();
 
+			SlotStateManager slotStateManager =
+				taskStateManager.getSlotStateManager(jobId, tdd.getExecutionAttemptId(), checkpointResponder);
+
 			Task task = new Task(
 				jobInformation,
 				taskInformation,
@@ -381,6 +391,7 @@ public class TaskExecutor extends RpcEndpoint implements TaskExecutorGateway {
 				ioManager,
 				networkEnvironment,
 				broadcastVariableManager,
+				slotStateManager,
 				taskManagerActions,
 				inputSplitProvider,
 				checkpointResponder,

@@ -52,6 +52,8 @@ import org.apache.flink.runtime.plugable.DeserializationDelegate;
 import org.apache.flink.runtime.plugable.NonReusingDeserializationDelegate;
 import org.apache.flink.runtime.query.KvStateRegistry;
 import org.apache.flink.runtime.query.TaskKvStateRegistry;
+import org.apache.flink.runtime.state.SlotStateManager;
+import org.apache.flink.runtime.taskmanager.CheckpointResponder;
 import org.apache.flink.runtime.taskmanager.TaskManagerRuntimeInfo;
 import org.apache.flink.runtime.util.TestingTaskManagerRuntimeInfo;
 
@@ -82,6 +84,8 @@ public class StreamMockEnvironment implements Environment {
 	private final MemoryManager memManager;
 
 	private final IOManager ioManager;
+
+	private final SlotStateManager slotStateManager;
 
 	private final InputSplitProvider inputSplitProvider;
 
@@ -130,6 +134,8 @@ public class StreamMockEnvironment implements Environment {
 
 		KvStateRegistry registry = new KvStateRegistry();
 		this.kvStateRegistry = registry.createTaskRegistry(jobID, getJobVertexId());
+
+		this.slotStateManager = new SlotStateManager(jobID, getExecutionId(), mock(CheckpointResponder.class));
 	}
 
 	public StreamMockEnvironment(Configuration jobConfig, Configuration taskConfig, long memorySize,
@@ -316,6 +322,11 @@ public class StreamMockEnvironment implements Environment {
 	@Override
 	public BroadcastVariableManager getBroadcastVariableManager() {
 		return this.bcVarManager;
+	}
+
+	@Override
+	public SlotStateManager getSlotStateManager() {
+		return null;
 	}
 
 	@Override

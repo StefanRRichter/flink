@@ -67,6 +67,7 @@ import org.apache.flink.runtime.metrics.{MetricRegistry => FlinkMetricRegistry}
 import org.apache.flink.runtime.process.ProcessReaper
 import org.apache.flink.runtime.security.SecurityUtils
 import org.apache.flink.runtime.security.SecurityUtils.SecurityConfiguration
+import org.apache.flink.runtime.state.SlotStateManager
 import org.apache.flink.runtime.taskexecutor.{TaskExecutor, TaskManagerConfiguration, TaskManagerServices, TaskManagerServicesConfiguration}
 import org.apache.flink.runtime.util._
 import org.apache.flink.runtime.{FlinkActor, LeaderSessionMessageFilter, LogMessages}
@@ -1179,6 +1180,11 @@ class TaskManager(
           config.getTimeout().getSize(),
           config.getTimeout().getUnit()))
 
+      val slotStateManager = new SlotStateManager(
+        jobInformation.getJobId,
+        tdd.getExecutionAttemptId,
+        checkpointResponder)
+
       val task = new Task(
         jobInformation,
         taskInformation,
@@ -1194,6 +1200,7 @@ class TaskManager(
         ioManager,
         network,
         bcVarManager,
+        slotStateManager,
         taskManagerConnection,
         inputSplitProvider,
         checkpointResponder,

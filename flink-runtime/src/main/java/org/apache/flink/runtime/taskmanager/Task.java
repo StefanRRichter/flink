@@ -70,6 +70,7 @@ import org.apache.flink.runtime.memory.MemoryManager;
 import org.apache.flink.runtime.metrics.groups.TaskMetricGroup;
 import org.apache.flink.runtime.query.TaskKvStateRegistry;
 import org.apache.flink.runtime.state.CheckpointListener;
+import org.apache.flink.runtime.state.SlotStateManager;
 import org.apache.flink.util.ExceptionUtils;
 import org.apache.flink.util.Preconditions;
 import org.apache.flink.util.SerializedValue;
@@ -182,6 +183,9 @@ public class Task implements Runnable, TaskActions, CheckpointListener {
 	/** The BroadcastVariableManager to be used by this task */
 	private final BroadcastVariableManager broadcastVariableManager;
 
+	/** The manager for state of operators running in this task/slot */
+	private final SlotStateManager slotStateManager;
+
 	/** Serialized version of the job specific execution configuration (see {@link ExecutionConfig}). */
 	private final SerializedValue<ExecutionConfig> serializedExecutionConfig;
 
@@ -284,6 +288,7 @@ public class Task implements Runnable, TaskActions, CheckpointListener {
 		IOManager ioManager,
 		NetworkEnvironment networkEnvironment,
 		BroadcastVariableManager bcVarManager,
+		SlotStateManager slotStateManager,
 		TaskManagerActions taskManagerActions,
 		InputSplitProvider inputSplitProvider,
 		CheckpointResponder checkpointResponder,
@@ -330,6 +335,7 @@ public class Task implements Runnable, TaskActions, CheckpointListener {
 		this.memoryManager = Preconditions.checkNotNull(memManager);
 		this.ioManager = Preconditions.checkNotNull(ioManager);
 		this.broadcastVariableManager = Preconditions.checkNotNull(bcVarManager);
+		this.slotStateManager = Preconditions.checkNotNull(slotStateManager);
 		this.accumulatorRegistry = new AccumulatorRegistry(jobId, executionId);
 
 		this.inputSplitProvider = Preconditions.checkNotNull(inputSplitProvider);
@@ -664,7 +670,7 @@ public class Task implements Runnable, TaskActions, CheckpointListener {
 			Environment env = new RuntimeEnvironment(
 				jobId, vertexId, executionId, executionConfig, taskInfo,
 				jobConfiguration, taskConfiguration, userCodeClassLoader,
-				memoryManager, ioManager, broadcastVariableManager,
+				memoryManager, ioManager, broadcastVariableManager, slotStateManager,
 				accumulatorRegistry, kvStateRegistry, inputSplitProvider,
 				distributedCacheEntries, writers, inputGates,
 				checkpointResponder, taskManagerConfig, metrics, this);
@@ -1249,6 +1255,7 @@ public class Task implements Runnable, TaskActions, CheckpointListener {
 					public void run() {
 						try {
 							statefulTask.notifyCheckpointComplete(checkpointID);
+							slotStateManager.notifyCheckpointComplete(checkpointID);
 						}
 						catch (Throwable t) {
 							if (getExecutionState() == ExecutionState.RUNNING) {

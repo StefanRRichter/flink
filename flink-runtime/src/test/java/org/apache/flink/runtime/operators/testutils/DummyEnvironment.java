@@ -38,6 +38,7 @@ import org.apache.flink.runtime.memory.MemoryManager;
 import org.apache.flink.runtime.metrics.groups.TaskMetricGroup;
 import org.apache.flink.runtime.query.KvStateRegistry;
 import org.apache.flink.runtime.query.TaskKvStateRegistry;
+import org.apache.flink.runtime.state.SlotStateManager;
 import org.apache.flink.runtime.taskmanager.TaskManagerRuntimeInfo;
 import org.apache.flink.runtime.util.TestingTaskManagerRuntimeInfo;
 
@@ -142,6 +143,11 @@ public class DummyEnvironment implements Environment {
 	}
 
 	@Override
+	public SlotStateManager getSlotStateManager() {
+		return null;
+	}
+
+	@Override
 	public AccumulatorRegistry getAccumulatorRegistry() {
 		return null;
 	}
@@ -188,5 +194,4 @@ public class DummyEnvironment implements Environment {
 	public InputGate[] getAllInputGates() {
 		return null;
 	}
-
 }

@@ -46,6 +46,8 @@ import org.apache.flink.runtime.memory.MemoryManager;
 import org.apache.flink.runtime.metrics.groups.TaskMetricGroup;
 import org.apache.flink.runtime.query.KvStateRegistry;
 import org.apache.flink.runtime.query.TaskKvStateRegistry;
+import org.apache.flink.runtime.state.SlotStateManager;
+import org.apache.flink.runtime.taskmanager.CheckpointResponder;
 import org.apache.flink.runtime.taskmanager.TaskManagerRuntimeInfo;
 import org.apache.flink.runtime.util.TestingTaskManagerRuntimeInfo;
 import org.apache.flink.types.Record;
@@ -77,6 +79,8 @@ public class MockEnvironment implements Environment {
 	private final MemoryManager memManager;
 
 	private final IOManager ioManager;
+
+	private final SlotStateManager slotStateManager;
 
 	private final InputSplitProvider inputSplitProvider;
 
@@ -160,6 +164,7 @@ public class MockEnvironment implements Environment {
 
 		this.memManager = new MemoryManager(memorySize, 1);
 		this.ioManager = new IOManagerAsync();
+		this.slotStateManager = new SlotStateManager(jobID, getExecutionId(), mock(CheckpointResponder.class));
 		this.executionConfig = executionConfig;
 		this.inputSplitProvider = inputSplitProvider;
 		this.bufferSize = bufferSize;
@@ -336,6 +341,11 @@ public class MockEnvironment implements Environment {
 	@Override
 	public BroadcastVariableManager getBroadcastVariableManager() {
 		return this.bcVarManager;
+	}
+
+	@Override
+	public SlotStateManager getSlotStateManager() {
+		return slotStateManager;
 	}
 
 	@Override
