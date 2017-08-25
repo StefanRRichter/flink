@@ -46,7 +46,7 @@ import org.apache.flink.runtime.state.OperatorStateHandle;
 import org.apache.flink.runtime.state.OperatorSubtaskStateReport;
 import org.apache.flink.runtime.state.SlotStateManager;
 import org.apache.flink.runtime.state.StateBackend;
-import org.apache.flink.runtime.state.image.KeyedBackendStateImage;
+import org.apache.flink.runtime.state.snapshots.Snapshot;
 import org.apache.flink.runtime.taskmanager.DispatcherThreadFactory;
 import org.apache.flink.streaming.api.TimeCharacteristic;
 import org.apache.flink.streaming.api.graph.StreamConfig;
@@ -754,7 +754,7 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 				taskStateSnapshot.getSubtaskStateByOperatorID(headOperator.getOperatorID());
 			restoreKeyedStateHandles = stateByOperatorID != null ? stateByOperatorID.getManagedKeyedState() : null;
 		}
-		KeyedBackendStateImage stateImage = null;
+		Snapshot stateImage = null;
 		if (restoreKeyedStateHandles != null && !restoreKeyedStateHandles.isEmpty()) {
 			//TODO!!!!!!!!! remove ugly winning
 			stateImage = StateHandleToStateImageConverter.convert(keyedStateBackend, restoreKeyedStateHandles);

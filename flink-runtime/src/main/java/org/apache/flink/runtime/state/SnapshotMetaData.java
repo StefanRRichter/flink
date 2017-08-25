@@ -16,25 +16,39 @@
  * limitations under the License.
  */
 
-package org.apache.flink.runtime.state.image;
+package org.apache.flink.runtime.state;
 
-import org.apache.flink.runtime.state.KeyedStateHandle;
-import org.apache.flink.runtime.state.StateImageMetaData;
-import org.apache.flink.runtime.state.heap.HeapKeyedStateBackend;
+import java.io.Serializable;
 
-import java.util.Collection;
+public class SnapshotMetaData implements Serializable {
 
-public class HeapFullKeyedStateImage
-	extends StateHandlesCollectionKeyedStateImage<HeapKeyedStateBackend<?>, KeyedStateHandle> {
+	public static final SnapshotMetaData PRIMARY_DFS = new SnapshotMetaData(true, LocalityHint.DFS);
 
-	private static final long serialVersionUID = 1L;
+	public SnapshotMetaData(boolean primary, LocalityHint localityHint) {
+		this.primary = true;
+		this.localityHint = localityHint;
+	}
 
-	public HeapFullKeyedStateImage(StateImageMetaData metaData, Collection<KeyedStateHandle> keyedStateHandles) {
-		super(metaData, keyedStateHandles);
+	public enum LocalityHint {
+		DFS, LOCAL_DISK, LOCAL_MEMORY, MOUNTED_DISK
+	}
+
+	private final LocalityHint localityHint;
+	private boolean primary;
+
+	public LocalityHint getLocalityHint() {
+		return localityHint;
+	}
+
+	public boolean isPrimary() {
+		return primary;
 	}
 
 	@Override
-	protected void doRestore(HeapKeyedStateBackend<?> backend) throws Exception {
-		backend.restoreFullFromFile(this);
+	public String toString() {
+		return "StateImageMetaData{" +
+			"localityHint=" + localityHint +
+			", primary=" + primary +
+			'}';
 	}
 }

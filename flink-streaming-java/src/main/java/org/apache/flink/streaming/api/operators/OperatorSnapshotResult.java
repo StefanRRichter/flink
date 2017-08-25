@@ -18,10 +18,8 @@
 
 package org.apache.flink.streaming.api.operators;
 
-import org.apache.flink.runtime.state.KeyedStateHandle;
-import org.apache.flink.runtime.state.OperatorStateHandle;
 import org.apache.flink.runtime.state.StateUtil;
-import org.apache.flink.runtime.state.image.KeyedBackendStateImage;
+import org.apache.flink.runtime.state.snapshots.Snapshot;
 import org.apache.flink.util.ExceptionUtils;
 
 import java.util.Collection;
@@ -32,20 +30,20 @@ import java.util.concurrent.RunnableFuture;
  */
 public class OperatorSnapshotResult {
 
-	private RunnableFuture<Collection<KeyedBackendStateImage>> keyedStateManagedFuture;
-	private RunnableFuture<KeyedStateHandle> keyedStateRawFuture;
-	private RunnableFuture<OperatorStateHandle> operatorStateManagedFuture;
-	private RunnableFuture<OperatorStateHandle> operatorStateRawFuture;
+	private RunnableFuture<Collection<Snapshot>> keyedStateManagedFuture;
+	private RunnableFuture<Collection<Snapshot>> keyedStateRawFuture;
+	private RunnableFuture<Collection<Snapshot>> operatorStateManagedFuture;
+	private RunnableFuture<Collection<Snapshot>> operatorStateRawFuture;
 
 	public OperatorSnapshotResult() {
 		this(null, null, null, null);
 	}
 
 	public OperatorSnapshotResult(
-		RunnableFuture<Collection<KeyedBackendStateImage>> keyedStateManagedFuture,
-		RunnableFuture<KeyedStateHandle> keyedStateRawFuture,
-		RunnableFuture<OperatorStateHandle> operatorStateManagedFuture,
-		RunnableFuture<OperatorStateHandle> operatorStateRawFuture) {
+		RunnableFuture<Collection<Snapshot>> keyedStateManagedFuture,
+		RunnableFuture<Collection<Snapshot>> keyedStateRawFuture,
+		RunnableFuture<Collection<Snapshot>> operatorStateManagedFuture,
+		RunnableFuture<Collection<Snapshot>> operatorStateRawFuture) {
 
 		this.keyedStateManagedFuture = keyedStateManagedFuture;
 		this.keyedStateRawFuture = keyedStateRawFuture;
@@ -53,35 +51,35 @@ public class OperatorSnapshotResult {
 		this.operatorStateRawFuture = operatorStateRawFuture;
 	}
 
-	public RunnableFuture<Collection<KeyedBackendStateImage>> getKeyedStateManagedFuture() {
+	public RunnableFuture<Collection<Snapshot>> getKeyedStateManagedFuture() {
 		return keyedStateManagedFuture;
 	}
 
-	public void setKeyedStateManagedFuture(RunnableFuture<Collection<KeyedBackendStateImage>> keyedStateManagedFuture) {
+	public void setKeyedStateManagedFuture(RunnableFuture<Collection<Snapshot>> keyedStateManagedFuture) {
 		this.keyedStateManagedFuture = keyedStateManagedFuture;
 	}
 
-	public RunnableFuture<KeyedStateHandle> getKeyedStateRawFuture() {
+	public RunnableFuture<Collection<Snapshot>> getKeyedStateRawFuture() {
 		return keyedStateRawFuture;
 	}
 
-	public void setKeyedStateRawFuture(RunnableFuture<KeyedStateHandle> keyedStateRawFuture) {
+	public void setKeyedStateRawFuture(RunnableFuture<Collection<Snapshot>> keyedStateRawFuture) {
 		this.keyedStateRawFuture = keyedStateRawFuture;
 	}
 
-	public RunnableFuture<OperatorStateHandle> getOperatorStateManagedFuture() {
+	public RunnableFuture<Collection<Snapshot>> getOperatorStateManagedFuture() {
 		return operatorStateManagedFuture;
 	}
 
-	public void setOperatorStateManagedFuture(RunnableFuture<OperatorStateHandle> operatorStateManagedFuture) {
+	public void setOperatorStateManagedFuture(RunnableFuture<Collection<Snapshot>> operatorStateManagedFuture) {
 		this.operatorStateManagedFuture = operatorStateManagedFuture;
 	}
 
-	public RunnableFuture<OperatorStateHandle> getOperatorStateRawFuture() {
+	public RunnableFuture<Collection<Snapshot>> getOperatorStateRawFuture() {
 		return operatorStateRawFuture;
 	}
 
-	public void setOperatorStateRawFuture(RunnableFuture<OperatorStateHandle> operatorStateRawFuture) {
+	public void setOperatorStateRawFuture(RunnableFuture<Collection<Snapshot>> operatorStateRawFuture) {
 		this.operatorStateRawFuture = operatorStateRawFuture;
 	}
 
@@ -97,7 +95,7 @@ public class OperatorSnapshotResult {
 		}
 
 		try {
-			StateUtil.discardStateFuture(getOperatorStateManagedFuture());
+			StateUtil.discardStateCollectionFuture(getOperatorStateManagedFuture());
 		} catch (Exception e) {
 			exception = ExceptionUtils.firstOrSuppressed(
 				new Exception("Could not properly cancel managed operator state future.", e),
@@ -105,7 +103,7 @@ public class OperatorSnapshotResult {
 		}
 
 		try {
-			StateUtil.discardStateFuture(getKeyedStateRawFuture());
+			StateUtil.discardStateCollectionFuture(getKeyedStateRawFuture());
 		} catch (Exception e) {
 			exception = ExceptionUtils.firstOrSuppressed(
 				new Exception("Could not properly cancel raw keyed state future.", e),
@@ -113,7 +111,7 @@ public class OperatorSnapshotResult {
 		}
 
 		try {
-			StateUtil.discardStateFuture(getOperatorStateRawFuture());
+			StateUtil.discardStateCollectionFuture(getOperatorStateRawFuture());
 		} catch (Exception e) {
 			exception = ExceptionUtils.firstOrSuppressed(
 				new Exception("Could not properly cancel raw operator state future.", e),

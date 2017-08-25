@@ -69,7 +69,7 @@ import org.apache.flink.runtime.state.OperatorStateHandle;
 import org.apache.flink.runtime.state.SlotStateManager;
 import org.apache.flink.runtime.state.StateBackendFactory;
 import org.apache.flink.runtime.state.StreamStateHandle;
-import org.apache.flink.runtime.state.image.KeyedBackendStateImage;
+import org.apache.flink.runtime.state.snapshots.Snapshot;
 import org.apache.flink.runtime.taskmanager.CheckpointResponder;
 import org.apache.flink.runtime.taskmanager.Task;
 import org.apache.flink.runtime.taskmanager.TaskExecutionState;
@@ -458,8 +458,8 @@ public class StreamTaskTest extends TestLogger {
 
 		StreamOperator<?> streamOperator = mock(StreamOperator.class);
 
-		Collection<KeyedBackendStateImage> managedKeyedStateHandle =
-			Collections.singletonList(mock(KeyedBackendStateImage.class));
+		Collection<Snapshot> managedKeyedStateHandle =
+			Collections.singletonList(mock(Snapshot.class));
 
 		KeyedStateHandle rawKeyedStateHandle = mock(KeyedStateHandle.class);
 		OperatorStateHandle managedOperatorStateHandle = mock(OperatorStateHandle.class);
@@ -517,7 +517,7 @@ public class StreamTaskTest extends TestLogger {
 		assertEquals(Collections.singletonList(rawOperatorStateHandle), subtaskState.getRawOperatorState());
 
 		// check that the state handles have not been discarded
-		for (KeyedBackendStateImage stateImage : managedKeyedStateHandle) {
+		for (Snapshot stateImage : managedKeyedStateHandle) {
 			verify(stateImage, never()).discardState();
 		}
 
@@ -531,7 +531,7 @@ public class StreamTaskTest extends TestLogger {
 
 		// canceling the stream task after it has acknowledged the checkpoint should not discard
 		// the state handles
-		for (KeyedBackendStateImage stateImage : managedKeyedStateHandle) {
+		for (Snapshot stateImage : managedKeyedStateHandle) {
 			verify(stateImage, never()).discardState();
 		}
 		verify(rawKeyedStateHandle, never()).discardState();
@@ -590,8 +590,8 @@ public class StreamTaskTest extends TestLogger {
 		final OperatorID operatorID = new OperatorID();
 		when(streamOperator.getOperatorID()).thenReturn(operatorID);
 
-		Collection<KeyedBackendStateImage> managedKeyedStateHandle =
-			Collections.singletonList(mock(KeyedBackendStateImage.class));
+		Collection<Snapshot> managedKeyedStateHandle =
+			Collections.singletonList(mock(Snapshot.class));
 
 		KeyedStateHandle rawKeyedStateHandle = mock(KeyedStateHandle.class);
 		OperatorStateHandle managedOperatorStateHandle = mock(OperatorStateHandle.class);
@@ -652,7 +652,7 @@ public class StreamTaskTest extends TestLogger {
 		verify(mockEnvironment, never()).acknowledgeCheckpoint(eq(checkpointId), any(CheckpointMetrics.class), any(TaskStateSnapshot.class));
 
 		// check that the state handles have been discarded
-		for (KeyedBackendStateImage stateImage : managedKeyedStateHandle) {
+		for (Snapshot stateImage : managedKeyedStateHandle) {
 			verify(stateImage).discardState();
 		}
 		verify(rawKeyedStateHandle).discardState();

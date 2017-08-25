@@ -16,11 +16,9 @@
  * limitations under the License.
  */
 
-package org.apache.flink.runtime.state.image;
+package org.apache.flink.runtime.state.snapshots;
 
-import org.apache.flink.runtime.state.AbstractKeyedStateBackend;
-import org.apache.flink.runtime.state.KeyedStateHandle;
-import org.apache.flink.runtime.state.StateImageMetaData;
+import org.apache.flink.runtime.state.SnapshotMetaData;
 import org.apache.flink.runtime.state.StateObject;
 import org.apache.flink.runtime.state.StateUtil;
 import org.apache.flink.util.Preconditions;
@@ -28,34 +26,35 @@ import org.apache.flink.util.Preconditions;
 import java.util.Collection;
 import java.util.Collections;
 
-public abstract class StateHandlesCollectionKeyedStateImage
-	<B extends AbstractKeyedStateBackend<?>, T extends KeyedStateHandle> extends KeyedBackendStateImage<B> {
+public abstract class StateObjectCollectionSnapshot<T extends StateObject> extends Snapshot {
 
 	private static final long serialVersionUID = 1L;
 
-	private final Collection<T> keyedStateHandles;
+	protected final Collection<T> stateObjects;
 
-	protected StateHandlesCollectionKeyedStateImage(StateImageMetaData metaData, Collection<T> keyedStateHandles) {
+	protected StateObjectCollectionSnapshot(SnapshotMetaData metaData, Collection<T> stateObjects) {
 		super(metaData);
-		this.keyedStateHandles = Collections.unmodifiableCollection(Preconditions.checkNotNull(keyedStateHandles));
-		Preconditions.checkState(!keyedStateHandles.isEmpty());
+		this.stateObjects = Collections.unmodifiableCollection(Preconditions.checkNotNull(stateObjects));
+		Preconditions.checkState(!stateObjects.isEmpty());
 	}
 
-	public Collection<T> getKeyedStateHandles() {
-		return keyedStateHandles;
+	public Collection<T> getStateObjects() {
+		return stateObjects;
 	}
 
 	@Override
 	public void discardState() throws Exception {
-		StateUtil.bestEffortDiscardAllStateObjects(keyedStateHandles);
+		StateUtil.bestEffortDiscardAllStateObjects(stateObjects);
 	}
 
 	@Override
 	public long getStateSize() {
 		long size = 0L;
-		for (StateObject stateHandle : keyedStateHandles) {
+
+		for (StateObject stateHandle : stateObjects) {
 			size += stateHandle.getStateSize();
 		}
+
 		return size;
 	}
 }

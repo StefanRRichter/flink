@@ -25,8 +25,8 @@ import org.apache.flink.runtime.checkpoint.OperatorSubtaskState;
 import org.apache.flink.runtime.checkpoint.TaskStateSnapshot;
 import org.apache.flink.runtime.executiongraph.ExecutionAttemptID;
 import org.apache.flink.runtime.jobgraph.OperatorID;
-import org.apache.flink.runtime.state.image.KeyedBackendStateImage;
-import org.apache.flink.runtime.state.image.StateHandlesCollectionKeyedStateImage;
+import org.apache.flink.runtime.state.snapshots.Snapshot;
+import org.apache.flink.runtime.state.snapshots.StateObjectCollectionSnapshot;
 import org.apache.flink.runtime.taskmanager.CheckpointResponder;
 import org.apache.flink.util.Preconditions;
 
@@ -73,21 +73,21 @@ public class SlotStateManager implements CheckpointListener {
 
 
 				KeyedStateHandle primaryKeyedBackendStateImage = null;
-				Collection<KeyedBackendStateImage> managedKeyedState = subtaskStateReport.getManagedKeyedState();
+				Collection<Snapshot> managedKeyedState = subtaskStateReport.getManagedKeyedState();
 
 				if (managedKeyedState != null) {
-					for (KeyedBackendStateImage stateImage : managedKeyedState) {
+					for (Snapshot stateImage : managedKeyedState) {
 
-						if (stateImage != null && stateImage.getStateImageMetaData().isPrimary()) {
+						if (stateImage != null && stateImage.getSnapshotMetaData().isPrimary()) {
 
 							Preconditions.checkState(primaryKeyedBackendStateImage == null,
 								"More than one primary state image!");
 
-							Preconditions.checkState(stateImage instanceof StateHandlesCollectionKeyedStateImage,
+							Preconditions.checkState(stateImage instanceof StateObjectCollectionSnapshot,
 								"Primary image is not based on keyed state handles.");
 
 							Collection<? extends KeyedStateHandle> keyedStateHandles =
-								((StateHandlesCollectionKeyedStateImage<?, ? extends KeyedStateHandle>) stateImage).getKeyedStateHandles();
+								((StateObjectCollectionSnapshot<? extends KeyedStateHandle>) stateImage).getStateObjects();
 
 							Preconditions.checkState(keyedStateHandles.size() == 1,
 								"Found more than one state handle.");

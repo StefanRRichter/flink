@@ -18,7 +18,7 @@
 
 package org.apache.flink.runtime.state;
 
-import org.apache.flink.runtime.state.image.KeyedBackendStateImage;
+import org.apache.flink.runtime.state.snapshots.Snapshot;
 
 import javax.annotation.Nullable;
 
@@ -42,7 +42,7 @@ public class OperatorSubtaskStateReport {
 	 * Snapshot from {@link org.apache.flink.runtime.state.KeyedStateBackend}.
 	 */
 	@Nullable
-	private final Collection<KeyedBackendStateImage> managedKeyedState;
+	private final Collection<Snapshot> managedKeyedState;
 
 	/**
 	 * Snapshot written using {@link org.apache.flink.runtime.state.KeyedStateCheckpointOutputStream}.
@@ -64,7 +64,7 @@ public class OperatorSubtaskStateReport {
 	public OperatorSubtaskStateReport(
 		OperatorStateHandle managedOperatorState,
 		OperatorStateHandle rawOperatorState,
-		Collection<KeyedBackendStateImage> managedKeyedState,
+		Collection<Snapshot> managedKeyedState,
 		KeyedStateHandle rawKeyedState) {
 
 		this.managedOperatorState = managedOperatorState;
@@ -87,7 +87,7 @@ public class OperatorSubtaskStateReport {
 	}
 
 	@Nullable
-	public Collection<KeyedBackendStateImage> getManagedKeyedState() {
+	public Collection<Snapshot> getManagedKeyedState() {
 		return managedKeyedState;
 	}
 

@@ -60,13 +60,13 @@ import org.apache.flink.runtime.state.PlaceholderStreamStateHandle;
 import org.apache.flink.runtime.state.RegisteredKeyedBackendStateMetaInfo;
 import org.apache.flink.runtime.state.SnappyStreamCompressionDecorator;
 import org.apache.flink.runtime.state.StateHandleID;
-import org.apache.flink.runtime.state.StateImageMetaData;
+import org.apache.flink.runtime.state.SnapshotMetaData;
 import org.apache.flink.runtime.state.StateObject;
 import org.apache.flink.runtime.state.StateUtil;
 import org.apache.flink.runtime.state.StreamCompressionDecorator;
 import org.apache.flink.runtime.state.StreamStateHandle;
 import org.apache.flink.runtime.state.UncompressedStreamCompressionDecorator;
-import org.apache.flink.runtime.state.image.KeyedBackendStateImage;
+import org.apache.flink.runtime.state.snapshots.Snapshot;
 import org.apache.flink.runtime.state.internal.InternalAggregatingState;
 import org.apache.flink.runtime.state.internal.InternalFoldingState;
 import org.apache.flink.runtime.state.internal.InternalListState;
@@ -88,7 +88,6 @@ import org.rocksdb.ReadOptions;
 import org.rocksdb.RocksDB;
 import org.rocksdb.RocksDBException;
 import org.rocksdb.RocksIterator;
-import org.rocksdb.Snapshot;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -327,7 +326,7 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 	 * @throws Exception
 	 */
 	@Override
-	public RunnableFuture<Collection<KeyedBackendStateImage>> snapshot(
+	public RunnableFuture<Collection<Snapshot>> snapshot(
 		final long checkpointId,
 		final long timestamp,
 		final CheckpointStreamFactory streamFactory,
@@ -341,7 +340,7 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 		}
 	}
 
-	private RunnableFuture<Collection<KeyedBackendStateImage>> snapshotIncrementally(
+	private RunnableFuture<Collection<Snapshot>> snapshotIncrementally(
 		final long checkpointId,
 		final long checkpointTimestamp,
 		final CheckpointStreamFactory checkpointStreamFactory) throws Exception {
@@ -369,10 +368,10 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 			snapshotOperation.takeSnapshot();
 		}
 
-		return new FutureTask<Collection<KeyedBackendStateImage>>(
-			new Callable<Collection<KeyedBackendStateImage>>() {
+		return new FutureTask<Collection<Snapshot>>(
+			new Callable<Collection<Snapshot>>() {
 				@Override
-				public Collection<KeyedBackendStateImage> call() throws Exception {
+				public Collection<Snapshot> call() throws Exception {
 					return snapshotOperation.materializeSnapshot();
 				}
 			}
@@ -390,7 +389,7 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 		};
 	}
 
-	private RunnableFuture<Collection<KeyedBackendStateImage>> snapshotFully(
+	private RunnableFuture<Collection<Snapshot>> snapshotFully(
 		final long checkpointId,
 		final long timestamp,
 		final CheckpointStreamFactory streamFactory) throws Exception {
@@ -418,8 +417,8 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 		}
 
 		// implementation of the async IO operation, based on FutureTask
-		AbstractAsyncIOCallable<Collection<KeyedBackendStateImage>, CheckpointStreamFactory.CheckpointStateOutputStream> ioCallable =
-			new AbstractAsyncIOCallable<Collection<KeyedBackendStateImage>, CheckpointStreamFactory.CheckpointStateOutputStream>() {
+		AbstractAsyncIOCallable<Collection<Snapshot>, CheckpointStreamFactory.CheckpointStateOutputStream> ioCallable =
+			new AbstractAsyncIOCallable<Collection<Snapshot>, CheckpointStreamFactory.CheckpointStateOutputStream>() {
 
 				@Override
 				public CheckpointStreamFactory.CheckpointStateOutputStream openIOHandle() throws Exception {
@@ -428,7 +427,7 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 				}
 
 				@Override
-				public Collection<KeyedBackendStateImage> performOperation() throws Exception {
+				public Collection<Snapshot> performOperation() throws Exception {
 					long startTime = System.currentTimeMillis();
 					synchronized (asyncSnapshotLock) {
 						try {
@@ -484,7 +483,7 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 		private long checkpointId;
 		private long checkpointTimeStamp;
 
-		private Snapshot snapshot;
+		private org.rocksdb.Snapshot snapshot;
 		private ReadOptions readOptions;
 		private List<Tuple2<RocksIterator, Integer>> kvStateIterators;
 
@@ -608,10 +607,10 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 		 *
 		 * @return state handle to the completed snapshot
 		 */
-		public Collection<KeyedBackendStateImage> getSnapshotResultStateHandle() {
+		public Collection<Snapshot> getSnapshotResultStateHandle() {
 
-			KeyedBackendStateImage stateImage = new RocksDBFullKeyedStateImage(
-				new StateImageMetaData(true, StateImageMetaData.LocalityHint.DFS),
+			Snapshot stateImage = new RocksDBFullKeyedStateImage(
+				new SnapshotMetaData(true, SnapshotMetaData.LocalityHint.DFS),
 				Collections.singletonList(snapshotResultStateHandle));
 
 			return Collections.singletonList(stateImage);
@@ -927,7 +926,7 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 			checkpoint.createCheckpoint(backupPath.getPath());
 		}
 
-		Collection<KeyedBackendStateImage> materializeSnapshot() throws Exception {
+		Collection<Snapshot> materializeSnapshot() throws Exception {
 
 			stateBackend.cancelStreamRegistry.registerClosable(closeableRegistry);
 
@@ -978,7 +977,7 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 
 			RocksDBIncrementalKeyedStateImage stateImage =
 				new RocksDBIncrementalKeyedStateImage(
-					new StateImageMetaData(true, StateImageMetaData.LocalityHint.DFS),
+					new SnapshotMetaData(true, SnapshotMetaData.LocalityHint.DFS),
 					Collections.singletonList(incrementalKeyedStateHandle));
 			return Collections.singletonList(stateImage);
 		}
@@ -1767,7 +1766,7 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 	}
 
 	@Override
-	public void restoreStateFromImage(KeyedBackendStateImage<?> keyedBackendStateImage) throws Exception {
+	public void restoreStateFromImage(Snapshot<?> keyedBackendStateImage) throws Exception {
 
 		LOG.info("Initializing RocksDB keyed state backend from state image.");
 
@@ -1793,7 +1792,7 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 
 	public void restoreIncremental(RocksDBIncrementalKeyedStateImage image) throws Exception {
 		Preconditions.checkNotNull(image);
-		Collection<IncrementalKeyedStateHandle> stateHandles = image.getKeyedStateHandles();
+		Collection<IncrementalKeyedStateHandle> stateHandles = image.getStateObjects();
 		if (stateHandles.isEmpty()) {
 			createDB();
 		} else {
@@ -1804,7 +1803,7 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 
 	public void restoreFull(RocksDBFullKeyedStateImage image) throws Exception {
 		Preconditions.checkNotNull(image);
-		Collection<KeyGroupsStateHandle> stateHandles = image.getKeyedStateHandles();
+		Collection<KeyGroupsStateHandle> stateHandles = image.getStateObjects();
 		if (stateHandles.isEmpty()) {
 			createDB();
 		} else {

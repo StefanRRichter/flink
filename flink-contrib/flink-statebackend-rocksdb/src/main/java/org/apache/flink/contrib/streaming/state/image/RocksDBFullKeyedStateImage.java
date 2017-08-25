@@ -20,21 +20,21 @@ package org.apache.flink.contrib.streaming.state.image;
 
 import org.apache.flink.contrib.streaming.state.RocksDBKeyedStateBackend;
 import org.apache.flink.runtime.state.KeyGroupsStateHandle;
-import org.apache.flink.runtime.state.StateImageMetaData;
-import org.apache.flink.runtime.state.image.StateHandlesCollectionKeyedStateImage;
+import org.apache.flink.runtime.state.SnapshotMetaData;
+import org.apache.flink.runtime.state.snapshots.StateObjectCollectionSnapshot;
 
 import java.util.Collection;
 
-public class RocksDBFullKeyedStateImage extends StateHandlesCollectionKeyedStateImage<RocksDBKeyedStateBackend<?>, KeyGroupsStateHandle> {
+public class RocksDBFullKeyedStateImage extends StateObjectCollectionSnapshot<RocksDBKeyedStateBackend<?>, KeyGroupsStateHandle> {
 
 	private static final long serialVersionUID = 1L;
 
-	public RocksDBFullKeyedStateImage(StateImageMetaData metaData, Collection<KeyGroupsStateHandle> keyedStateHandles) {
+	public RocksDBFullKeyedStateImage(SnapshotMetaData metaData, Collection<KeyGroupsStateHandle> keyedStateHandles) {
 		super(metaData, keyedStateHandles);
 	}
 
 	@Override
-	protected void doRestore(RocksDBKeyedStateBackend<?> backend) throws Exception {
+	public void doRestore(RocksDBKeyedStateBackend<?> backend) throws Exception {
 		backend.restoreFull(this);
 	}
 }

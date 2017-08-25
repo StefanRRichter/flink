@@ -21,17 +21,14 @@ package org.apache.flink.runtime.state;
 import org.apache.flink.api.common.state.OperatorStateStore;
 
 import java.io.Closeable;
-import java.util.Collection;
 
 /**
  * Interface that combines both, the user facing {@link OperatorStateStore} interface and the system interface
  * {@link Snapshotable}
  *
  */
-public interface OperatorStateBackend extends OperatorStateStore, Snapshotable<OperatorStateHandle>, Closeable {
-
-	//TODO change to state images, move to interface similar like the keyed backends.
-	void restore(Collection<OperatorStateHandle> restoreSnapshots) throws Exception;
+public interface OperatorStateBackend
+	extends OperatorStateStore, Snapshotable, Closeable {
 
 	/**
 	 * Disposes the backend and releases all resources.

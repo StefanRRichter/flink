@@ -20,10 +20,10 @@ package org.apache.flink.streaming.util;
 
 import org.apache.flink.runtime.state.AbstractKeyedStateBackend;
 import org.apache.flink.runtime.state.KeyedStateHandle;
-import org.apache.flink.runtime.state.StateImageMetaData;
+import org.apache.flink.runtime.state.SnapshotMetaData;
 import org.apache.flink.runtime.state.heap.HeapKeyedStateBackend;
-import org.apache.flink.runtime.state.image.HeapFullKeyedStateImage;
-import org.apache.flink.runtime.state.image.KeyedBackendStateImage;
+import org.apache.flink.runtime.state.snapshots.FullKeyedStateImage;
+import org.apache.flink.runtime.state.snapshots.Snapshot;
 
 import java.util.Collection;
 
@@ -34,7 +34,7 @@ public class StateHandleToStateImageConverter {
 	}
 
 	@SuppressWarnings("unchecked")
-	public static KeyedBackendStateImage convert(
+	public static Snapshot convert(
 		AbstractKeyedStateBackend<?> backend,
 		Collection<KeyedStateHandle> stateHandles) {
 
@@ -56,7 +56,7 @@ public class StateHandleToStateImageConverter {
 //
 //		} else
 		if (backend instanceof HeapKeyedStateBackend) {
-			return new HeapFullKeyedStateImage(StateImageMetaData.PRIMARY_DFS, stateHandles);
+			return new FullKeyedStateImage(SnapshotMetaData.PRIMARY_DFS, stateHandles);
 		} else {
 			throw new IllegalArgumentException("Unexpected backend type: " + backend);
 		}

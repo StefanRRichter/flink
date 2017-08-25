@@ -16,28 +16,25 @@
  * limitations under the License.
  */
 
-package org.apache.flink.contrib.streaming.state.image;
+package org.apache.flink.runtime.state.snapshots;
 
-import org.apache.flink.contrib.streaming.state.RocksDBKeyedStateBackend;
-import org.apache.flink.runtime.state.IncrementalKeyedStateHandle;
+import org.apache.flink.runtime.state.KeyGroupsStateHandle;
 import org.apache.flink.runtime.state.SnapshotMetaData;
-import org.apache.flink.runtime.state.snapshots.StateObjectCollectionSnapshot;
+import org.apache.flink.runtime.state.StateReporter;
 
 import java.util.Collection;
 
-public class RocksDBIncrementalKeyedStateImage extends StateObjectCollectionSnapshot<RocksDBKeyedStateBackend<?>, IncrementalKeyedStateHandle> {
+public class FullKeyedStateImage
+	extends StateObjectCollectionSnapshot<KeyGroupsStateHandle> {
 
 	private static final long serialVersionUID = 1L;
 
-	public RocksDBIncrementalKeyedStateImage(
-		SnapshotMetaData metaData,
-		Collection<IncrementalKeyedStateHandle> keyedStateHandles) {
-
+	public FullKeyedStateImage(SnapshotMetaData metaData, Collection<KeyGroupsStateHandle> keyedStateHandles) {
 		super(metaData, keyedStateHandles);
 	}
 
 	@Override
-	public void doRestore(RocksDBKeyedStateBackend<?> backend) throws Exception {
-		backend.restoreIncremental(this);
+	public void report(StateReporter stateReporter) {
+		stateReporter.reportKeyedStateFromBackend(this);
 	}
 }

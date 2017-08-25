@@ -48,15 +48,14 @@ import org.apache.flink.runtime.state.KeyGroupRange;
 import org.apache.flink.runtime.state.KeyGroupRangeOffsets;
 import org.apache.flink.runtime.state.KeyGroupsStateHandle;
 import org.apache.flink.runtime.state.KeyedBackendSerializationProxy;
-import org.apache.flink.runtime.state.KeyedStateHandle;
 import org.apache.flink.runtime.state.RegisteredKeyedBackendStateMetaInfo;
 import org.apache.flink.runtime.state.SnappyStreamCompressionDecorator;
-import org.apache.flink.runtime.state.StateImageMetaData;
+import org.apache.flink.runtime.state.SnapshotMetaData;
 import org.apache.flink.runtime.state.StreamCompressionDecorator;
 import org.apache.flink.runtime.state.StreamStateHandle;
 import org.apache.flink.runtime.state.UncompressedStreamCompressionDecorator;
-import org.apache.flink.runtime.state.image.HeapFullKeyedStateImage;
-import org.apache.flink.runtime.state.image.KeyedBackendStateImage;
+import org.apache.flink.runtime.state.snapshots.FullKeyedStateImage;
+import org.apache.flink.runtime.state.snapshots.Snapshot;
 import org.apache.flink.runtime.state.internal.InternalAggregatingState;
 import org.apache.flink.runtime.state.internal.InternalFoldingState;
 import org.apache.flink.runtime.state.internal.InternalListState;
@@ -288,19 +287,8 @@ public class HeapKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 	}
 
 	@Override
-	public void restoreStateFromImage(KeyedBackendStateImage<?> keyedBackendStateImage) throws Exception {
-		if (keyedBackendStateImage != null) {
-			keyedBackendStateImage.restore(this);
-		}
-	}
-
-	public void restoreFullFromFile(HeapFullKeyedStateImage image) throws Exception {
-		restore(image.getKeyedStateHandles());
-	}
-
-	@Override
 	@SuppressWarnings("unchecked")
-	public RunnableFuture<Collection<KeyedBackendStateImage>> snapshot(
+	public RunnableFuture<Collection<Snapshot>> snapshot(
 			final long checkpointId,
 			final long timestamp,
 			final CheckpointStreamFactory streamFactory,
@@ -341,15 +329,15 @@ public class HeapKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 		//--------------------------------------------------- this becomes the end of sync part
 
 		// implementation of the async IO operation, based on FutureTask
-		final AbstractAsyncSnapshotIOCallable<Collection<KeyedBackendStateImage>> ioCallable =
-			new AbstractAsyncSnapshotIOCallable<Collection<KeyedBackendStateImage>>(
+		final AbstractAsyncSnapshotIOCallable<Collection<Snapshot>> ioCallable =
+			new AbstractAsyncSnapshotIOCallable<Collection<Snapshot>>(
 				checkpointId,
 				timestamp,
 				streamFactory,
 				cancelStreamRegistry) {
 
 				@Override
-				public Collection<KeyedBackendStateImage> performOperation() throws Exception {
+				public Collection<Snapshot> performOperation() throws Exception {
 
 					long asyncStartTime = System.currentTimeMillis();
 
@@ -387,9 +375,9 @@ public class HeapKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 					KeyGroupRangeOffsets offsets = new KeyGroupRangeOffsets(keyGroupRange, keyGroupRangeOffsets);
 					final KeyGroupsStateHandle keyGroupsStateHandle = new KeyGroupsStateHandle(offsets, streamStateHandle);
 
-					HeapFullKeyedStateImage stateImage =
-						new HeapFullKeyedStateImage(
-							new StateImageMetaData(true, StateImageMetaData.LocalityHint.DFS),
+					FullKeyedStateImage stateImage =
+						new FullKeyedStateImage(
+							new SnapshotMetaData(true, SnapshotMetaData.LocalityHint.DFS),
 							Collections.singletonList(keyGroupsStateHandle));
 
 					return Collections.singletonList(stateImage);
@@ -404,7 +392,7 @@ public class HeapKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 				}
 			};
 
-		AsyncStoppableTaskWithCallback<Collection<KeyedBackendStateImage>> task =
+		AsyncStoppableTaskWithCallback<Collection<Snapshot>> task =
 			AsyncStoppableTaskWithCallback.from(ioCallable);
 
 		if (!asynchronousSnapshots) {
@@ -417,7 +405,15 @@ public class HeapKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 		return task;
 	}
 
-	private void restore(Collection<KeyedStateHandle> restoredState) throws Exception {
+	@Override
+	public void restore(Snapshot snapshot) throws Exception {
+		if (snapshot instanceof FullKeyedStateImage) {
+			restore(((FullKeyedStateImage) snapshot).getStateObjects());
+		}
+	}
+
+	private void restore(Collection<KeyGroupsStateHandle> restoredState) throws Exception {
+
 		if (restoredState == null || restoredState.isEmpty()) {
 			return;
 		}
@@ -432,7 +428,7 @@ public class HeapKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 	}
 
 	@SuppressWarnings({"unchecked"})
-	private void restorePartitionedState(Collection<KeyedStateHandle> state) throws Exception {
+	private void restorePartitionedState(Collection<KeyGroupsStateHandle> state) throws Exception {
 
 		final Map<Integer, String> kvStatesById = new HashMap<>();
 		int numRegisteredKvStates = 0;
@@ -440,20 +436,13 @@ public class HeapKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 
 		boolean keySerializerRestored = false;
 
-		for (KeyedStateHandle keyedStateHandle : state) {
+		for (KeyGroupsStateHandle keyedStateHandle : state) {
 
 			if (keyedStateHandle == null) {
 				continue;
 			}
 
-			if (!(keyedStateHandle instanceof KeyGroupsStateHandle)) {
-				throw new IllegalStateException("Unexpected state handle type, " +
-						"expected: " + KeyGroupsStateHandle.class +
-						", but found: " + keyedStateHandle.getClass());
-			}
-
-			KeyGroupsStateHandle keyGroupsStateHandle = (KeyGroupsStateHandle) keyedStateHandle;
-			FSDataInputStream fsDataInputStream = keyGroupsStateHandle.openInputStream();
+			FSDataInputStream fsDataInputStream = keyedStateHandle.openInputStream();
 			cancelStreamRegistry.registerClosable(fsDataInputStream);
 
 			try {
@@ -528,7 +517,7 @@ public class HeapKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 				final StreamCompressionDecorator streamCompressionDecorator = serializationProxy.isUsingKeyGroupCompression() ?
 					SnappyStreamCompressionDecorator.INSTANCE : UncompressedStreamCompressionDecorator.INSTANCE;
 
-				for (Tuple2<Integer, Long> groupOffset : keyGroupsStateHandle.getGroupRangeOffsets()) {
+				for (Tuple2<Integer, Long> groupOffset : keyedStateHandle.getGroupRangeOffsets()) {
 					int keyGroupIndex = groupOffset.f0;
 					long offset = groupOffset.f1;
 

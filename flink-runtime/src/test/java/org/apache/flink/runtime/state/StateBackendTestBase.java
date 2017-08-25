@@ -56,9 +56,9 @@ import org.apache.flink.runtime.query.netty.message.KvStateRequestSerializer;
 import org.apache.flink.runtime.state.heap.AbstractHeapState;
 import org.apache.flink.runtime.state.heap.NestedMapsStateTable;
 import org.apache.flink.runtime.state.heap.StateTable;
-import org.apache.flink.runtime.state.image.KeyedBackendStateImage;
 import org.apache.flink.runtime.state.internal.InternalKvState;
 import org.apache.flink.runtime.state.internal.InternalValueState;
+import org.apache.flink.runtime.state.snapshots.Snapshot;
 import org.apache.flink.runtime.util.BlockerCheckpointStreamFactory;
 import org.apache.flink.shaded.guava18.com.google.common.base.Joiner;
 import org.apache.flink.types.IntValue;
@@ -147,18 +147,18 @@ public abstract class StateBackendTestBase<B extends AbstractStateBackend> exten
 				keyGroupRange,
 				env.getTaskKvStateRegistry());
 
-		backend.restoreStateFromImage(null);
+		backend.restore(null);
 
 		return backend;
 	}
 
-	protected <K> AbstractKeyedStateBackend<K> restoreKeyedBackend(TypeSerializer<K> keySerializer, Collection<KeyedBackendStateImage> state) throws Exception {
+	protected <K> AbstractKeyedStateBackend<K> restoreKeyedBackend(TypeSerializer<K> keySerializer, Collection<Snapshot> state) throws Exception {
 		return restoreKeyedBackend(keySerializer, state, new DummyEnvironment("test", 1, 0));
 	}
 
 	protected <K> AbstractKeyedStateBackend<K> restoreKeyedBackend(
 			TypeSerializer<K> keySerializer,
-			Collection<KeyedBackendStateImage> state,
+			Collection<Snapshot> state,
 			Environment env) throws Exception {
 		return restoreKeyedBackend(
 				keySerializer,
@@ -172,7 +172,7 @@ public abstract class StateBackendTestBase<B extends AbstractStateBackend> exten
 		TypeSerializer<K> keySerializer,
 		int numberOfKeyGroups,
 		KeyGroupRange keyGroupRange,
-		Collection<KeyedBackendStateImage> state,
+		Collection<Snapshot> state,
 		Environment env) throws Exception {
 
 		AbstractKeyedStateBackend<K> backend = getStateBackend().createKeyedStateBackend(
@@ -186,9 +186,9 @@ public abstract class StateBackendTestBase<B extends AbstractStateBackend> exten
 
 		try {
 			if (state == null || state.isEmpty()) {
-				backend.restoreStateFromImage(null);
+				backend.restore(null);
 			} else {
-				backend.restoreStateFromImage(state.iterator().next());
+				backend.restore(state.iterator().next());
 			}
 		} catch (Exception e) {
 			backend.dispose();
@@ -456,7 +456,7 @@ public abstract class StateBackendTestBase<B extends AbstractStateBackend> exten
 		backend.setCurrentKey(2);
 		state.update(new TestPojo("u2", 2));
 
-		Collection<KeyedBackendStateImage> snapshot = runSnapshot(backend.snapshot(
+		Collection<Snapshot> snapshot = runSnapshot(backend.snapshot(
 				682375462378L,
 				2,
 				streamFactory,
@@ -521,13 +521,13 @@ public abstract class StateBackendTestBase<B extends AbstractStateBackend> exten
 			backend.setCurrentKey(2);
 			state.update(new TestPojo("u2", 2));
 
-			Collection<KeyedBackendStateImage> snapshot = runSnapshot(backend.snapshot(
+			Collection<Snapshot> snapshot = runSnapshot(backend.snapshot(
 				682375462378L,
 				2,
 				streamFactory,
 				CheckpointOptions.forFullCheckpoint()));
 
-			KeyedBackendStateImage stateImage = snapshot.iterator().next();
+			Snapshot stateImage = snapshot.iterator().next();
 			//TODO !!!!!!!!!!!! revisit
 //			if (stateImage instanceof RocksDBIncrementalKeyedStateImage) {
 //				Collection<IncrementalKeyedStateHandle> keyedStateHandles =
@@ -556,7 +556,7 @@ public abstract class StateBackendTestBase<B extends AbstractStateBackend> exten
 			// update to test state backends that eagerly serialize, such as RocksDB
 			state.update(new TestPojo("u1", 11));
 
-			Collection<KeyedBackendStateImage> snapshot2 = runSnapshot(backend.snapshot(
+			Collection<Snapshot> snapshot2 = runSnapshot(backend.snapshot(
 				682375462378L,
 				2,
 				streamFactory,
@@ -641,13 +641,13 @@ public abstract class StateBackendTestBase<B extends AbstractStateBackend> exten
 			backend.setCurrentKey(2);
 			state.update(new TestPojo("u2", 2));
 
-			Collection<KeyedBackendStateImage> snapshot = runSnapshot(backend.snapshot(
+			Collection<Snapshot> snapshot = runSnapshot(backend.snapshot(
 				682375462378L,
 				2,
 				streamFactory,
 				CheckpointOptions.forFullCheckpoint()));
 
-			KeyedBackendStateImage stateImage = snapshot.iterator().next();
+			Snapshot stateImage = snapshot.iterator().next();
 			//TODO !!!!!!!!!!!! revisit
 //			if (stateImage instanceof RocksDBIncrementalKeyedStateImage) {
 //				Collection<IncrementalKeyedStateHandle> keyedStateHandles =
@@ -675,7 +675,7 @@ public abstract class StateBackendTestBase<B extends AbstractStateBackend> exten
 			// update to test state backends that eagerly serialize, such as RocksDB
 			state.update(new TestPojo("u1", 11));
 
-			Collection<KeyedBackendStateImage> snapshot2 = runSnapshot(backend.snapshot(
+			Collection<Snapshot> snapshot2 = runSnapshot(backend.snapshot(
 				682375462378L,
 				2,
 				streamFactory,
@@ -749,7 +749,7 @@ public abstract class StateBackendTestBase<B extends AbstractStateBackend> exten
 		backend.setCurrentKey(2);
 		state.update(new TestPojo("u2", 2, new TestNestedPojoClassA(2.0, 5), new TestNestedPojoClassB(3.1, "bar")));
 
-		Collection<KeyedBackendStateImage> snapshot = runSnapshot(backend.snapshot(
+		Collection<Snapshot> snapshot = runSnapshot(backend.snapshot(
 			682375462378L,
 			2,
 			streamFactory,
@@ -816,7 +816,7 @@ public abstract class StateBackendTestBase<B extends AbstractStateBackend> exten
 		backend.setCurrentKey(2);
 		state.update(new TestPojo("u2", 2, new TestNestedPojoClassA(2.0, 5), new TestNestedPojoClassB(3.1, "bar")));
 
-		Collection<KeyedBackendStateImage> snapshot = runSnapshot(backend.snapshot(
+		Collection<Snapshot> snapshot = runSnapshot(backend.snapshot(
 			682375462378L,
 			2,
 			streamFactory,
@@ -887,7 +887,7 @@ public abstract class StateBackendTestBase<B extends AbstractStateBackend> exten
 		assertEquals("1", getSerializedValue(kvState, 1, keySerializer, VoidNamespace.INSTANCE, namespaceSerializer, valueSerializer));
 
 		// draw a snapshot
-		Collection<KeyedBackendStateImage> snapshot1 = FutureUtil.runIfNotDoneAndGet(backend.snapshot(682375462378L, 2, streamFactory, CheckpointOptions.forFullCheckpoint()));
+		Collection<Snapshot> snapshot1 = FutureUtil.runIfNotDoneAndGet(backend.snapshot(682375462378L, 2, streamFactory, CheckpointOptions.forFullCheckpoint()));
 
 		// make some more modifications
 		backend.setCurrentKey(1);
@@ -898,7 +898,7 @@ public abstract class StateBackendTestBase<B extends AbstractStateBackend> exten
 		state.update("u3");
 
 		// draw another snapshot
-		Collection<KeyedBackendStateImage> snapshot2 = FutureUtil.runIfNotDoneAndGet(backend.snapshot(682375462379L, 4, streamFactory, CheckpointOptions.forFullCheckpoint()));
+		Collection<Snapshot> snapshot2 = FutureUtil.runIfNotDoneAndGet(backend.snapshot(682375462379L, 4, streamFactory, CheckpointOptions.forFullCheckpoint()));
 
 		// validate the original state
 		backend.setCurrentKey(1);
@@ -1097,7 +1097,7 @@ public abstract class StateBackendTestBase<B extends AbstractStateBackend> exten
 		assertEquals(13, (int) state2.value());
 
 		// draw a snapshot
-		Collection<KeyedBackendStateImage> snapshot1 =
+		Collection<Snapshot> snapshot1 =
 			FutureUtil.runIfNotDoneAndGet(backend.snapshot(682375462378L, 2, streamFactory, CheckpointOptions.forFullCheckpoint()));
 
 		backend.dispose();
@@ -1170,7 +1170,7 @@ public abstract class StateBackendTestBase<B extends AbstractStateBackend> exten
 		assertEquals(42L, (long) state.value());
 
 		// draw a snapshot
-		Collection<KeyedBackendStateImage> snapshot1 = FutureUtil.runIfNotDoneAndGet(backend.snapshot(682375462378L, 2, streamFactory, CheckpointOptions.forFullCheckpoint()));
+		Collection<Snapshot> snapshot1 = FutureUtil.runIfNotDoneAndGet(backend.snapshot(682375462378L, 2, streamFactory, CheckpointOptions.forFullCheckpoint()));
 
 		backend.dispose();
 		backend = restoreKeyedBackend(IntSerializer.INSTANCE, snapshot1);
@@ -1215,7 +1215,7 @@ public abstract class StateBackendTestBase<B extends AbstractStateBackend> exten
 		assertEquals("1", joiner.join(getSerializedList(kvState, 1, keySerializer, VoidNamespace.INSTANCE, namespaceSerializer, valueSerializer)));
 
 		// draw a snapshot
-		Collection<KeyedBackendStateImage> snapshot1 = runSnapshot(backend.snapshot(682375462378L, 2, streamFactory, CheckpointOptions.forFullCheckpoint()));
+		Collection<Snapshot> snapshot1 = runSnapshot(backend.snapshot(682375462378L, 2, streamFactory, CheckpointOptions.forFullCheckpoint()));
 
 		// make some more modifications
 		backend.setCurrentKey(1);
@@ -1226,7 +1226,7 @@ public abstract class StateBackendTestBase<B extends AbstractStateBackend> exten
 		state.add("u3");
 
 		// draw another snapshot
-		Collection<KeyedBackendStateImage> snapshot2 = runSnapshot(backend.snapshot(682375462379L, 4, streamFactory, CheckpointOptions.forFullCheckpoint()));
+		Collection<Snapshot> snapshot2 = runSnapshot(backend.snapshot(682375462379L, 4, streamFactory, CheckpointOptions.forFullCheckpoint()));
 
 		// validate the original state
 		backend.setCurrentKey(1);
@@ -1309,7 +1309,7 @@ public abstract class StateBackendTestBase<B extends AbstractStateBackend> exten
 		assertEquals("1", getSerializedValue(kvState, 1, keySerializer, VoidNamespace.INSTANCE, namespaceSerializer, valueSerializer));
 
 		// draw a snapshot
-		Collection<KeyedBackendStateImage> snapshot1 = runSnapshot(backend.snapshot(682375462378L, 2, streamFactory, CheckpointOptions.forFullCheckpoint()));
+		Collection<Snapshot> snapshot1 = runSnapshot(backend.snapshot(682375462378L, 2, streamFactory, CheckpointOptions.forFullCheckpoint()));
 
 		// make some more modifications
 		backend.setCurrentKey(1);
@@ -1320,7 +1320,7 @@ public abstract class StateBackendTestBase<B extends AbstractStateBackend> exten
 		state.add("u3");
 
 		// draw another snapshot
-		Collection<KeyedBackendStateImage> snapshot2 = runSnapshot(backend.snapshot(682375462379L, 4, streamFactory, CheckpointOptions.forFullCheckpoint()));
+		Collection<Snapshot> snapshot2 = runSnapshot(backend.snapshot(682375462379L, 4, streamFactory, CheckpointOptions.forFullCheckpoint()));
 
 		// validate the original state
 		backend.setCurrentKey(1);
@@ -1406,7 +1406,7 @@ public abstract class StateBackendTestBase<B extends AbstractStateBackend> exten
 		assertEquals("Fold-Initial:,1", getSerializedValue(kvState, 1, keySerializer, VoidNamespace.INSTANCE, namespaceSerializer, valueSerializer));
 
 		// draw a snapshot
-		Collection<KeyedBackendStateImage> snapshot1 = runSnapshot(backend.snapshot(682375462378L, 2, streamFactory, CheckpointOptions.forFullCheckpoint()));
+		Collection<Snapshot> snapshot1 = runSnapshot(backend.snapshot(682375462378L, 2, streamFactory, CheckpointOptions.forFullCheckpoint()));
 
 		// make some more modifications
 		backend.setCurrentKey(1);
@@ -1418,7 +1418,7 @@ public abstract class StateBackendTestBase<B extends AbstractStateBackend> exten
 		state.add(103);
 
 		// draw another snapshot
-		Collection<KeyedBackendStateImage> snapshot2 = runSnapshot(backend.snapshot(682375462379L, 4, streamFactory, CheckpointOptions.forFullCheckpoint()));
+		Collection<Snapshot> snapshot2 = runSnapshot(backend.snapshot(682375462379L, 4, streamFactory, CheckpointOptions.forFullCheckpoint()));
 
 		// validate the original state
 		backend.setCurrentKey(1);
@@ -1505,7 +1505,7 @@ public abstract class StateBackendTestBase<B extends AbstractStateBackend> exten
 				getSerializedMap(kvState, 1, keySerializer, VoidNamespace.INSTANCE, namespaceSerializer, userKeySerializer, userValueSerializer));
 
 		// draw a snapshot
-		Collection<KeyedBackendStateImage> snapshot1 = runSnapshot(backend.snapshot(682375462378L, 2, streamFactory, CheckpointOptions.forFullCheckpoint()));
+		Collection<Snapshot> snapshot1 = runSnapshot(backend.snapshot(682375462378L, 2, streamFactory, CheckpointOptions.forFullCheckpoint()));
 
 		// make some more modifications
 		backend.setCurrentKey(1);
@@ -1517,7 +1517,7 @@ public abstract class StateBackendTestBase<B extends AbstractStateBackend> exten
 		state.putAll(new HashMap<Integer, String>() {{ put(1031, "1031"); put(1032, "1032"); }});
 
 		// draw another snapshot
-		Collection<KeyedBackendStateImage> snapshot2 = runSnapshot(backend.snapshot(682375462379L, 4, streamFactory, CheckpointOptions.forFullCheckpoint()));
+		Collection<Snapshot> snapshot2 = runSnapshot(backend.snapshot(682375462379L, 4, streamFactory, CheckpointOptions.forFullCheckpoint()));
 
 		// validate the original state
 		backend.setCurrentKey(1);
@@ -1823,7 +1823,7 @@ public abstract class StateBackendTestBase<B extends AbstractStateBackend> exten
 		backend.setCurrentKey(keyInSecondHalf);
 		state.update("ShouldBeInSecondHalf");
 
-		Collection<KeyedBackendStateImage> snapshot = FutureUtil.runIfNotDoneAndGet(backend.snapshot(0, 0, streamFactory, CheckpointOptions.forFullCheckpoint()));
+		Collection<Snapshot> snapshot = FutureUtil.runIfNotDoneAndGet(backend.snapshot(0, 0, streamFactory, CheckpointOptions.forFullCheckpoint()));
 
 		//TODO!!!!!!!!!!!!!!
 //		RocksDBFullKeyedStateImage stateImage = (RocksDBFullKeyedStateImage) snapshot.iterator().next();
@@ -1910,7 +1910,7 @@ public abstract class StateBackendTestBase<B extends AbstractStateBackend> exten
 		state.update("2");
 
 		// draw a snapshot
-		Collection<KeyedBackendStateImage> snapshot1 = FutureUtil.runIfNotDoneAndGet(backend.snapshot(682375462378L, 2, streamFactory, CheckpointOptions.forFullCheckpoint()));
+		Collection<Snapshot> snapshot1 = FutureUtil.runIfNotDoneAndGet(backend.snapshot(682375462378L, 2, streamFactory, CheckpointOptions.forFullCheckpoint()));
 
 		backend.dispose();
 
@@ -1941,7 +1941,7 @@ public abstract class StateBackendTestBase<B extends AbstractStateBackend> exten
 			state.update("2");
 
 			// draw a snapshot
-			Collection<KeyedBackendStateImage> snapshot1 = FutureUtil.runIfNotDoneAndGet(backend.snapshot(682375462378L, 2, streamFactory, CheckpointOptions.forFullCheckpoint()));
+			Collection<Snapshot> snapshot1 = FutureUtil.runIfNotDoneAndGet(backend.snapshot(682375462378L, 2, streamFactory, CheckpointOptions.forFullCheckpoint()));
 
 			backend.dispose();
 			// restore the first snapshot and validate it
@@ -1984,7 +1984,7 @@ public abstract class StateBackendTestBase<B extends AbstractStateBackend> exten
 			state.add("2");
 
 			// draw a snapshot
-			Collection<KeyedBackendStateImage> snapshot1 = FutureUtil.runIfNotDoneAndGet(backend.snapshot(682375462378L, 2, streamFactory, CheckpointOptions.forFullCheckpoint()));
+			Collection<Snapshot> snapshot1 = FutureUtil.runIfNotDoneAndGet(backend.snapshot(682375462378L, 2, streamFactory, CheckpointOptions.forFullCheckpoint()));
 
 			backend.dispose();
 			// restore the first snapshot and validate it
@@ -2029,7 +2029,7 @@ public abstract class StateBackendTestBase<B extends AbstractStateBackend> exten
 			state.add("2");
 
 			// draw a snapshot
-			Collection<KeyedBackendStateImage> snapshot1 = FutureUtil.runIfNotDoneAndGet(backend.snapshot(682375462378L, 2, streamFactory, CheckpointOptions.forFullCheckpoint()));
+			Collection<Snapshot> snapshot1 = FutureUtil.runIfNotDoneAndGet(backend.snapshot(682375462378L, 2, streamFactory, CheckpointOptions.forFullCheckpoint()));
 
 			backend.dispose();
 			// restore the first snapshot and validate it
@@ -2072,7 +2072,7 @@ public abstract class StateBackendTestBase<B extends AbstractStateBackend> exten
 			state.put("2", "Second");
 
 			// draw a snapshot
-			Collection<KeyedBackendStateImage> snapshot1 = FutureUtil.runIfNotDoneAndGet(backend.snapshot(682375462378L, 2, streamFactory, CheckpointOptions.forFullCheckpoint()));
+			Collection<Snapshot> snapshot1 = FutureUtil.runIfNotDoneAndGet(backend.snapshot(682375462378L, 2, streamFactory, CheckpointOptions.forFullCheckpoint()));
 
 			backend.dispose();
 			// restore the first snapshot and validate it
@@ -2331,7 +2331,7 @@ public abstract class StateBackendTestBase<B extends AbstractStateBackend> exten
 				eq(env.getJobID()), eq(env.getJobVertexId()), eq(expectedKeyGroupRange), eq("banana"), any(KvStateID.class));
 
 
-		Collection<KeyedBackendStateImage> snapshot = FutureUtil.runIfNotDoneAndGet(backend.snapshot(682375462379L, 4, streamFactory, CheckpointOptions.forFullCheckpoint()));
+		Collection<Snapshot> snapshot = FutureUtil.runIfNotDoneAndGet(backend.snapshot(682375462379L, 4, streamFactory, CheckpointOptions.forFullCheckpoint()));
 
 		backend.dispose();
 
@@ -2362,7 +2362,7 @@ public abstract class StateBackendTestBase<B extends AbstractStateBackend> exten
 			ListStateDescriptor<String> kvId = new ListStateDescriptor<>("id", String.class);
 
 			// draw a snapshot
-			Collection<KeyedBackendStateImage> snapshot =
+			Collection<Snapshot> snapshot =
 					FutureUtil.runIfNotDoneAndGet(backend.snapshot(682375462379L, 1, streamFactory, CheckpointOptions.forFullCheckpoint()));
 			assertNull(snapshot);
 			backend.dispose();
@@ -2390,7 +2390,7 @@ public abstract class StateBackendTestBase<B extends AbstractStateBackend> exten
 		streamFactory.setWaiterLatch(waiter);
 
 		AbstractKeyedStateBackend<Integer> backend = null;
-		Collection<KeyedBackendStateImage> stateHandle = null;
+		Collection<Snapshot> stateHandle = null;
 
 		try {
 			backend = createKeyedBackend(IntSerializer.INSTANCE);
@@ -2405,7 +2405,7 @@ public abstract class StateBackendTestBase<B extends AbstractStateBackend> exten
 				valueState.update(i);
 			}
 
-			RunnableFuture<Collection<KeyedBackendStateImage>> snapshot =
+			RunnableFuture<Collection<Snapshot>> snapshot =
 					backend.snapshot(0L, 0L, streamFactory, CheckpointOptions.forFullCheckpoint());
 			Thread runner = new Thread(snapshot);
 			runner.start();
@@ -2489,7 +2489,7 @@ public abstract class StateBackendTestBase<B extends AbstractStateBackend> exten
 				valueState.update(i);
 			}
 
-			RunnableFuture<Collection<KeyedBackendStateImage>> snapshot =
+			RunnableFuture<Collection<Snapshot>> snapshot =
 					backend.snapshot(0L, 0L, streamFactory, CheckpointOptions.forFullCheckpoint());
 
 			Thread runner = new Thread(snapshot);
@@ -2601,7 +2601,7 @@ public abstract class StateBackendTestBase<B extends AbstractStateBackend> exten
 		}
 	}
 
-	protected Collection<KeyedBackendStateImage> runSnapshot(RunnableFuture<Collection<KeyedBackendStateImage>> snapshotRunnableFuture) throws Exception {
+	protected Collection<Snapshot> runSnapshot(RunnableFuture<Collection<Snapshot>> snapshotRunnableFuture) throws Exception {
 		if(!snapshotRunnableFuture.isDone()) {
 			Thread runner = new Thread(snapshotRunnableFuture);
 			runner.start();
