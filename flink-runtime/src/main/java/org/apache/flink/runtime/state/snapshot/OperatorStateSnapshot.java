@@ -16,39 +16,21 @@
  * limitations under the License.
  */
 
-package org.apache.flink.runtime.state;
+package org.apache.flink.runtime.state.snapshot;
 
-import java.io.Serializable;
+import org.apache.flink.runtime.state.OperatorStateHandle;
 
-public class StateImageMetaData implements Serializable {
+import javax.annotation.Nonnull;
 
-	public static final StateImageMetaData PRIMARY_DFS = new StateImageMetaData(true, LocalityHint.DFS);
+import java.util.Collection;
 
-	public StateImageMetaData(boolean primary, LocalityHint localityHint) {
-		this.primary = true;
-		this.localityHint = localityHint;
-	}
+public class OperatorStateSnapshot extends Snapshot<OperatorStateHandle>{
 
-	public enum LocalityHint {
-		DFS, LOCAL_DISK, LOCAL_MEMORY, MOUNTED_DISK
-	}
+	private static final long serialVersionUID = 1L;
 
-	private final LocalityHint localityHint;
-	private boolean primary;
-
-	public LocalityHint getLocalityHint() {
-		return localityHint;
-	}
-
-	public boolean isPrimary() {
-		return primary;
-	}
-
-	@Override
-	public String toString() {
-		return "StateImageMetaData{" +
-			"localityHint=" + localityHint +
-			", primary=" + primary +
-			'}';
+	public OperatorStateSnapshot(
+		@Nonnull SnapshotMetaData metaData,
+		@Nonnull Collection<OperatorStateHandle> stateObjects) {
+		super(metaData, stateObjects);
 	}
 }
