@@ -23,6 +23,7 @@ import org.apache.flink.runtime.state.KeyedStateHandle;
 import javax.annotation.Nonnull;
 
 import java.util.Collection;
+import java.util.Collections;
 
 public class KeyedStateSnapshot extends Snapshot<KeyedStateHandle> {
 
@@ -31,5 +32,11 @@ public class KeyedStateSnapshot extends Snapshot<KeyedStateHandle> {
 		@Nonnull Collection<KeyedStateHandle> stateObjects) {
 
 		super(metaData, stateObjects);
+	}
+
+	public KeyedStateSnapshot(
+		@Nonnull SnapshotMetaData metaData,
+		@Nonnull KeyedStateHandle stateObjects) {
+		this(metaData, Collections.singletonList(stateObjects));
 	}
 }

@@ -46,6 +46,7 @@ import org.apache.flink.runtime.state.OperatorStateHandle;
 import org.apache.flink.runtime.state.SlotStateManager;
 import org.apache.flink.runtime.state.StateBackend;
 import org.apache.flink.runtime.state.snapshot.KeyedStateSnapshot;
+import org.apache.flink.runtime.state.snapshot.OperatorStateSnapshot;
 import org.apache.flink.runtime.state.snapshot.OperatorSubtaskStateReport;
 import org.apache.flink.runtime.state.snapshot.SnapshotMetaData;
 import org.apache.flink.runtime.taskmanager.DispatcherThreadFactory;
@@ -706,7 +707,7 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 	}
 
 	public OperatorStateBackend createOperatorStateBackend(
-			StreamOperator<?> op, Collection<OperatorStateHandle> restoreStateHandles) throws Exception {
+			StreamOperator<?> op, OperatorStateSnapshot restoreStateHandles) throws Exception {
 
 		Environment env = getEnvironment();
 		String opId = createOperatorIdentifier(op, getConfiguration().getVertexID());

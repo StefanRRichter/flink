@@ -27,13 +27,14 @@ import org.apache.flink.runtime.state.heap.HeapKeyedStateBackend;
 import org.apache.flink.runtime.state.heap.HeapReducingStateTest;
 import org.apache.flink.runtime.state.internal.InternalValueState;
 import org.apache.flink.runtime.state.memory.MemCheckpointStreamFactory;
+import org.apache.flink.runtime.state.snapshot.KeyedStateSnapshot;
 import org.apache.flink.util.TestLogger;
 
 import org.apache.commons.io.IOUtils;
 import org.junit.Assert;
 import org.junit.Test;
 
-import java.util.Collections;
+import java.util.Collection;
 import java.util.concurrent.RunnableFuture;
 
 import static org.mockito.Mockito.mock;
@@ -101,7 +102,7 @@ public class StateSnapshotCompressionTest extends TestLogger {
 		ExecutionConfig executionConfig = new ExecutionConfig();
 		executionConfig.setUseSnapshotCompression(useCompression);
 
-		KeyedStateHandle stateHandle = null;
+		Collection<KeyedStateSnapshot> stateHandle;
 
 		ValueStateDescriptor<String> stateDescriptor = new ValueStateDescriptor<>("test", String.class);
 		stateDescriptor.initializeSerializerUnlessSet(executionConfig);
@@ -135,7 +136,7 @@ public class StateSnapshotCompressionTest extends TestLogger {
 			state.setCurrentNamespace(VoidNamespace.INSTANCE);
 			state.update("45");
 			CheckpointStreamFactory streamFactory = new MemCheckpointStreamFactory(4 * 1024 * 1024);
-			RunnableFuture<KeyedStateHandle> snapshot =
+			RunnableFuture<Collection<KeyedStateSnapshot>> snapshot =
 				stateBackend.snapshot(0L, 0L, streamFactory, CheckpointOptions.forFullCheckpoint());
 			snapshot.run();
 			stateHandle = snapshot.get();
@@ -157,7 +158,7 @@ public class StateSnapshotCompressionTest extends TestLogger {
 			executionConfig);
 		try {
 
-			stateBackend.restore(Collections.singletonList(stateHandle));
+			stateBackend.restore(stateHandle.iterator().next());
 
 			InternalValueState<VoidNamespace, String> state = stateBackend.createValueState(
 				new VoidNamespaceSerializer(),

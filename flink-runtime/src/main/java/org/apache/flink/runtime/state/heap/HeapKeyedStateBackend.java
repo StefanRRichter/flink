@@ -60,6 +60,8 @@ import org.apache.flink.runtime.state.internal.InternalListState;
 import org.apache.flink.runtime.state.internal.InternalMapState;
 import org.apache.flink.runtime.state.internal.InternalReducingState;
 import org.apache.flink.runtime.state.internal.InternalValueState;
+import org.apache.flink.runtime.state.snapshot.KeyedStateSnapshot;
+import org.apache.flink.runtime.state.snapshot.SnapshotMetaData;
 import org.apache.flink.util.Preconditions;
 import org.apache.flink.util.StateMigrationException;
 
@@ -73,6 +75,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -283,9 +286,11 @@ public class HeapKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 		return new HeapMapState<>(stateDesc, stateTable, keySerializer, namespaceSerializer);
 	}
 
+
+
 	@Override
 	@SuppressWarnings("unchecked")
-	public  RunnableFuture<KeyedStateHandle> snapshot(
+	public  RunnableFuture<Collection<KeyedStateSnapshot>> snapshot(
 			final long checkpointId,
 			final long timestamp,
 			final CheckpointStreamFactory streamFactory,
@@ -325,8 +330,8 @@ public class HeapKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 		//--------------------------------------------------- this becomes the end of sync part
 
 		// implementation of the async IO operation, based on FutureTask
-		final AbstractAsyncCallableWithResources<KeyedStateHandle> ioCallable =
-			new AbstractAsyncCallableWithResources<KeyedStateHandle>() {
+		final AbstractAsyncCallableWithResources<Collection<KeyedStateSnapshot>> ioCallable =
+			new AbstractAsyncCallableWithResources<Collection<KeyedStateSnapshot>>() {
 
 				CheckpointStreamFactory.CheckpointStateOutputStream stream = null;
 
@@ -358,7 +363,7 @@ public class HeapKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 				}
 
 				@Override
-				public KeyGroupsStateHandle performOperation() throws Exception {
+				public Collection<KeyedStateSnapshot> performOperation() throws Exception {
 					long asyncStartTime = System.currentTimeMillis();
 
 					CheckpointStreamFactory.CheckpointStateOutputStream localStream = this.stream;
@@ -400,7 +405,10 @@ public class HeapKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 							final KeyGroupsStateHandle keyGroupsStateHandle =
 								new KeyGroupsStateHandle(offsets, streamStateHandle);
 
-							return keyGroupsStateHandle;
+							return Collections.singletonList(
+								new KeyedStateSnapshot(
+									SnapshotMetaData.createPrimarySnapshotMetaData(),
+									keyGroupsStateHandle));
 						}
 					}
 
@@ -408,7 +416,7 @@ public class HeapKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 				}
 			};
 
-		AsyncStoppableTaskWithCallback<KeyedStateHandle> task = AsyncStoppableTaskWithCallback.from(ioCallable);
+		AsyncStoppableTaskWithCallback<Collection<KeyedStateSnapshot>> task = AsyncStoppableTaskWithCallback.from(ioCallable);
 
 		if (!asynchronousSnapshots) {
 			task.run();
@@ -422,22 +430,16 @@ public class HeapKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 
 	@SuppressWarnings("deprecation")
 	@Override
-	public void restore(Collection<KeyedStateHandle> restoredState) throws Exception {
-		if (restoredState == null || restoredState.isEmpty()) {
+	public void restore(KeyedStateSnapshot state) throws Exception {
+		if (state == null) {
 			return;
 		}
 
 		LOG.info("Initializing heap keyed state backend from snapshot.");
 
 		if (LOG.isDebugEnabled()) {
-			LOG.debug("Restoring snapshot from state handles: {}.", restoredState);
+			LOG.debug("Restoring snapshot from state handles: {}.", state);
 		}
-
-		restorePartitionedState(restoredState);
-	}
-
-	@SuppressWarnings({"unchecked"})
-	private void restorePartitionedState(Collection<KeyedStateHandle> state) throws Exception {
 
 		final Map<Integer, String> kvStatesById = new HashMap<>();
 		int numRegisteredKvStates = 0;
@@ -453,8 +455,8 @@ public class HeapKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 
 			if (!(keyedStateHandle instanceof KeyGroupsStateHandle)) {
 				throw new IllegalStateException("Unexpected state handle type, " +
-						"expected: " + KeyGroupsStateHandle.class +
-						", but found: " + keyedStateHandle.getClass());
+					"expected: " + KeyGroupsStateHandle.class +
+					", but found: " + keyedStateHandle.getClass());
 			}
 
 			KeyGroupsStateHandle keyGroupsStateHandle = (KeyGroupsStateHandle) keyedStateHandle;
@@ -465,7 +467,7 @@ public class HeapKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 				DataInputViewStreamWrapper inView = new DataInputViewStreamWrapper(fsDataInputStream);
 
 				KeyedBackendSerializationProxy<K> serializationProxy =
-						new KeyedBackendSerializationProxy<>(userCodeClassLoader);
+					new KeyedBackendSerializationProxy<>(userCodeClassLoader);
 
 				serializationProxy.read(inView);
 

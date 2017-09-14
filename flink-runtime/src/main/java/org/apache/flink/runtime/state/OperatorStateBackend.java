@@ -19,6 +19,7 @@
 package org.apache.flink.runtime.state;
 
 import org.apache.flink.api.common.state.OperatorStateStore;
+import org.apache.flink.runtime.state.snapshot.OperatorStateSnapshot;
 
 import java.io.Closeable;
 
@@ -27,7 +28,7 @@ import java.io.Closeable;
  * {@link Snapshotable}
  *
  */
-public interface OperatorStateBackend extends OperatorStateStore, Snapshotable<OperatorStateHandle>, Closeable {
+public interface OperatorStateBackend extends OperatorStateStore, Snapshotable<OperatorStateSnapshot>, Closeable {
 
 	/**
 	 * Disposes the backend and releases all resources.
