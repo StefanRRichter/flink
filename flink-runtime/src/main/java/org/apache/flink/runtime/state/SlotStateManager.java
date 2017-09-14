@@ -21,10 +21,21 @@ package org.apache.flink.runtime.state;
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.runtime.checkpoint.CheckpointMetaData;
 import org.apache.flink.runtime.checkpoint.CheckpointMetrics;
+import org.apache.flink.runtime.checkpoint.OperatorSubtaskState;
+import org.apache.flink.runtime.checkpoint.TaskStateSnapshot;
 import org.apache.flink.runtime.executiongraph.ExecutionAttemptID;
+import org.apache.flink.runtime.jobgraph.OperatorID;
+import org.apache.flink.runtime.state.snapshot.KeyedStateSnapshot;
+import org.apache.flink.runtime.state.snapshot.OperatorSubtaskStateReport;
+import org.apache.flink.runtime.state.snapshot.SnapshotMetaData;
 import org.apache.flink.runtime.taskmanager.CheckpointResponder;
+import org.apache.flink.util.Preconditions;
 
 import com.sun.istack.internal.NotNull;
+
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * Manages the all checkpointed state for a slot on a TM.
@@ -46,68 +57,63 @@ public class SlotStateManager implements CheckpointListener {
 	 */
 	public void reportStates(
 		@NotNull CheckpointMetaData checkpointMetaData,
-		@NotNull CheckpointMetrics checkpointMetrics
-		/*@NotNull Map<OperatorID, OperatorSubtaskStateReport> subtaskStateReportsByOperator*/) {
-//
-//		Preconditions.checkNotNull(subtaskStateReportsByOperator);
-//
-//		Map<OperatorID, OperatorSubtaskState> subtaskStateByOperatorId =
-//			new HashMap<>(subtaskStateReportsByOperator.size());
-//
-//		for (Map.Entry<OperatorID, OperatorSubtaskStateReport> entry : subtaskStateReportsByOperator.entrySet()) {
-//
-//			OperatorID operatorID = entry.getKey();
-//			OperatorSubtaskStateReport subtaskStateReport = entry.getValue();
-//
-//			if (subtaskStateReport != null && subtaskStateReport.hasState()) {
-//
-//
-//				KeyedStateHandle primaryKeyedBackendStateImage = null;
-//				Collection<KeyedBackendStateImage> managedKeyedState = subtaskStateReport.getManagedKeyedState();
-//
-//				if (managedKeyedState != null) {
-//					for (KeyedBackendStateImage stateImage : managedKeyedState) {
-//
-//						if (stateImage != null && stateImage.getStateImageMetaData().isPrimary()) {
-//
-//							Preconditions.checkState(primaryKeyedBackendStateImage == null,
-//								"More than one primary state image!");
-//
-//							Preconditions.checkState(stateImage instanceof StateHandlesCollectionKeyedStateImage,
-//								"Primary image is not based on keyed state handles.");
-//
-//							Collection<? extends KeyedStateHandle> keyedStateHandles =
-//								((StateHandlesCollectionKeyedStateImage<? extends KeyedStateHandle>) stateImage).getKeyedStateHandles();
-//
-//							Preconditions.checkState(keyedStateHandles.size() == 1,
-//								"Found more than one state handle.");
-//
-//							primaryKeyedBackendStateImage = keyedStateHandles.iterator().next();
-//
-//						}
-//						//TODO store secondary (local) states
-//					}
-//				}
-//
-//				OperatorSubtaskState operatorSubtaskState = new OperatorSubtaskState(
-//					subtaskStateReport.getManagedOperatorState(),
-//					subtaskStateReport.getRawOperatorState(),
-//					primaryKeyedBackendStateImage,
-//					subtaskStateReport.getRawKeyedState());
-//
-//				subtaskStateByOperatorId.put(operatorID, operatorSubtaskState);
-//			}
-//		}
-//
-//		TaskStateSnapshot taskStateSnapshot = subtaskStateByOperatorId.isEmpty() ?
-//			null : new TaskStateSnapshot(subtaskStateByOperatorId);
-//
-//		checkpointResponder.acknowledgeCheckpoint(
-//			jobId,
-//			executionId,
-//			checkpointMetaData.getCheckpointId(),
-//			checkpointMetrics,
-//			taskStateSnapshot);
+		@NotNull CheckpointMetrics checkpointMetrics,
+		@NotNull Map<OperatorID, OperatorSubtaskStateReport> subtaskStateReportsByOperator) {
+
+		Preconditions.checkNotNull(subtaskStateReportsByOperator);
+
+		Map<OperatorID, OperatorSubtaskState> subtaskStateByOperatorId =
+			new HashMap<>(subtaskStateReportsByOperator.size());
+
+		for (Map.Entry<OperatorID, OperatorSubtaskStateReport> entry : subtaskStateReportsByOperator.entrySet()) {
+
+			OperatorID operatorID = entry.getKey();
+			OperatorSubtaskStateReport subtaskStateReport = entry.getValue();
+
+			if (subtaskStateReport != null && subtaskStateReport.hasState()) {
+
+				KeyedStateHandle primaryKeyedBackendStateImage = null;
+				Collection<KeyedStateSnapshot> managedKeyedState = subtaskStateReport.getManagedKeyedState();
+
+				if (managedKeyedState != null) {
+					for (KeyedStateSnapshot managedKeyedSnapshot : managedKeyedState) {
+
+						if (managedKeyedSnapshot == null) {
+							continue;
+						}
+
+						if (SnapshotMetaData.Ownership.JobManager.equals(managedKeyedSnapshot.getMetaData().getOwnership())) {
+							for (KeyedStateHandle keyedStateHandle : managedKeyedSnapshot) {
+
+								Preconditions.checkState(primaryKeyedBackendStateImage == null,
+									"More than one primary state image!");
+
+								primaryKeyedBackendStateImage = keyedStateHandle;
+							}
+							//TODO store secondary (local) states
+						}
+					}
+
+					OperatorSubtaskState operatorSubtaskState = new OperatorSubtaskState(
+						subtaskStateReport.getManagedOperatorState(),
+						subtaskStateReport.getRawOperatorState(),
+						primaryKeyedBackendStateImage,
+						subtaskStateReport.getRawKeyedState());
+
+					subtaskStateByOperatorId.put(operatorID, operatorSubtaskState);
+				}
+			}
+		}
+
+		TaskStateSnapshot taskStateSnapshot = subtaskStateByOperatorId.isEmpty() ?
+			null : new TaskStateSnapshot(subtaskStateByOperatorId);
+
+		checkpointResponder.acknowledgeCheckpoint(
+			jobId,
+			executionId,
+			checkpointMetaData.getCheckpointId(),
+			checkpointMetrics,
+			taskStateSnapshot);
 	}
 
 	/**

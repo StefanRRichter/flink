@@ -18,17 +18,17 @@
 
 package org.apache.flink.runtime.state.snapshot;
 
-import org.apache.flink.runtime.state.KeyGroupsStateHandle;
+import org.apache.flink.runtime.state.KeyedStateHandle;
 
 import javax.annotation.Nonnull;
 
 import java.util.Collection;
 
-public class KeyedStateSnapshot extends Snapshot<KeyGroupsStateHandle> {
+public class KeyedStateSnapshot extends Snapshot<KeyedStateHandle> {
 
 	public KeyedStateSnapshot(
 		@Nonnull SnapshotMetaData metaData,
-		@Nonnull Collection<KeyGroupsStateHandle> stateObjects) {
+		@Nonnull Collection<KeyedStateHandle> stateObjects) {
 
 		super(metaData, stateObjects);
 	}
