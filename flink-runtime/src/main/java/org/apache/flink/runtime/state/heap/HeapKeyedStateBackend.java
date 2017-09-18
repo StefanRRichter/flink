@@ -60,6 +60,7 @@ import org.apache.flink.runtime.state.internal.InternalListState;
 import org.apache.flink.runtime.state.internal.InternalMapState;
 import org.apache.flink.runtime.state.internal.InternalReducingState;
 import org.apache.flink.runtime.state.internal.InternalValueState;
+import org.apache.flink.runtime.state.snapshot.KeyedStateHandleSnapshot;
 import org.apache.flink.runtime.state.snapshot.KeyedStateSnapshot;
 import org.apache.flink.runtime.state.snapshot.SnapshotMetaData;
 import org.apache.flink.util.Preconditions;
@@ -406,7 +407,7 @@ public class HeapKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 								new KeyGroupsStateHandle(offsets, streamStateHandle);
 
 							return Collections.singletonList(
-								new KeyedStateSnapshot(
+								new KeyedStateHandleSnapshot(
 									SnapshotMetaData.createPrimarySnapshotMetaData(),
 									keyGroupsStateHandle));
 						}
@@ -430,10 +431,17 @@ public class HeapKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 
 	@SuppressWarnings("deprecation")
 	@Override
-	public void restore(KeyedStateSnapshot state) throws Exception {
-		if (state == null) {
+	public void restore(KeyedStateSnapshot toRestore) throws Exception {
+
+		if (toRestore == null) {
 			return;
 		}
+
+		if (!(toRestore instanceof KeyedStateHandleSnapshot)) {
+			throw new IllegalStateException("Unknown snapshot type: " + toRestore.getClass());
+		}
+
+		KeyedStateHandleSnapshot state = (KeyedStateHandleSnapshot) toRestore;
 
 		LOG.info("Initializing heap keyed state backend from snapshot.");
 

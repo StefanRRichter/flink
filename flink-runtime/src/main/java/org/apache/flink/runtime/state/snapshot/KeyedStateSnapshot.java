@@ -18,25 +18,9 @@
 
 package org.apache.flink.runtime.state.snapshot;
 
-import org.apache.flink.runtime.state.KeyedStateHandle;
+public interface KeyedStateSnapshot extends StateSnapshot {
 
-import javax.annotation.Nonnull;
-
-import java.util.Collection;
-import java.util.Collections;
-
-public class KeyedStateSnapshot extends Snapshot<KeyedStateHandle> {
-
-	public KeyedStateSnapshot(
-		@Nonnull SnapshotMetaData metaData,
-		@Nonnull Collection<KeyedStateHandle> stateObjects) {
-
-		super(metaData, stateObjects);
-	}
-
-	public KeyedStateSnapshot(
-		@Nonnull SnapshotMetaData metaData,
-		@Nonnull KeyedStateHandle stateObjects) {
-		this(metaData, Collections.singletonList(stateObjects));
-	}
+//	KeyedStateSnapshot getSnapshotForIntersection(KeyGroupRange keyGroupRange);
+//
+//	void registerSharedState(SharedStateRegistry registry);
 }

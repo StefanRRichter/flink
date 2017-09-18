@@ -44,8 +44,8 @@ import org.apache.flink.runtime.state.KeyedStateHandle;
 import org.apache.flink.runtime.state.OperatorStateBackend;
 import org.apache.flink.runtime.state.SlotStateManager;
 import org.apache.flink.runtime.state.StateBackend;
-import org.apache.flink.runtime.state.snapshot.KeyedStateSnapshot;
-import org.apache.flink.runtime.state.snapshot.OperatorStateSnapshot;
+import org.apache.flink.runtime.state.snapshot.KeyedStateHandleSnapshot;
+import org.apache.flink.runtime.state.snapshot.OperatorStateHandleSnapshot;
 import org.apache.flink.runtime.state.snapshot.OperatorSubtaskStateReport;
 import org.apache.flink.runtime.state.snapshot.SnapshotMetaData;
 import org.apache.flink.runtime.taskmanager.DispatcherThreadFactory;
@@ -705,7 +705,7 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 	}
 
 	public OperatorStateBackend createOperatorStateBackend(
-			StreamOperator<?> op, OperatorStateSnapshot restoreStateHandles) throws Exception {
+			StreamOperator<?> op, OperatorStateHandleSnapshot restoreStateHandles) throws Exception {
 
 		Environment env = getEnvironment();
 		String opId = createOperatorIdentifier(op, getConfiguration().getVertexID());
@@ -767,12 +767,12 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 	/**
 	 * TODO remove and do properly!!!!!!
 	 */
-	private KeyedStateSnapshot convertKeyedStateHandleToSnapshot(Collection<KeyedStateHandle> restoreKeyedStateHandles) {
-		if(restoreKeyedStateHandles == null) {
+	private KeyedStateHandleSnapshot convertKeyedStateHandleToSnapshot(Collection<KeyedStateHandle> restoreKeyedStateHandles) {
+		if (restoreKeyedStateHandles == null) {
 			return null;
 		}
 
-		return new KeyedStateSnapshot(SnapshotMetaData.createPrimarySnapshotMetaData(), restoreKeyedStateHandles);
+		return new KeyedStateHandleSnapshot(SnapshotMetaData.createPrimarySnapshotMetaData(), restoreKeyedStateHandles);
 	}
 
 

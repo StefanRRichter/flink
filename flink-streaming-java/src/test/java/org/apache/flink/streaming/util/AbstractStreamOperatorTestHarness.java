@@ -41,8 +41,8 @@ import org.apache.flink.runtime.state.OperatorStateBackend;
 import org.apache.flink.runtime.state.OperatorStateHandle;
 import org.apache.flink.runtime.state.StateBackend;
 import org.apache.flink.runtime.state.memory.MemoryStateBackend;
-import org.apache.flink.runtime.state.snapshot.KeyedStateSnapshot;
-import org.apache.flink.runtime.state.snapshot.OperatorStateSnapshot;
+import org.apache.flink.runtime.state.snapshot.KeyedStateHandleSnapshot;
+import org.apache.flink.runtime.state.snapshot.OperatorStateHandleSnapshot;
 import org.apache.flink.runtime.state.snapshot.OperatorSubtaskStateReport;
 import org.apache.flink.runtime.state.snapshot.SnapshotUtils;
 import org.apache.flink.streaming.api.TimeCharacteristic;
@@ -217,7 +217,7 @@ public class AbstractStreamOperatorTestHarness<OUT> implements AutoCloseable {
 				@Override
 				public OperatorStateBackend answer(InvocationOnMock invocationOnMock) throws Throwable {
 					final StreamOperator<?> operator = (StreamOperator<?>) invocationOnMock.getArguments()[0];
-					final OperatorStateSnapshot stateHandles = (OperatorStateSnapshot) invocationOnMock.getArguments()[1];
+					final OperatorStateHandleSnapshot stateHandles = (OperatorStateHandleSnapshot) invocationOnMock.getArguments()[1];
 					OperatorStateBackend osb;
 
 					osb = stateBackend.createOperatorStateBackend(
@@ -232,7 +232,7 @@ public class AbstractStreamOperatorTestHarness<OUT> implements AutoCloseable {
 
 					return osb;
 				}
-			}).when(mockTask).createOperatorStateBackend(any(StreamOperator.class), any(OperatorStateSnapshot.class));
+			}).when(mockTask).createOperatorStateBackend(any(StreamOperator.class), any(OperatorStateHandleSnapshot.class));
 		} catch (Exception e) {
 			throw new RuntimeException(e.getMessage(), e);
 		}
@@ -479,16 +479,16 @@ public class AbstractStreamOperatorTestHarness<OUT> implements AutoCloseable {
 			timestamp,
 			CheckpointOptions.forFullCheckpoint());
 
-		Collection<KeyedStateSnapshot> keyedManaged =
+		Collection<KeyedStateHandleSnapshot> keyedManaged =
 			FutureUtil.runIfNotDoneAndGet(operatorStateResult.getKeyedStateManagedFuture());
 
-		Collection<KeyedStateSnapshot> keyedRaw =
+		Collection<KeyedStateHandleSnapshot> keyedRaw =
 			FutureUtil.runIfNotDoneAndGet(operatorStateResult.getKeyedStateRawFuture());
 
-		Collection<OperatorStateSnapshot> opManaged =
+		Collection<OperatorStateHandleSnapshot> opManaged =
 			FutureUtil.runIfNotDoneAndGet(operatorStateResult.getOperatorStateManagedFuture());
 
-		Collection<OperatorStateSnapshot> opRaw =
+		Collection<OperatorStateHandleSnapshot> opRaw =
 			FutureUtil.runIfNotDoneAndGet(operatorStateResult.getOperatorStateRawFuture());
 
 		return new OperatorSubtaskStateReport(

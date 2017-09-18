@@ -36,6 +36,7 @@ import org.apache.flink.core.memory.DataOutputViewStreamWrapper;
 import org.apache.flink.runtime.checkpoint.CheckpointOptions;
 import org.apache.flink.runtime.io.async.AbstractAsyncCallableWithResources;
 import org.apache.flink.runtime.io.async.AsyncStoppableTaskWithCallback;
+import org.apache.flink.runtime.state.snapshot.OperatorStateHandleSnapshot;
 import org.apache.flink.runtime.state.snapshot.OperatorStateSnapshot;
 import org.apache.flink.runtime.state.snapshot.SnapshotMetaData;
 import org.apache.flink.util.Preconditions;
@@ -301,7 +302,7 @@ public class DefaultOperatorStateBackend implements OperatorStateBackend {
 							OperatorStateHandle operatorStateHandle =
 								new OperatorStateHandle(writtenStatesMetaData, stateHandle);
 
-							OperatorStateSnapshot operatorStateSnapshot = new OperatorStateSnapshot(
+							OperatorStateHandleSnapshot operatorStateSnapshot = new OperatorStateHandleSnapshot(
 								SnapshotMetaData.createPrimarySnapshotMetaData(),
 								operatorStateHandle);
 
@@ -331,13 +332,19 @@ public class DefaultOperatorStateBackend implements OperatorStateBackend {
 	}
 
 	@Override
-	public void restore(OperatorStateSnapshot restoreSnapshots) throws Exception {
+	public void restore(OperatorStateSnapshot snapshot) throws Exception {
 
-		if (null == restoreSnapshots) {
+		if (null == snapshot) {
 			return;
 		}
 
-		for (OperatorStateHandle stateHandle : restoreSnapshots) {
+		if (!(snapshot instanceof OperatorStateHandleSnapshot)) {
+			throw new IllegalStateException("Unknown snapshot type: " + snapshot.getClass());
+		}
+
+		OperatorStateHandleSnapshot handleSnapshot = (OperatorStateHandleSnapshot) snapshot;
+
+		for (OperatorStateHandle stateHandle : handleSnapshot) {
 
 			if (stateHandle == null) {
 				continue;

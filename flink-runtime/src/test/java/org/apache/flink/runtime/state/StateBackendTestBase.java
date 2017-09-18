@@ -47,7 +47,6 @@ import org.apache.flink.core.memory.DataOutputViewStreamWrapper;
 import org.apache.flink.core.testutils.CheckedThread;
 import org.apache.flink.core.testutils.OneShotLatch;
 import org.apache.flink.runtime.checkpoint.CheckpointOptions;
-import org.apache.flink.runtime.checkpoint.StateAssignmentOperation;
 import org.apache.flink.runtime.execution.Environment;
 import org.apache.flink.runtime.operators.testutils.DummyEnvironment;
 import org.apache.flink.runtime.query.KvStateID;
@@ -60,7 +59,7 @@ import org.apache.flink.runtime.state.heap.StateTable;
 import org.apache.flink.runtime.state.internal.InternalKvState;
 import org.apache.flink.runtime.state.internal.InternalValueState;
 import org.apache.flink.runtime.state.snapshot.KeyedStateSnapshot;
-import org.apache.flink.runtime.state.snapshot.SnapshotMetaData;
+import org.apache.flink.runtime.state.snapshot.SnapshotUtils;
 import org.apache.flink.runtime.util.BlockerCheckpointStreamFactory;
 import org.apache.flink.shaded.guava18.com.google.common.base.Joiner;
 import org.apache.flink.types.IntValue;
@@ -1795,21 +1794,14 @@ public abstract class StateBackendTestBase<B extends AbstractStateBackend> exten
 
 		Preconditions.checkState(snapshot.size() == 1);
 
-		KeyedStateSnapshot stateSnapshot = snapshot.iterator().next();
-		ArrayList<KeyedStateHandle> stateHandles = new ArrayList<>();
-		stateSnapshot.forEach(stateHandles::add);
 
-		List<KeyedStateHandle> firstHalfKeyGroupStates = StateAssignmentOperation.getKeyedStateHandles(
-				stateHandles,
-				KeyGroupRangeAssignment.computeKeyGroupRangeForOperatorIndex(MAX_PARALLELISM, 2, 0));
+		KeyedStateSnapshot primarySnapshot = SnapshotUtils.findPrimarySnapshot(snapshot);
 
+		KeyedStateSnapshot snapshot1 = primarySnapshot.getSnapshotForIntersection(
+			KeyGroupRangeAssignment.computeKeyGroupRangeForOperatorIndex(MAX_PARALLELISM, 2, 0));
 
-		List<KeyedStateHandle> secondHalfKeyGroupStates = StateAssignmentOperation.getKeyedStateHandles(
-				stateHandles,
-				KeyGroupRangeAssignment.computeKeyGroupRangeForOperatorIndex(MAX_PARALLELISM, 2, 1));
-
-		KeyedStateSnapshot snapshot1 = new KeyedStateSnapshot(SnapshotMetaData.createPrimarySnapshotMetaData(), firstHalfKeyGroupStates);
-		KeyedStateSnapshot snapshot2 = new KeyedStateSnapshot(SnapshotMetaData.createPrimarySnapshotMetaData(), secondHalfKeyGroupStates);
+		KeyedStateSnapshot snapshot2 = primarySnapshot.getSnapshotForIntersection(
+			KeyGroupRangeAssignment.computeKeyGroupRangeForOperatorIndex(MAX_PARALLELISM, 2, 1));
 
 		backend.dispose();
 
@@ -2535,9 +2527,7 @@ public abstract class StateBackendTestBase<B extends AbstractStateBackend> exten
 
 	private static void registerSharedStates(Collection<KeyedStateSnapshot> snapshots, SharedStateRegistry registry) {
 		for (KeyedStateSnapshot snapshot : snapshots) {
-			for (KeyedStateHandle stateHandle : snapshot) {
-				stateHandle.registerSharedStates(registry);
-			}
+			snapshot.registerSharedState(registry);
 		}
 	}
 

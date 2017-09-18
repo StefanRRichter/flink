@@ -56,7 +56,7 @@ import org.apache.flink.runtime.state.StateSnapshotContext;
 import org.apache.flink.runtime.state.StateSnapshotContextSynchronousImpl;
 import org.apache.flink.runtime.state.VoidNamespace;
 import org.apache.flink.runtime.state.VoidNamespaceSerializer;
-import org.apache.flink.runtime.state.snapshot.OperatorStateSnapshot;
+import org.apache.flink.runtime.state.snapshot.OperatorStateHandleSnapshot;
 import org.apache.flink.runtime.state.snapshot.SnapshotMetaData;
 import org.apache.flink.streaming.api.graph.StreamConfig;
 import org.apache.flink.streaming.api.watermark.Watermark;
@@ -300,14 +300,14 @@ public abstract class AbstractStreamOperator<OUT>
 	/**
 	 * TODO remove and do properly!!!!!!!
 	 */
-	private OperatorStateSnapshot convertOperatorStateHandleToSnapshot(
+	private OperatorStateHandleSnapshot convertOperatorStateHandleToSnapshot(
 		Collection<OperatorStateHandle> operatorStateHandles) {
 
 		if (operatorStateHandles == null) {
 			return null;
 		}
 
-		return new OperatorStateSnapshot(SnapshotMetaData.createPrimarySnapshotMetaData(), operatorStateHandles);
+		return new OperatorStateHandleSnapshot(SnapshotMetaData.createPrimarySnapshotMetaData(), operatorStateHandles);
 	}
 
 	/**

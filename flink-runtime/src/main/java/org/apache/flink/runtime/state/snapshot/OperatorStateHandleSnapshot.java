@@ -18,5 +18,26 @@
 
 package org.apache.flink.runtime.state.snapshot;
 
-public interface OperatorStateSnapshot extends StateSnapshot {
+import org.apache.flink.runtime.state.OperatorStateHandle;
+
+import javax.annotation.Nonnull;
+
+import java.util.Collection;
+import java.util.Collections;
+
+public class OperatorStateHandleSnapshot
+	extends AbstractHandleBasedSnapshot<OperatorStateHandle>
+	implements OperatorStateSnapshot {
+
+	public OperatorStateHandleSnapshot(
+		@Nonnull SnapshotMetaData metaData,
+		@Nonnull Collection<OperatorStateHandle> stateObjects) {
+		super(metaData, stateObjects);
+	}
+
+	public OperatorStateHandleSnapshot(
+		@Nonnull SnapshotMetaData metaData,
+		@Nonnull OperatorStateHandle stateObjects) {
+		this(metaData, Collections.singletonList(stateObjects));
+	}
 }

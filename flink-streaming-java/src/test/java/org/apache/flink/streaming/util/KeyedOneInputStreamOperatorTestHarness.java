@@ -30,7 +30,7 @@ import org.apache.flink.runtime.state.KeyGroupRange;
 import org.apache.flink.runtime.state.KeyedStateBackend;
 import org.apache.flink.runtime.state.KeyedStateHandle;
 import org.apache.flink.runtime.state.heap.HeapKeyedStateBackend;
-import org.apache.flink.runtime.state.snapshot.KeyedStateSnapshot;
+import org.apache.flink.runtime.state.snapshot.KeyedStateHandleSnapshot;
 import org.apache.flink.runtime.state.snapshot.OperatorSubtaskStateReport;
 import org.apache.flink.runtime.state.snapshot.SnapshotUtils;
 import org.apache.flink.streaming.api.operators.OneInputStreamOperator;
@@ -57,7 +57,7 @@ public class KeyedOneInputStreamOperatorTestHarness<K, IN, OUT>
 
 	// when we restore we keep the state here so that we can call restore
 	// when the operator requests the keyed state backend
-	private KeyedStateSnapshot restoredKeyedState = null;
+	private KeyedStateHandleSnapshot restoredKeyedState = null;
 
 	public KeyedOneInputStreamOperatorTestHarness(
 			OneInputStreamOperator<IN, OUT> operator,
@@ -164,7 +164,7 @@ public class KeyedOneInputStreamOperatorTestHarness<K, IN, OUT>
 				keyGroupPartitions.get(subtaskIndex);
 
 			restoredKeyedState = null;
-			KeyedStateSnapshot managedKeyedState = SnapshotUtils.findPrimarySnapshot(subtaskStateReport.getManagedKeyedState());
+			KeyedStateHandleSnapshot managedKeyedState = SnapshotUtils.findPrimarySnapshot(subtaskStateReport.getManagedKeyedState());
 			if (managedKeyedState != null) {
 				List<KeyedStateHandle> keyedStatePartition = StateAssignmentOperation.getKeyedStateHandles(
 					managedKeyedState,

@@ -20,7 +20,9 @@ package org.apache.flink.runtime.state;
 
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.core.fs.CloseableRegistry;
+import org.apache.flink.runtime.state.snapshot.KeyedStateHandleSnapshot;
 import org.apache.flink.runtime.state.snapshot.KeyedStateSnapshot;
+import org.apache.flink.runtime.state.snapshot.OperatorStateHandleSnapshot;
 import org.apache.flink.runtime.state.snapshot.OperatorStateSnapshot;
 import org.apache.flink.runtime.state.snapshot.SnapshotMetaData;
 import org.apache.flink.util.ExceptionUtils;
@@ -118,7 +120,7 @@ public class StateSnapshotContextSynchronousImpl implements StateSnapshotContext
 		KeyGroupsStateHandle keyGroupsStateHandle =
 			closeAndUnregisterStreamToObtainStateHandle(keyedStateCheckpointOutputStream);
 
-		KeyedStateSnapshot keyedStateSnapshot = new KeyedStateSnapshot(
+		KeyedStateSnapshot keyedStateSnapshot = new KeyedStateHandleSnapshot(
 			SnapshotMetaData.createPrimarySnapshotMetaData(),
 			keyGroupsStateHandle);
 
@@ -129,7 +131,7 @@ public class StateSnapshotContextSynchronousImpl implements StateSnapshotContext
 		OperatorStateHandle operatorStateHandle =
 			closeAndUnregisterStreamToObtainStateHandle(operatorStateCheckpointOutputStream);
 
-		OperatorStateSnapshot operatorStateSnapshot = new OperatorStateSnapshot(
+		OperatorStateSnapshot operatorStateSnapshot = new OperatorStateHandleSnapshot(
 			SnapshotMetaData.createPrimarySnapshotMetaData(),
 			operatorStateHandle);
 

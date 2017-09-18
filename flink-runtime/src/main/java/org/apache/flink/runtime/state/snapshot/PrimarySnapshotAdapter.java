@@ -28,13 +28,13 @@ import java.util.Collections;
  * TODO integrate!!!!!!
  * @param <S>
  */
-public class PrimarySnapshotAdapter<S extends StateObject> extends Snapshot<S> {
+public class PrimarySnapshotAdapter<S extends StateObject> extends AbstractHandleBasedSnapshot<S> {
 
-	public PrimarySnapshotAdapter(Collection<Snapshot<S>> snapshots) {
+	public PrimarySnapshotAdapter(Collection<AbstractHandleBasedSnapshot<S>> snapshots) {
 		super(SnapshotMetaData.createPrimarySnapshotMetaData(), findPrimarySnapshotHandles(snapshots));
 	}
 
-	public static <T extends StateObject, S extends Snapshot<T>> S findPrimarySnapshot(
+	public static <T extends StateObject, S extends AbstractHandleBasedSnapshot<T>> S findPrimarySnapshot(
 		Collection<S> snapshots) {
 
 		if (snapshots == null) {
@@ -55,9 +55,9 @@ public class PrimarySnapshotAdapter<S extends StateObject> extends Snapshot<S> {
 	}
 
 	public static <T extends StateObject> Collection<T> findPrimarySnapshotHandles(
-		Collection<? extends Snapshot<T>> snapshots) {
+		Collection<? extends AbstractHandleBasedSnapshot<T>> snapshots) {
 
-		Snapshot<T> primarySnapshot = findPrimarySnapshot(snapshots);
+		AbstractHandleBasedSnapshot<T> primarySnapshot = findPrimarySnapshot(snapshots);
 
 		return primarySnapshot != null ? primarySnapshot.stateObjects : Collections.emptyList();
 	}

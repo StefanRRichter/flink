@@ -29,7 +29,7 @@ public class SnapshotCollectionAdapter<S extends StateObject> implements Collect
 
 	private final Collection<S> delegate;
 
-	public SnapshotCollectionAdapter(Snapshot<S> snapshot) {
+	public SnapshotCollectionAdapter(AbstractHandleBasedSnapshot<S> snapshot) {
 		if (snapshot == null) {
 			this.delegate = Collections.emptyList();
 		} else {

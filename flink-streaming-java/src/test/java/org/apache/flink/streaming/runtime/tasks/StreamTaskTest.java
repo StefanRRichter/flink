@@ -72,7 +72,7 @@ import org.apache.flink.runtime.state.OperatorStateHandle;
 import org.apache.flink.runtime.state.SlotStateManager;
 import org.apache.flink.runtime.state.StateBackendFactory;
 import org.apache.flink.runtime.state.StreamStateHandle;
-import org.apache.flink.runtime.state.snapshot.OperatorStateSnapshot;
+import org.apache.flink.runtime.state.snapshot.OperatorStateHandleSnapshot;
 import org.apache.flink.runtime.state.snapshot.SnapshotUtils;
 import org.apache.flink.runtime.taskmanager.CheckpointResponder;
 import org.apache.flink.runtime.taskmanager.Task;
@@ -389,7 +389,7 @@ public class StreamTaskTest extends TestLogger {
 		OperatorSnapshotResult operatorSnapshotResult2 = mock(OperatorSnapshotResult.class);
 		OperatorSnapshotResult operatorSnapshotResult3 = mock(OperatorSnapshotResult.class);
 
-		RunnableFuture<Collection<OperatorStateSnapshot>> failingFuture = mock(RunnableFuture.class);
+		RunnableFuture<Collection<OperatorStateHandleSnapshot>> failingFuture = mock(RunnableFuture.class);
 		when(failingFuture.get()).thenThrow(new ExecutionException(new Exception("Test exception")));
 
 		when(operatorSnapshotResult3.getOperatorStateRawFuture()).thenReturn(failingFuture);

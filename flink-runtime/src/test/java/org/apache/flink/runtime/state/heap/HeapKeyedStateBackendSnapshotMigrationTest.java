@@ -23,7 +23,7 @@ import org.apache.flink.api.common.state.ListStateDescriptor;
 import org.apache.flink.api.common.typeutils.base.IntSerializer;
 import org.apache.flink.runtime.state.KeyGroupsStateHandle;
 import org.apache.flink.runtime.state.internal.InternalListState;
-import org.apache.flink.runtime.state.snapshot.KeyedStateSnapshot;
+import org.apache.flink.runtime.state.snapshot.KeyedStateHandleSnapshot;
 import org.apache.flink.runtime.state.snapshot.SnapshotMetaData;
 import org.apache.flink.util.InstantiationUtil;
 import org.apache.flink.util.Preconditions;
@@ -67,8 +67,8 @@ public class HeapKeyedStateBackendSnapshotMigrationTest extends HeapStateBackend
 				stateHandle = InstantiationUtil.deserializeObject(bis, Thread.currentThread().getContextClassLoader());
 			}
 
-			KeyedStateSnapshot snapshot =
-				new KeyedStateSnapshot(SnapshotMetaData.createPrimarySnapshotMetaData(), stateHandle);
+			KeyedStateHandleSnapshot snapshot =
+				new KeyedStateHandleSnapshot(SnapshotMetaData.createPrimarySnapshotMetaData(), stateHandle);
 
 			keyedBackend.restore(snapshot);
 			final ListStateDescriptor<Long> stateDescr = new ListStateDescriptor<>("my-state", Long.class);

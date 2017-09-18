@@ -30,25 +30,25 @@ public class OperatorSubtaskStateReport {
 	 * Snapshot from the {@link org.apache.flink.runtime.state.OperatorStateBackend}.
 	 */
 	@Nullable
-	private final Collection<OperatorStateSnapshot> managedOperatorState;
+	private final Collection<OperatorStateHandleSnapshot> managedOperatorState;
 
 	/**
 	 * Snapshot written using {@link org.apache.flink.runtime.state.OperatorStateCheckpointOutputStream}.
 	 */
 	@Nullable
-	private final Collection<OperatorStateSnapshot> rawOperatorState;
+	private final Collection<OperatorStateHandleSnapshot> rawOperatorState;
 
 	/**
 	 * Snapshot from {@link org.apache.flink.runtime.state.KeyedStateBackend}.
 	 */
 	@Nullable
-	private final Collection<KeyedStateSnapshot> managedKeyedState;
+	private final Collection<KeyedStateHandleSnapshot> managedKeyedState;
 
 	/**
 	 * Snapshot written using {@link org.apache.flink.runtime.state.KeyedStateCheckpointOutputStream}.
 	 */
 	@Nullable
-	private final Collection<KeyedStateSnapshot> rawKeyedState;
+	private final Collection<KeyedStateHandleSnapshot> rawKeyedState;
 
 	/**
 	 * Empty state.
@@ -62,10 +62,10 @@ public class OperatorSubtaskStateReport {
 	}
 
 	public OperatorSubtaskStateReport(
-		Collection<OperatorStateSnapshot> managedOperatorState,
-		Collection<OperatorStateSnapshot> rawOperatorState,
-		Collection<KeyedStateSnapshot> managedKeyedState,
-		Collection<KeyedStateSnapshot> rawKeyedState) {
+		Collection<OperatorStateHandleSnapshot> managedOperatorState,
+		Collection<OperatorStateHandleSnapshot> rawOperatorState,
+		Collection<KeyedStateHandleSnapshot> managedKeyedState,
+		Collection<KeyedStateHandleSnapshot> rawKeyedState) {
 
 		this.managedOperatorState = managedOperatorState;
 		this.rawOperatorState = rawOperatorState;
@@ -77,22 +77,22 @@ public class OperatorSubtaskStateReport {
 
 
 	@Nullable
-	public Collection<OperatorStateSnapshot> getManagedOperatorState() {
+	public Collection<OperatorStateHandleSnapshot> getManagedOperatorState() {
 		return managedOperatorState;
 	}
 
 	@Nullable
-	public Collection<OperatorStateSnapshot> getRawOperatorState() {
+	public Collection<OperatorStateHandleSnapshot> getRawOperatorState() {
 		return rawOperatorState;
 	}
 
 	@Nullable
-	public Collection<KeyedStateSnapshot> getManagedKeyedState() {
+	public Collection<KeyedStateHandleSnapshot> getManagedKeyedState() {
 		return managedKeyedState;
 	}
 
 	@Nullable
-	public Collection<KeyedStateSnapshot> getRawKeyedState() {
+	public Collection<KeyedStateHandleSnapshot> getRawKeyedState() {
 		return rawKeyedState;
 	}
 

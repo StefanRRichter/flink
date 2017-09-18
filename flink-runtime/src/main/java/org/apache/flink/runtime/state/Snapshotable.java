@@ -19,7 +19,7 @@
 package org.apache.flink.runtime.state;
 
 import org.apache.flink.runtime.checkpoint.CheckpointOptions;
-import org.apache.flink.runtime.state.snapshot.Snapshot;
+import org.apache.flink.runtime.state.snapshot.StateSnapshot;
 
 import java.util.Collection;
 import java.util.concurrent.RunnableFuture;
@@ -29,7 +29,7 @@ import java.util.concurrent.RunnableFuture;
  *
  * @param <S> Generic type of the state object that is created as handle to snapshots.
  */
-public interface Snapshotable<S extends Snapshot<?>> {
+public interface Snapshotable<S extends StateSnapshot> {
 
 	/**
 	 * Operation that writes a snapshot into a stream that is provided by the given {@link CheckpointStreamFactory} and

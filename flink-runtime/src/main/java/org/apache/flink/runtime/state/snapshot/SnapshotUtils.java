@@ -20,23 +20,22 @@ package org.apache.flink.runtime.state.snapshot;
 
 import org.apache.flink.runtime.state.KeyedStateHandle;
 import org.apache.flink.runtime.state.OperatorStateHandle;
-import org.apache.flink.runtime.state.StateObject;
 import org.apache.flink.util.Preconditions;
 
 import java.util.Collection;
 
 public class SnapshotUtils {
 
-	public static <T extends StateObject, S extends Snapshot<T>> S findPrimarySnapshot(
-		Collection<S> snapshots) {
+	public static <T extends StateSnapshot> T findPrimarySnapshot(
+		Collection<? extends T> snapshots) {
 
 		if (snapshots == null) {
 			return null;
 		}
 
-		S result = null;
+		T result = null;
 
-		for (S snapshot : snapshots) {
+		for (T snapshot : snapshots) {
 			SnapshotMetaData snapshotMetaData = snapshot.getMetaData();
 			if (SnapshotMetaData.Ownership.JobManager.equals(snapshotMetaData.getOwnership())) {
 				Preconditions.checkState(result == null, "More than one primary state snapshot!");
@@ -47,63 +46,63 @@ public class SnapshotUtils {
 		return result;
 	}
 
-	public static <T extends StateObject> Collection<T> findPrimarySnapshotHandles(
-		Collection<? extends Snapshot<T>> snapshots) {
+//	public static <T extends StateObject> Collection<T> findPrimarySnapshotHandles(
+//		Collection<? extends AbstractHandleBasedSnapshot<T>> snapshots) {
+//
+//		AbstractHandleBasedSnapshot<T> primarySnapshot = findPrimarySnapshot(snapshots);
+//
+//		return primarySnapshot != null ? primarySnapshot.stateObjects : null;
+//	}
+//
+//	public static <T extends StateObject> T findPrimarySnapshotSingletonHandle(
+//		Collection<? extends AbstractHandleBasedSnapshot<T>> snapshots) {
+//
+//		Collection<T> primarySnapshot = findPrimarySnapshotHandles(snapshots);
+//
+//		T result = null;
+//
+//		if (primarySnapshot != null) {
+//			for (T handle : primarySnapshot) {
+//				Preconditions.checkState(result == null, "More than one state handle!");
+//				result = handle;
+//			}
+//		}
+//		return result;
+//	}
 
-		Snapshot<T> primarySnapshot = findPrimarySnapshot(snapshots);
-
-		return primarySnapshot != null ? primarySnapshot.stateObjects : null;
-	}
-
-	public static <T extends StateObject> T findPrimarySnapshotSingletonHandle(
-		Collection<? extends Snapshot<T>> snapshots) {
-
-		Collection<T> primarySnapshot = findPrimarySnapshotHandles(snapshots);
-
-		T result = null;
-
-		if (primarySnapshot != null) {
-			for (T handle : primarySnapshot) {
-				Preconditions.checkState(result == null, "More than one state handle!");
-				result = handle;
-			}
-		}
-		return result;
-	}
-
-	public static KeyedStateSnapshot toPrimaryKeyedSnapshot(KeyedStateHandle ksh) {
-
-		if (ksh == null) {
-			return null;
-		}
-
-		return new KeyedStateSnapshot(SnapshotMetaData.createPrimarySnapshotMetaData(), ksh);
-	}
-
-	public static OperatorStateSnapshot toPrimaryOperatorSnapshot(OperatorStateHandle osh) {
-
-		if (osh == null) {
-			return null;
-		}
-
-		return new OperatorStateSnapshot(SnapshotMetaData.createPrimarySnapshotMetaData(), osh);
-	}
-
-	public static KeyedStateSnapshot toPrimaryKeyedSnapshot(Collection<KeyedStateHandle> ksh) {
+	public static KeyedStateHandleSnapshot toPrimaryKeyedSnapshot(KeyedStateHandle ksh) {
 
 		if (ksh == null) {
 			return null;
 		}
 
-		return new KeyedStateSnapshot(SnapshotMetaData.createPrimarySnapshotMetaData(), ksh);
+		return new KeyedStateHandleSnapshot(SnapshotMetaData.createPrimarySnapshotMetaData(), ksh);
 	}
 
-	public static OperatorStateSnapshot toPrimaryOperatorSnapshot(Collection<OperatorStateHandle> osh) {
+	public static OperatorStateHandleSnapshot toPrimaryOperatorSnapshot(OperatorStateHandle osh) {
 
 		if (osh == null) {
 			return null;
 		}
 
-		return new OperatorStateSnapshot(SnapshotMetaData.createPrimarySnapshotMetaData(), osh);
+		return new OperatorStateHandleSnapshot(SnapshotMetaData.createPrimarySnapshotMetaData(), osh);
+	}
+
+	public static KeyedStateHandleSnapshot toPrimaryKeyedSnapshot(Collection<KeyedStateHandle> ksh) {
+
+		if (ksh == null) {
+			return null;
+		}
+
+		return new KeyedStateHandleSnapshot(SnapshotMetaData.createPrimarySnapshotMetaData(), ksh);
+	}
+
+	public static OperatorStateHandleSnapshot toPrimaryOperatorSnapshot(Collection<OperatorStateHandle> osh) {
+
+		if (osh == null) {
+			return null;
+		}
+
+		return new OperatorStateHandleSnapshot(SnapshotMetaData.createPrimarySnapshotMetaData(), osh);
 	}
 }

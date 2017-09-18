@@ -32,7 +32,7 @@ import java.util.Iterator;
  *
  * @param <T>
  */
-public abstract class Snapshot<T extends StateObject> implements StateObject, Iterable<T> {
+public abstract class AbstractHandleBasedSnapshot<T extends StateObject> implements StateSnapshot, Iterable<T> {
 
 	private static final long serialVersionUID = 1L;
 
@@ -42,7 +42,10 @@ public abstract class Snapshot<T extends StateObject> implements StateObject, It
 	/** */
 	@Nonnull protected final Collection<T> stateObjects;
 
-	protected Snapshot(@Nonnull SnapshotMetaData metaData, @Nonnull Collection<? extends T> stateObjects) {
+	protected AbstractHandleBasedSnapshot(
+		@Nonnull SnapshotMetaData metaData,
+		@Nonnull Collection<? extends T> stateObjects) {
+
 		this.metaData = Preconditions.checkNotNull(metaData);
 		this.stateObjects = Collections.unmodifiableCollection(Preconditions.checkNotNull(stateObjects));
 	}

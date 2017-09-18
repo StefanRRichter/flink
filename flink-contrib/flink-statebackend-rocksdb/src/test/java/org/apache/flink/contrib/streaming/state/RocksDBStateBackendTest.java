@@ -39,6 +39,7 @@ import org.apache.flink.runtime.state.StreamStateHandle;
 import org.apache.flink.runtime.state.VoidNamespace;
 import org.apache.flink.runtime.state.VoidNamespaceSerializer;
 import org.apache.flink.runtime.state.filesystem.FsStateBackend;
+import org.apache.flink.runtime.state.snapshot.KeyedStateHandleSnapshot;
 import org.apache.flink.runtime.state.snapshot.KeyedStateSnapshot;
 import org.apache.flink.runtime.state.snapshot.SnapshotUtils;
 import org.apache.flink.runtime.util.BlockerCheckpointStreamFactory;
@@ -219,7 +220,7 @@ public class RocksDBStateBackendTest extends StateBackendTestBase<RocksDBStateBa
 	@Test
 	public void testRunningSnapshotAfterBackendClosed() throws Exception {
 		setupRocksKeyedStateBackend();
-		RunnableFuture<Collection<KeyedStateSnapshot>> snapshot =
+		RunnableFuture<Collection<KeyedStateHandleSnapshot>> snapshot =
 			keyedStateBackend.snapshot(
 				0L,
 				0L,
@@ -295,7 +296,7 @@ public class RocksDBStateBackendTest extends StateBackendTestBase<RocksDBStateBa
 		setupRocksKeyedStateBackend();
 
 		try {
-			RunnableFuture<Collection<KeyedStateSnapshot>> snapshot =
+			RunnableFuture<Collection<KeyedStateHandleSnapshot>> snapshot =
 				keyedStateBackend.snapshot(
 					0L,
 					0L,
@@ -334,7 +335,7 @@ public class RocksDBStateBackendTest extends StateBackendTestBase<RocksDBStateBa
 	public void testDismissingSnapshot() throws Exception {
 		setupRocksKeyedStateBackend();
 		try {
-			RunnableFuture<Collection<KeyedStateSnapshot>> snapshot =
+			RunnableFuture<Collection<KeyedStateHandleSnapshot>> snapshot =
 				keyedStateBackend.snapshot(
 					0L,
 					0L,
@@ -353,7 +354,7 @@ public class RocksDBStateBackendTest extends StateBackendTestBase<RocksDBStateBa
 	public void testDismissingSnapshotNotRunnable() throws Exception {
 		setupRocksKeyedStateBackend();
 		try {
-			RunnableFuture<Collection<KeyedStateSnapshot>> snapshot =
+			RunnableFuture<Collection<KeyedStateHandleSnapshot>> snapshot =
 				keyedStateBackend.snapshot(
 					0L,
 					0L,
@@ -381,7 +382,7 @@ public class RocksDBStateBackendTest extends StateBackendTestBase<RocksDBStateBa
 	public void testCompletingSnapshot() throws Exception {
 		setupRocksKeyedStateBackend();
 		try {
-			RunnableFuture<Collection<KeyedStateSnapshot>> snapshot =
+			RunnableFuture<Collection<KeyedStateHandleSnapshot>> snapshot =
 				keyedStateBackend.snapshot(
 					0L,
 					0L,
@@ -412,7 +413,7 @@ public class RocksDBStateBackendTest extends StateBackendTestBase<RocksDBStateBa
 	public void testCancelRunningSnapshot() throws Exception {
 		setupRocksKeyedStateBackend();
 		try {
-			RunnableFuture<Collection<KeyedStateSnapshot>> snapshot =
+			RunnableFuture<Collection<KeyedStateHandleSnapshot>> snapshot =
 				keyedStateBackend.snapshot(
 					0L,
 					0L,

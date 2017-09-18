@@ -33,7 +33,8 @@ import org.apache.flink.runtime.state.OperatorStateBackend;
 import org.apache.flink.runtime.state.StateSnapshotContextSynchronousImpl;
 import org.apache.flink.runtime.state.VoidNamespace;
 import org.apache.flink.runtime.state.VoidNamespaceSerializer;
-import org.apache.flink.runtime.state.snapshot.KeyedStateSnapshot;
+import org.apache.flink.runtime.state.snapshot.KeyedStateHandleSnapshot;
+import org.apache.flink.runtime.state.snapshot.OperatorStateHandleSnapshot;
 import org.apache.flink.runtime.state.snapshot.OperatorStateSnapshot;
 import org.apache.flink.runtime.state.snapshot.OperatorSubtaskStateReport;
 import org.apache.flink.streaming.runtime.streamrecord.StreamRecord;
@@ -558,8 +559,8 @@ public class AbstractStreamOperatorTest {
 
 		final CloseableRegistry closeableRegistry = new CloseableRegistry();
 
-		RunnableFuture<Collection<KeyedStateSnapshot>> futureKeyedStateHandle = mock(RunnableFuture.class);
-		RunnableFuture<Collection<OperatorStateSnapshot>> futureOperatorStateHandle = mock(RunnableFuture.class);
+		RunnableFuture<Collection<KeyedStateHandleSnapshot>> futureKeyedStateHandle = mock(RunnableFuture.class);
+		RunnableFuture<Collection<OperatorStateHandleSnapshot>> futureOperatorStateHandle = mock(RunnableFuture.class);
 
 		StateSnapshotContextSynchronousImpl context = mock(StateSnapshotContextSynchronousImpl.class);
 		when(context.getKeyedStateStreamFuture()).thenReturn(futureKeyedStateHandle);

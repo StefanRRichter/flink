@@ -18,5 +18,9 @@
 
 package org.apache.flink.runtime.state.snapshot;
 
-public interface OperatorStateSnapshot extends StateSnapshot {
+import org.apache.flink.runtime.state.StateObject;
+
+public interface StateSnapshot extends StateObject {
+
+	SnapshotMetaData getMetaData();
 }
