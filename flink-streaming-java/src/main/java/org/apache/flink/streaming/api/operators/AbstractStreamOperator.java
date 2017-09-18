@@ -56,6 +56,8 @@ import org.apache.flink.runtime.state.StateSnapshotContext;
 import org.apache.flink.runtime.state.StateSnapshotContextSynchronousImpl;
 import org.apache.flink.runtime.state.VoidNamespace;
 import org.apache.flink.runtime.state.VoidNamespaceSerializer;
+import org.apache.flink.runtime.state.snapshot.OperatorStateSnapshot;
+import org.apache.flink.runtime.state.snapshot.SnapshotMetaData;
 import org.apache.flink.streaming.api.graph.StreamConfig;
 import org.apache.flink.streaming.api.watermark.Watermark;
 import org.apache.flink.streaming.runtime.streamrecord.LatencyMarker;
@@ -289,10 +291,23 @@ public abstract class AbstractStreamOperator<OUT>
 	private void initOperatorState(Collection<OperatorStateHandle> operatorStateHandles) {
 		try {
 			// create an operator state backend
-			this.operatorStateBackend = container.createOperatorStateBackend(this, operatorStateHandles);
+			this.operatorStateBackend = container.createOperatorStateBackend(this, convertOperatorStateHandleToSnapshot(operatorStateHandles));
 		} catch (Exception e) {
 			throw new IllegalStateException("Could not initialize operator state backend.", e);
 		}
+	}
+
+	/**
+	 * TODO remove and do properly!!!!!!!
+	 */
+	private OperatorStateSnapshot convertOperatorStateHandleToSnapshot(
+		Collection<OperatorStateHandle> operatorStateHandles) {
+
+		if (operatorStateHandles == null) {
+			return null;
+		}
+
+		return new OperatorStateSnapshot(SnapshotMetaData.createPrimarySnapshotMetaData(), operatorStateHandles);
 	}
 
 	/**

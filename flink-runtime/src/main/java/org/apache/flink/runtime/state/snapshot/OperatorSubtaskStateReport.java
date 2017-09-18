@@ -18,8 +18,6 @@
 
 package org.apache.flink.runtime.state.snapshot;
 
-import org.apache.flink.runtime.state.KeyedStateHandle;
-import org.apache.flink.runtime.state.OperatorStateHandle;
 import org.apache.flink.runtime.state.StateObject;
 
 import javax.annotation.Nullable;
@@ -32,13 +30,13 @@ public class OperatorSubtaskStateReport {
 	 * Snapshot from the {@link org.apache.flink.runtime.state.OperatorStateBackend}.
 	 */
 	@Nullable
-	private final OperatorStateHandle managedOperatorState;
+	private final Collection<OperatorStateSnapshot> managedOperatorState;
 
 	/**
 	 * Snapshot written using {@link org.apache.flink.runtime.state.OperatorStateCheckpointOutputStream}.
 	 */
 	@Nullable
-	private final OperatorStateHandle rawOperatorState;
+	private final Collection<OperatorStateSnapshot> rawOperatorState;
 
 	/**
 	 * Snapshot from {@link org.apache.flink.runtime.state.KeyedStateBackend}.
@@ -50,7 +48,7 @@ public class OperatorSubtaskStateReport {
 	 * Snapshot written using {@link org.apache.flink.runtime.state.KeyedStateCheckpointOutputStream}.
 	 */
 	@Nullable
-	private final KeyedStateHandle rawKeyedState;
+	private final Collection<KeyedStateSnapshot> rawKeyedState;
 
 	/**
 	 * Empty state.
@@ -64,10 +62,10 @@ public class OperatorSubtaskStateReport {
 	}
 
 	public OperatorSubtaskStateReport(
-		OperatorStateHandle managedOperatorState,
-		OperatorStateHandle rawOperatorState,
+		Collection<OperatorStateSnapshot> managedOperatorState,
+		Collection<OperatorStateSnapshot> rawOperatorState,
 		Collection<KeyedStateSnapshot> managedKeyedState,
-		KeyedStateHandle rawKeyedState) {
+		Collection<KeyedStateSnapshot> rawKeyedState) {
 
 		this.managedOperatorState = managedOperatorState;
 		this.rawOperatorState = rawOperatorState;
@@ -79,12 +77,12 @@ public class OperatorSubtaskStateReport {
 
 
 	@Nullable
-	public OperatorStateHandle getManagedOperatorState() {
+	public Collection<OperatorStateSnapshot> getManagedOperatorState() {
 		return managedOperatorState;
 	}
 
 	@Nullable
-	public OperatorStateHandle getRawOperatorState() {
+	public Collection<OperatorStateSnapshot> getRawOperatorState() {
 		return rawOperatorState;
 	}
 
@@ -94,7 +92,7 @@ public class OperatorSubtaskStateReport {
 	}
 
 	@Nullable
-	public KeyedStateHandle getRawKeyedState() {
+	public Collection<KeyedStateSnapshot> getRawKeyedState() {
 		return rawKeyedState;
 	}
 

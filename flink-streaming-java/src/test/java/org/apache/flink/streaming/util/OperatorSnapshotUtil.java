@@ -21,7 +21,11 @@ package org.apache.flink.streaming.util;
 import org.apache.flink.runtime.checkpoint.savepoint.SavepointV1Serializer;
 import org.apache.flink.runtime.state.KeyedStateHandle;
 import org.apache.flink.runtime.state.OperatorStateHandle;
-import org.apache.flink.streaming.runtime.tasks.OperatorStateHandles;
+import org.apache.flink.runtime.state.snapshot.KeyedStateSnapshot;
+import org.apache.flink.runtime.state.snapshot.OperatorStateSnapshot;
+import org.apache.flink.runtime.state.snapshot.OperatorSubtaskStateReport;
+import org.apache.flink.runtime.state.snapshot.SnapshotMetaData;
+import org.apache.flink.runtime.state.snapshot.SnapshotUtils;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -45,17 +49,20 @@ public class OperatorSnapshotUtil {
 		return resource.getFile();
 	}
 
-	public static void writeStateHandle(OperatorStateHandles state, String path) throws IOException {
+	public static void writeStateHandle(OperatorSubtaskStateReport state, String path) throws IOException {
 		FileOutputStream out = new FileOutputStream(path);
 
 		try (DataOutputStream dos = new DataOutputStream(out)) {
 
-			dos.writeInt(state.getOperatorChainIndex());
+			// still required for compatibility
+			dos.writeInt(0);
 
 			// still required for compatibility
 			SavepointV1Serializer.serializeStreamStateHandle(null, dos);
 
-			Collection<OperatorStateHandle> rawOperatorState = state.getRawOperatorState();
+			Collection<OperatorStateHandle> rawOperatorState =
+				SnapshotUtils.findPrimarySnapshotHandles(state.getRawOperatorState());
+
 			if (rawOperatorState != null) {
 				dos.writeInt(rawOperatorState.size());
 				for (OperatorStateHandle operatorStateHandle : rawOperatorState) {
@@ -66,7 +73,9 @@ public class OperatorSnapshotUtil {
 				dos.writeInt(-1);
 			}
 
-			Collection<OperatorStateHandle> managedOperatorState = state.getManagedOperatorState();
+			Collection<OperatorStateHandle> managedOperatorState =
+				SnapshotUtils.findPrimarySnapshotHandles(state.getManagedOperatorState());
+
 			if (managedOperatorState != null) {
 				dos.writeInt(managedOperatorState.size());
 				for (OperatorStateHandle operatorStateHandle : managedOperatorState) {
@@ -77,7 +86,9 @@ public class OperatorSnapshotUtil {
 				dos.writeInt(-1);
 			}
 
-			Collection<KeyedStateHandle> rawKeyedState = state.getRawKeyedState();
+			Collection<KeyedStateHandle> rawKeyedState =
+				SnapshotUtils.findPrimarySnapshotHandles(state.getRawKeyedState());
+
 			if (rawKeyedState != null) {
 				dos.writeInt(rawKeyedState.size());
 				for (KeyedStateHandle keyedStateHandle : rawKeyedState) {
@@ -88,7 +99,9 @@ public class OperatorSnapshotUtil {
 				dos.writeInt(-1);
 			}
 
-			Collection<KeyedStateHandle> managedKeyedState = state.getManagedKeyedState();
+			Collection<KeyedStateHandle> managedKeyedState =
+				SnapshotUtils.findPrimarySnapshotHandles(state.getManagedKeyedState());
+
 			if (managedKeyedState != null) {
 				dos.writeInt(managedKeyedState.size());
 				for (KeyedStateHandle keyedStateHandle : managedKeyedState) {
@@ -103,7 +116,7 @@ public class OperatorSnapshotUtil {
 		}
 	}
 
-	public static OperatorStateHandles readStateHandle(String path) throws IOException, ClassNotFoundException {
+	public static OperatorSubtaskStateReport readStateHandle(String path) throws IOException, ClassNotFoundException {
 		FileInputStream in = new FileInputStream(path);
 		try (DataInputStream dis = new DataInputStream(in)) {
 			int index = dis.readInt();
@@ -111,56 +124,73 @@ public class OperatorSnapshotUtil {
 			// still required for compatibility to consume the bytes.
 			SavepointV1Serializer.deserializeStreamStateHandle(dis);
 
-			List<OperatorStateHandle> rawOperatorState = null;
+			List<OperatorStateSnapshot> rawOperatorState = null;
 			int numRawOperatorStates = dis.readInt();
 			if (numRawOperatorStates >= 0) {
 				rawOperatorState = new ArrayList<>();
 				for (int i = 0; i < numRawOperatorStates; i++) {
-					OperatorStateHandle operatorState = SavepointV1Serializer.deserializeOperatorStateHandle(
-						dis);
-					rawOperatorState.add(operatorState);
+					OperatorStateHandle operatorState = SavepointV1Serializer.deserializeOperatorStateHandle(dis);
+					OperatorStateSnapshot operatorStateSnapshot = operatorState != null ?
+						new OperatorStateSnapshot(
+							SnapshotMetaData.createPrimarySnapshotMetaData(),
+							operatorState)
+						: null;
+					rawOperatorState.add(operatorStateSnapshot);
 				}
 			}
 
-			List<OperatorStateHandle> managedOperatorState = null;
+			List<OperatorStateSnapshot> managedOperatorState = null;
 			int numManagedOperatorStates = dis.readInt();
 			if (numManagedOperatorStates >= 0) {
 				managedOperatorState = new ArrayList<>();
 				for (int i = 0; i < numManagedOperatorStates; i++) {
-					OperatorStateHandle operatorState = SavepointV1Serializer.deserializeOperatorStateHandle(
-						dis);
-					managedOperatorState.add(operatorState);
+					OperatorStateHandle operatorState = SavepointV1Serializer.deserializeOperatorStateHandle(dis);
+					OperatorStateSnapshot operatorStateSnapshot = operatorState != null ?
+						new OperatorStateSnapshot(
+							SnapshotMetaData.createPrimarySnapshotMetaData(),
+							operatorState)
+						: null;
+					managedOperatorState.add(operatorStateSnapshot);
 				}
 			}
 
-			List<KeyedStateHandle> rawKeyedState = null;
+			List<KeyedStateSnapshot> rawKeyedState = null;
 			int numRawKeyedStates = dis.readInt();
 			if (numRawKeyedStates >= 0) {
 				rawKeyedState = new ArrayList<>();
 				for (int i = 0; i < numRawKeyedStates; i++) {
-					KeyedStateHandle keyedState = SavepointV1Serializer.deserializeKeyedStateHandle(
-						dis);
-					rawKeyedState.add(keyedState);
+					KeyedStateHandle keyedState = SavepointV1Serializer.deserializeKeyedStateHandle(dis);
+					KeyedStateSnapshot keyedStateSnapshot = keyedState != null ?
+						new KeyedStateSnapshot(
+							SnapshotMetaData.createPrimarySnapshotMetaData(),
+							keyedState)
+						: null;
+					rawKeyedState.add(keyedStateSnapshot);
 				}
 			}
 
-			List<KeyedStateHandle> managedKeyedState = null;
+			List<KeyedStateSnapshot> managedKeyedState = null;
 			int numManagedKeyedStates = dis.readInt();
 			if (numManagedKeyedStates >= 0) {
 				managedKeyedState = new ArrayList<>();
 				for (int i = 0; i < numManagedKeyedStates; i++) {
-					KeyedStateHandle keyedState = SavepointV1Serializer.deserializeKeyedStateHandle(
-						dis);
-					managedKeyedState.add(keyedState);
+					KeyedStateHandle keyedState = SavepointV1Serializer.deserializeKeyedStateHandle(dis);
+					KeyedStateSnapshot keyedStateSnapshot = keyedState != null ?
+						new KeyedStateSnapshot(
+							SnapshotMetaData.createPrimarySnapshotMetaData(),
+							keyedState)
+						: null;
+					if (keyedState != null) {
+						managedKeyedState.add(keyedStateSnapshot);
+					}
 				}
 			}
 
-			return new OperatorStateHandles(
-				index,
-				managedKeyedState,
-				rawKeyedState,
+			return new OperatorSubtaskStateReport(
 				managedOperatorState,
-				rawOperatorState);
+				rawOperatorState,
+				managedKeyedState,
+				rawKeyedState);
 		}
 	}
 }

@@ -35,9 +35,9 @@ import org.apache.flink.runtime.state.OperatorStateCheckpointOutputStream;
 import org.apache.flink.runtime.state.StateInitializationContext;
 import org.apache.flink.runtime.state.StatePartitionStreamProvider;
 import org.apache.flink.runtime.state.StateSnapshotContext;
+import org.apache.flink.runtime.state.snapshot.OperatorSubtaskStateReport;
 import org.apache.flink.streaming.api.watermark.Watermark;
 import org.apache.flink.streaming.runtime.streamrecord.StreamRecord;
-import org.apache.flink.streaming.runtime.tasks.OperatorStateHandles;
 import org.apache.flink.streaming.util.KeyedOneInputStreamOperatorTestHarness;
 
 import org.junit.Assert;
@@ -80,7 +80,7 @@ public class StreamOperatorSnapshotRestoreTest {
 			testHarness.processElement(new StreamRecord<>(i));
 		}
 
-		OperatorStateHandles handles = testHarness.snapshot(1L, 1L);
+		OperatorSubtaskStateReport handles = testHarness.snapshot(1L, 1L);
 
 		testHarness.close();
 

@@ -25,15 +25,13 @@ import org.apache.flink.runtime.checkpoint.OperatorSubtaskState;
 import org.apache.flink.runtime.checkpoint.TaskStateSnapshot;
 import org.apache.flink.runtime.executiongraph.ExecutionAttemptID;
 import org.apache.flink.runtime.jobgraph.OperatorID;
-import org.apache.flink.runtime.state.snapshot.KeyedStateSnapshot;
 import org.apache.flink.runtime.state.snapshot.OperatorSubtaskStateReport;
-import org.apache.flink.runtime.state.snapshot.SnapshotMetaData;
+import org.apache.flink.runtime.state.snapshot.SnapshotUtils;
 import org.apache.flink.runtime.taskmanager.CheckpointResponder;
 import org.apache.flink.util.Preconditions;
 
-import com.sun.istack.internal.NotNull;
+import javax.annotation.Nonnull;
 
-import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -56,9 +54,9 @@ public class SlotStateManager implements CheckpointListener {
 	 * Called to report the states of a new operator snapshot.
 	 */
 	public void reportStates(
-		@NotNull CheckpointMetaData checkpointMetaData,
-		@NotNull CheckpointMetrics checkpointMetrics,
-		@NotNull Map<OperatorID, OperatorSubtaskStateReport> subtaskStateReportsByOperator) {
+		@Nonnull CheckpointMetaData checkpointMetaData,
+		@Nonnull CheckpointMetrics checkpointMetrics,
+		@Nonnull Map<OperatorID, OperatorSubtaskStateReport> subtaskStateReportsByOperator) {
 
 		Preconditions.checkNotNull(subtaskStateReportsByOperator);
 
@@ -72,36 +70,16 @@ public class SlotStateManager implements CheckpointListener {
 
 			if (subtaskStateReport != null && subtaskStateReport.hasState()) {
 
-				KeyedStateHandle primaryKeyedBackendStateImage = null;
-				Collection<KeyedStateSnapshot> managedKeyedState = subtaskStateReport.getManagedKeyedState();
+				OperatorSubtaskState operatorSubtaskState = new OperatorSubtaskState(
+					SnapshotUtils.findPrimarySnapshotSingletonHandle(subtaskStateReport.getManagedOperatorState()),
+					SnapshotUtils.findPrimarySnapshotSingletonHandle(subtaskStateReport.getRawOperatorState()),
+					SnapshotUtils.findPrimarySnapshotSingletonHandle(subtaskStateReport.getManagedKeyedState()),
+					SnapshotUtils.findPrimarySnapshotSingletonHandle(subtaskStateReport.getRawKeyedState()));
 
-				if (managedKeyedState != null) {
-					for (KeyedStateSnapshot managedKeyedSnapshot : managedKeyedState) {
+				Preconditions.checkState(operatorSubtaskState.hasState(),
+					"SubtaskStateReport with state resulted in OperatorSubtaskState without state!");
 
-						if (managedKeyedSnapshot == null) {
-							continue;
-						}
-
-						if (SnapshotMetaData.Ownership.JobManager.equals(managedKeyedSnapshot.getMetaData().getOwnership())) {
-							for (KeyedStateHandle keyedStateHandle : managedKeyedSnapshot) {
-
-								Preconditions.checkState(primaryKeyedBackendStateImage == null,
-									"More than one primary state image!");
-
-								primaryKeyedBackendStateImage = keyedStateHandle;
-							}
-							//TODO store secondary (local) states
-						}
-					}
-
-					OperatorSubtaskState operatorSubtaskState = new OperatorSubtaskState(
-						subtaskStateReport.getManagedOperatorState(),
-						subtaskStateReport.getRawOperatorState(),
-						primaryKeyedBackendStateImage,
-						subtaskStateReport.getRawKeyedState());
-
-					subtaskStateByOperatorId.put(operatorID, operatorSubtaskState);
-				}
+				subtaskStateByOperatorId.put(operatorID, operatorSubtaskState);
 			}
 		}
 

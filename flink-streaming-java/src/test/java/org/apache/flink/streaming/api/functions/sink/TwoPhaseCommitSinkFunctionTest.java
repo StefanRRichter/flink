@@ -20,8 +20,8 @@ package org.apache.flink.streaming.api.functions.sink;
 import org.apache.flink.api.common.typeinfo.TypeHint;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.api.common.typeutils.base.StringSerializer;
+import org.apache.flink.runtime.state.snapshot.OperatorSubtaskStateReport;
 import org.apache.flink.streaming.api.operators.StreamSink;
-import org.apache.flink.streaming.runtime.tasks.OperatorStateHandles;
 import org.apache.flink.streaming.util.OneInputStreamOperatorTestHarness;
 
 import org.junit.After;
@@ -83,7 +83,7 @@ public class TwoPhaseCommitSinkFunctionTest {
 		context.harness.processElement("42", 0);
 		context.harness.snapshot(0, 1);
 		context.harness.processElement("43", 2);
-		OperatorStateHandles snapshot = context.harness.snapshot(1, 3);
+		OperatorSubtaskStateReport snapshot = context.harness.snapshot(1, 3);
 
 		assertTrue(context.tmpDirectory.setWritable(false));
 		try {

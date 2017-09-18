@@ -26,15 +26,14 @@ import org.apache.flink.api.java.functions.KeySelector;
 import org.apache.flink.runtime.state.AbstractKeyedStateBackend;
 import org.apache.flink.runtime.state.KeyGroupRange;
 import org.apache.flink.runtime.state.KeyedStateBackend;
-import org.apache.flink.runtime.state.KeyedStateHandle;
 import org.apache.flink.runtime.state.heap.HeapKeyedStateBackend;
+import org.apache.flink.runtime.state.snapshot.KeyedStateSnapshot;
+import org.apache.flink.runtime.state.snapshot.OperatorSubtaskStateReport;
+import org.apache.flink.runtime.state.snapshot.SnapshotUtils;
 import org.apache.flink.streaming.api.operators.TwoInputStreamOperator;
-import org.apache.flink.streaming.runtime.tasks.OperatorStateHandles;
 
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
-
-import java.util.Collection;
 
 import static org.mockito.Matchers.any;
 import static org.mockito.Mockito.anyInt;
@@ -53,7 +52,7 @@ public class KeyedTwoInputStreamOperatorTestHarness<K, IN1, IN2, OUT>
 
 	// when we restore we keep the state here so that we can call restore
 	// when the operator requests the keyed state backend
-	private Collection<KeyedStateHandle> restoredKeyedState = null;
+	private KeyedStateSnapshot restoredKeyedState = null;
 
 	public KeyedTwoInputStreamOperatorTestHarness(
 			TwoInputStreamOperator<IN1, IN2, OUT> operator,
@@ -117,12 +116,12 @@ public class KeyedTwoInputStreamOperatorTestHarness<K, IN1, IN2, OUT>
 	}
 
 	@Override
-	public void initializeState(OperatorStateHandles operatorStateHandles) throws Exception {
+	public void initializeState(OperatorSubtaskStateReport stateReport) throws Exception {
 		if (restoredKeyedState != null) {
-			restoredKeyedState = operatorStateHandles.getManagedKeyedState();
+			restoredKeyedState = SnapshotUtils.findPrimarySnapshot(stateReport.getManagedKeyedState());
 		}
 
-		super.initializeState(operatorStateHandles);
+		super.initializeState(stateReport);
 	}
 
 	public int numKeyedStateEntries() {

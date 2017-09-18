@@ -41,6 +41,10 @@ import org.apache.flink.runtime.state.OperatorStateBackend;
 import org.apache.flink.runtime.state.OperatorStateHandle;
 import org.apache.flink.runtime.state.StateBackend;
 import org.apache.flink.runtime.state.memory.MemoryStateBackend;
+import org.apache.flink.runtime.state.snapshot.KeyedStateSnapshot;
+import org.apache.flink.runtime.state.snapshot.OperatorStateSnapshot;
+import org.apache.flink.runtime.state.snapshot.OperatorSubtaskStateReport;
+import org.apache.flink.runtime.state.snapshot.SnapshotUtils;
 import org.apache.flink.streaming.api.TimeCharacteristic;
 import org.apache.flink.streaming.api.graph.StreamConfig;
 import org.apache.flink.streaming.api.operators.AbstractStreamOperator;
@@ -213,7 +217,7 @@ public class AbstractStreamOperatorTestHarness<OUT> implements AutoCloseable {
 				@Override
 				public OperatorStateBackend answer(InvocationOnMock invocationOnMock) throws Throwable {
 					final StreamOperator<?> operator = (StreamOperator<?>) invocationOnMock.getArguments()[0];
-					final Collection<OperatorStateHandle> stateHandles = (Collection<OperatorStateHandle>) invocationOnMock.getArguments()[1];
+					final OperatorStateSnapshot stateHandles = (OperatorStateSnapshot) invocationOnMock.getArguments()[1];
 					OperatorStateBackend osb;
 
 					osb = stateBackend.createOperatorStateBackend(
@@ -228,7 +232,7 @@ public class AbstractStreamOperatorTestHarness<OUT> implements AutoCloseable {
 
 					return osb;
 				}
-			}).when(mockTask).createOperatorStateBackend(any(StreamOperator.class), any(Collection.class));
+			}).when(mockTask).createOperatorStateBackend(any(StreamOperator.class), any(OperatorStateSnapshot.class));
 		} catch (Exception e) {
 			throw new RuntimeException(e.getMessage(), e);
 		}
@@ -308,12 +312,12 @@ public class AbstractStreamOperatorTestHarness<OUT> implements AutoCloseable {
 	 * in the local key-group range and the operator states that would be assigned to the local
 	 * subtask.
 	 */
-	public void initializeState(OperatorStateHandles operatorStateHandles) throws Exception {
+	public void initializeState(OperatorSubtaskStateReport stateReport) throws Exception {
 		if (!setupCalled) {
 			setup();
 		}
 
-		if (operatorStateHandles != null) {
+		if (stateReport != null) {
 			int numKeyGroups = getEnvironment().getTaskInfo().getMaxNumberOfParallelSubtasks();
 			int numSubtasks = getEnvironment().getTaskInfo().getNumberOfParallelSubtasks();
 			int subtaskIndex = getEnvironment().getTaskInfo().getIndexOfThisSubtask();
@@ -325,43 +329,54 @@ public class AbstractStreamOperatorTestHarness<OUT> implements AutoCloseable {
 					numSubtasks);
 
 			KeyGroupRange localKeyGroupRange =
-					keyGroupPartitions.get(subtaskIndex);
+				keyGroupPartitions.get(subtaskIndex);
 
-			List<KeyedStateHandle> localManagedKeyGroupState = null;
-			if (operatorStateHandles.getManagedKeyedState() != null) {
-				localManagedKeyGroupState = StateAssignmentOperation.getKeyedStateHandles(
-						operatorStateHandles.getManagedKeyedState(),
-						localKeyGroupRange);
+			List<KeyedStateHandle> repartitionedManagedKeyGroupState = null;
+
+			Collection<KeyedStateHandle> primaryManagedKeyedStateHandles =
+				SnapshotUtils.findPrimarySnapshotHandles(stateReport.getManagedKeyedState());
+
+			if (primaryManagedKeyedStateHandles != null) {
+				repartitionedManagedKeyGroupState = StateAssignmentOperation.getKeyedStateHandles(
+					primaryManagedKeyedStateHandles,
+					localKeyGroupRange);
 			}
 
-			List<KeyedStateHandle> localRawKeyGroupState = null;
-			if (operatorStateHandles.getRawKeyedState() != null) {
-				localRawKeyGroupState = StateAssignmentOperation.getKeyedStateHandles(
-						operatorStateHandles.getRawKeyedState(),
-						localKeyGroupRange);
+			Collection<KeyedStateHandle> repartitionedRawKeyedStateHandles =
+				SnapshotUtils.findPrimarySnapshotHandles(stateReport.getRawKeyedState());
+
+			if (repartitionedRawKeyedStateHandles != null) {
+				repartitionedRawKeyedStateHandles = StateAssignmentOperation.getKeyedStateHandles(
+					repartitionedRawKeyedStateHandles,
+					localKeyGroupRange);
 			}
 
 			List<OperatorStateHandle> managedOperatorState = new ArrayList<>();
-			if (operatorStateHandles.getManagedOperatorState() != null) {
-				managedOperatorState.addAll(operatorStateHandles.getManagedOperatorState());
+			Collection<OperatorStateHandle> primaryManagedOperatorStateHandles =
+				SnapshotUtils.findPrimarySnapshotHandles(stateReport.getManagedOperatorState());
+			if (primaryManagedOperatorStateHandles != null) {
+				managedOperatorState.addAll(primaryManagedOperatorStateHandles);
 			}
-			Collection<OperatorStateHandle> localManagedOperatorState = operatorStateRepartitioner.repartitionState(
-					managedOperatorState,
-					numSubtasks).get(subtaskIndex);
+
+			Collection<OperatorStateHandle> repartitionedManagedOperatorState = operatorStateRepartitioner.repartitionState(
+				managedOperatorState,
+				numSubtasks).get(subtaskIndex);
 
 			List<OperatorStateHandle> rawOperatorState = new ArrayList<>();
-			if (operatorStateHandles.getRawOperatorState() != null) {
-				rawOperatorState.addAll(operatorStateHandles.getRawOperatorState());
+			Collection<OperatorStateHandle> primaryRawOperatorStateHandles =
+				SnapshotUtils.findPrimarySnapshotHandles(stateReport.getRawOperatorState());
+			if (primaryRawOperatorStateHandles != null) {
+				rawOperatorState.addAll(primaryRawOperatorStateHandles);
 			}
-			Collection<OperatorStateHandle> localRawOperatorState = operatorStateRepartitioner.repartitionState(
-					rawOperatorState,
-					numSubtasks).get(subtaskIndex);
+			Collection<OperatorStateHandle> repartitionedRawOperatorState = operatorStateRepartitioner.repartitionState(
+				rawOperatorState,
+				numSubtasks).get(subtaskIndex);
 
 			OperatorSubtaskState massagedOperatorStateHandles = new OperatorSubtaskState(
-				nullToEmptyCollection(localManagedOperatorState),
-				nullToEmptyCollection(localRawOperatorState),
-				nullToEmptyCollection(localManagedKeyGroupState),
-				nullToEmptyCollection(localRawKeyGroupState));
+				nullToEmptyCollection(repartitionedManagedOperatorState),
+				nullToEmptyCollection(repartitionedRawOperatorState),
+				nullToEmptyCollection(repartitionedManagedKeyGroupState),
+				nullToEmptyCollection(repartitionedRawKeyedStateHandles));
 
 			operator.initializeState(massagedOperatorStateHandles);
 		} else {
@@ -380,7 +395,7 @@ public class AbstractStreamOperatorTestHarness<OUT> implements AutoCloseable {
 	 * and repacks them into a single {@link OperatorStateHandles} so that the parallelism of the test
 	 * can change arbitrarily (i.e. be able to scale both up and down).
 	 *
-	 * <p>After repacking the partial states, use {@link #initializeState(OperatorStateHandles)} to initialize
+	 * <p>After repacking the partial states, use {@link #initializeState(OperatorSubtaskStateReport)} )} to initialize
 	 * a new instance with the resulting state. Bear in mind that for parallelism greater than one, you
 	 * have to use the constructor {@link #AbstractStreamOperatorTestHarness(StreamOperator, int, int, int)}.
 	 *
@@ -393,7 +408,7 @@ public class AbstractStreamOperatorTestHarness<OUT> implements AutoCloseable {
 	 * @param handles the different states to be merged.
 	 * @return the resulting state, or {@code null} if no partial states are specified.
 	 */
-	public static OperatorStateHandles repackageState(OperatorStateHandles... handles) throws Exception {
+	public static OperatorSubtaskStateReport repackageState(OperatorSubtaskStateReport... handles) throws Exception {
 
 		if (handles.length < 1) {
 			return null;
@@ -407,12 +422,16 @@ public class AbstractStreamOperatorTestHarness<OUT> implements AutoCloseable {
 		List<KeyedStateHandle> mergedManagedKeyedState = new ArrayList<>(handles.length);
 		List<KeyedStateHandle> mergedRawKeyedState = new ArrayList<>(handles.length);
 
-		for (OperatorStateHandles handle: handles) {
+		for (OperatorSubtaskStateReport handle: handles) {
 
-			Collection<OperatorStateHandle> managedOperatorState = handle.getManagedOperatorState();
-			Collection<OperatorStateHandle> rawOperatorState = handle.getRawOperatorState();
-			Collection<KeyedStateHandle> managedKeyedState = handle.getManagedKeyedState();
-			Collection<KeyedStateHandle> rawKeyedState = handle.getRawKeyedState();
+			Collection<OperatorStateHandle> managedOperatorState =
+				SnapshotUtils.findPrimarySnapshotHandles(handle.getManagedOperatorState());
+			Collection<OperatorStateHandle> rawOperatorState =
+				SnapshotUtils.findPrimarySnapshotHandles(handle.getRawOperatorState());
+			Collection<KeyedStateHandle> managedKeyedState =
+				SnapshotUtils.findPrimarySnapshotHandles(handle.getManagedKeyedState());
+			Collection<KeyedStateHandle> rawKeyedState =
+				SnapshotUtils.findPrimarySnapshotHandles(handle.getRawKeyedState());
 
 			if (managedOperatorState != null) {
 				mergedManagedOperatorState.addAll(managedOperatorState);
@@ -431,12 +450,11 @@ public class AbstractStreamOperatorTestHarness<OUT> implements AutoCloseable {
 			}
 		}
 
-		return new OperatorStateHandles(
-			0,
-			mergedManagedKeyedState,
-			mergedRawKeyedState,
-			mergedManagedOperatorState,
-			mergedRawOperatorState);
+		return new OperatorSubtaskStateReport(
+			Collections.singletonList(SnapshotUtils.toPrimaryOperatorSnapshot(mergedManagedOperatorState)),
+			Collections.singletonList(SnapshotUtils.toPrimaryOperatorSnapshot(mergedRawOperatorState)),
+			Collections.singletonList(SnapshotUtils.toPrimaryKeyedSnapshot(mergedManagedKeyedState)),
+			Collections.singletonList(SnapshotUtils.toPrimaryKeyedSnapshot(mergedRawKeyedState)));
 	}
 
 	/**
@@ -454,25 +472,30 @@ public class AbstractStreamOperatorTestHarness<OUT> implements AutoCloseable {
 	/**
 	 * Calls {@link StreamOperator#snapshotState(long, long, CheckpointOptions)}.
 	 */
-	public OperatorStateHandles snapshot(long checkpointId, long timestamp) throws Exception {
+	public OperatorSubtaskStateReport snapshot(long checkpointId, long timestamp) throws Exception {
 
 		OperatorSnapshotResult operatorStateResult = operator.snapshotState(
 			checkpointId,
 			timestamp,
 			CheckpointOptions.forFullCheckpoint());
 
-		KeyedStateHandle keyedManaged = FutureUtil.runIfNotDoneAndGet(operatorStateResult.getKeyedStateManagedFuture());
-		KeyedStateHandle keyedRaw = FutureUtil.runIfNotDoneAndGet(operatorStateResult.getKeyedStateRawFuture());
+		Collection<KeyedStateSnapshot> keyedManaged =
+			FutureUtil.runIfNotDoneAndGet(operatorStateResult.getKeyedStateManagedFuture());
 
-		OperatorStateHandle opManaged = FutureUtil.runIfNotDoneAndGet(operatorStateResult.getOperatorStateManagedFuture());
-		OperatorStateHandle opRaw = FutureUtil.runIfNotDoneAndGet(operatorStateResult.getOperatorStateRawFuture());
+		Collection<KeyedStateSnapshot> keyedRaw =
+			FutureUtil.runIfNotDoneAndGet(operatorStateResult.getKeyedStateRawFuture());
 
-		return new OperatorStateHandles(
-			0,
-			keyedManaged != null ? Collections.singletonList(keyedManaged) : null,
-			keyedRaw != null ? Collections.singletonList(keyedRaw) : null,
-			opManaged != null ? Collections.singletonList(opManaged) : null,
-			opRaw != null ? Collections.singletonList(opRaw) : null);
+		Collection<OperatorStateSnapshot> opManaged =
+			FutureUtil.runIfNotDoneAndGet(operatorStateResult.getOperatorStateManagedFuture());
+
+		Collection<OperatorStateSnapshot> opRaw =
+			FutureUtil.runIfNotDoneAndGet(operatorStateResult.getOperatorStateRawFuture());
+
+		return new OperatorSubtaskStateReport(
+			opManaged,
+			opRaw,
+			keyedManaged,
+			keyedRaw);
 	}
 
 	/**

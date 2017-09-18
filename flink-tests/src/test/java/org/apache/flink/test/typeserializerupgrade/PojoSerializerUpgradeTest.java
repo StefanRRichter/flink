@@ -41,10 +41,10 @@ import org.apache.flink.runtime.state.AbstractStateBackend;
 import org.apache.flink.runtime.state.FunctionInitializationContext;
 import org.apache.flink.runtime.state.FunctionSnapshotContext;
 import org.apache.flink.runtime.state.StateBackend;
+import org.apache.flink.runtime.state.snapshot.OperatorSubtaskStateReport;
 import org.apache.flink.streaming.api.checkpoint.CheckpointedFunction;
 import org.apache.flink.streaming.api.operators.OneInputStreamOperator;
 import org.apache.flink.streaming.api.operators.StreamMap;
-import org.apache.flink.streaming.runtime.tasks.OperatorStateHandles;
 import org.apache.flink.streaming.util.KeyedOneInputStreamOperatorTestHarness;
 import org.apache.flink.streaming.util.OneInputStreamOperatorTestHarness;
 import org.apache.flink.util.DynamicCodeLoadingException;
@@ -306,7 +306,7 @@ public class PojoSerializerUpgradeTest extends TestLogger {
 			new URL[]{rootPath.toURI().toURL()},
 			Thread.currentThread().getContextClassLoader());
 
-		OperatorStateHandles stateHandles = runOperator(
+		OperatorSubtaskStateReport stateHandles = runOperator(
 			taskConfiguration,
 			executionConfig,
 			new StreamMap<>(new StatefulMapper(isKeyedState, false, hasBField)),
@@ -339,7 +339,7 @@ public class PojoSerializerUpgradeTest extends TestLogger {
 			inputs);
 	}
 
-	private OperatorStateHandles runOperator(
+	private OperatorSubtaskStateReport runOperator(
 			Configuration taskConfiguration,
 			ExecutionConfig executionConfig,
 			OneInputStreamOperator<Long, Long> operator,
@@ -347,7 +347,7 @@ public class PojoSerializerUpgradeTest extends TestLogger {
 			boolean isKeyedState,
 			StateBackend stateBackend,
 			ClassLoader classLoader,
-			OperatorStateHandles operatorStateHandles,
+			OperatorSubtaskStateReport operatorStateHandles,
 			Iterable<Long> input) throws Exception {
 
 		final MockEnvironment environment = new MockEnvironment(
@@ -389,7 +389,7 @@ public class PojoSerializerUpgradeTest extends TestLogger {
 		long checkpointId = 1L;
 		long checkpointTimestamp = timestamp + 1L;
 
-		OperatorStateHandles stateHandles = harness.snapshot(checkpointId, checkpointTimestamp);
+		OperatorSubtaskStateReport stateHandles = harness.snapshot(checkpointId, checkpointTimestamp);
 
 		harness.close();
 

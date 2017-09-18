@@ -53,8 +53,8 @@ import org.apache.flink.runtime.state.AbstractStateBackend;
 import org.apache.flink.runtime.state.CheckpointStreamFactory;
 import org.apache.flink.runtime.state.KeyGroupRange;
 import org.apache.flink.runtime.state.OperatorStateBackend;
-import org.apache.flink.runtime.state.OperatorStateHandle;
 import org.apache.flink.runtime.state.SlotStateManager;
+import org.apache.flink.runtime.state.snapshot.OperatorStateSnapshot;
 import org.apache.flink.runtime.taskmanager.CheckpointResponder;
 import org.apache.flink.runtime.taskmanager.Task;
 import org.apache.flink.runtime.taskmanager.TaskManagerActions;
@@ -74,6 +74,7 @@ import javax.annotation.Nullable;
 
 import java.io.IOException;
 import java.net.URL;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
@@ -271,10 +272,10 @@ public class StreamTaskTerminationTest extends TestLogger {
 		}
 	}
 
-	static class BlockingCallable implements Callable<OperatorStateHandle> {
+	static class BlockingCallable implements Callable<Collection<OperatorStateSnapshot>> {
 
 		@Override
-		public OperatorStateHandle call() throws Exception {
+		public Collection<OperatorStateSnapshot> call() throws Exception {
 			// notify that we have started the asynchronous checkpointint operation
 			CHECKPOINTING_LATCH.trigger();
 			// wait until we have reached the StreamTask#cleanup --> This will already cancel this FutureTask

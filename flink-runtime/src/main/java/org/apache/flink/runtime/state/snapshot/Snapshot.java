@@ -63,6 +63,14 @@ public abstract class Snapshot<T extends StateObject> implements StateObject, It
 		StateUtil.bestEffortDiscardAllStateObjects(stateObjects);
 	}
 
+	public boolean isEmpty() {
+		return size() == 0;
+	}
+
+	public int size() {
+		return stateObjects.size();
+	}
+
 	@Override
 	public long getStateSize() {
 		long stateSize = 0L;

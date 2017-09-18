@@ -42,7 +42,6 @@ import org.apache.flink.runtime.state.CheckpointStreamFactory;
 import org.apache.flink.runtime.state.KeyGroupRange;
 import org.apache.flink.runtime.state.KeyedStateHandle;
 import org.apache.flink.runtime.state.OperatorStateBackend;
-import org.apache.flink.runtime.state.OperatorStateHandle;
 import org.apache.flink.runtime.state.SlotStateManager;
 import org.apache.flink.runtime.state.StateBackend;
 import org.apache.flink.runtime.state.snapshot.KeyedStateSnapshot;
@@ -68,7 +67,6 @@ import org.slf4j.LoggerFactory;
 import java.io.Closeable;
 import java.io.IOException;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
@@ -759,12 +757,24 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 			restoreKeyedStateHandles = stateByOperatorID != null ? stateByOperatorID.getManagedKeyedState() : null;
 		}
 
-		keyedStateBackend.restore(restoreKeyedStateHandles);
+		keyedStateBackend.restore(convertKeyedStateHandleToSnapshot(restoreKeyedStateHandles));
 
 		@SuppressWarnings("unchecked")
 		AbstractKeyedStateBackend<K> typedBackend = (AbstractKeyedStateBackend<K>) keyedStateBackend;
 		return typedBackend;
 	}
+
+	/**
+	 * TODO remove and do properly!!!!!!
+	 */
+	private KeyedStateSnapshot convertKeyedStateHandleToSnapshot(Collection<KeyedStateHandle> restoreKeyedStateHandles) {
+		if(restoreKeyedStateHandles == null) {
+			return null;
+		}
+
+		return new KeyedStateSnapshot(SnapshotMetaData.createPrimarySnapshotMetaData(), restoreKeyedStateHandles);
+	}
+
 
 	/**
 	 * This is only visible because
@@ -877,18 +887,10 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 					OperatorID operatorID = entry.getKey();
 					OperatorSnapshotResult snapshotInProgress = entry.getValue();
 
-					KeyedStateHandle managedKeyedStateHandle =
-						FutureUtil.runIfNotDoneAndGet(snapshotInProgress.getKeyedStateManagedFuture());
-
-					KeyedStateSnapshot managedKeyedStateSnapshot =
-						new KeyedStateSnapshot(
-							SnapshotMetaData.createPrimarySnapshotMetaData(),
-							Collections.singletonList(managedKeyedStateHandle));
-
 					OperatorSubtaskStateReport operatorSubtaskStateReport = new OperatorSubtaskStateReport(
 						FutureUtil.runIfNotDoneAndGet(snapshotInProgress.getOperatorStateManagedFuture()),
 						FutureUtil.runIfNotDoneAndGet(snapshotInProgress.getOperatorStateRawFuture()),
-						Collections.singleton(managedKeyedStateSnapshot),
+						FutureUtil.runIfNotDoneAndGet(snapshotInProgress.getKeyedStateManagedFuture()),
 						FutureUtil.runIfNotDoneAndGet(snapshotInProgress.getKeyedStateRawFuture())
 					);
 

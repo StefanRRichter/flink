@@ -29,14 +29,14 @@ import org.apache.flink.runtime.state.AbstractKeyedStateBackend;
 import org.apache.flink.runtime.state.CheckpointStreamFactory;
 import org.apache.flink.runtime.state.KeyGroupRange;
 import org.apache.flink.runtime.state.KeyGroupRangeAssignment;
-import org.apache.flink.runtime.state.KeyedStateHandle;
 import org.apache.flink.runtime.state.OperatorStateBackend;
-import org.apache.flink.runtime.state.OperatorStateHandle;
 import org.apache.flink.runtime.state.StateSnapshotContextSynchronousImpl;
 import org.apache.flink.runtime.state.VoidNamespace;
 import org.apache.flink.runtime.state.VoidNamespaceSerializer;
+import org.apache.flink.runtime.state.snapshot.KeyedStateSnapshot;
+import org.apache.flink.runtime.state.snapshot.OperatorStateSnapshot;
+import org.apache.flink.runtime.state.snapshot.OperatorSubtaskStateReport;
 import org.apache.flink.streaming.runtime.streamrecord.StreamRecord;
-import org.apache.flink.streaming.runtime.tasks.OperatorStateHandles;
 import org.apache.flink.streaming.runtime.tasks.StreamTask;
 import org.apache.flink.streaming.util.AbstractStreamOperatorTestHarness;
 import org.apache.flink.streaming.util.KeyedOneInputStreamOperatorTestHarness;
@@ -49,6 +49,7 @@ import org.powermock.core.classloader.annotations.PrepareForTest;
 import org.powermock.modules.junit4.PowerMockRunner;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Random;
 import java.util.concurrent.RunnableFuture;
@@ -190,7 +191,7 @@ public class AbstractStreamOperatorTest {
 
 		testHarness.processElement(new Tuple2<>(0, "SET_PROC_TIME_TIMER:10"), 0);
 
-		OperatorStateHandles snapshot = testHarness.snapshot(0, 0);
+		OperatorSubtaskStateReport snapshot = testHarness.snapshot(0, 0);
 
 		TestOperator testOperator1 = new TestOperator();
 
@@ -299,7 +300,7 @@ public class AbstractStreamOperatorTest {
 
 		assertTrue(extractResult(testHarness).isEmpty());
 
-		OperatorStateHandles snapshot = testHarness.snapshot(0, 0);
+		OperatorSubtaskStateReport snapshot = testHarness.snapshot(0, 0);
 
 		// now, restore in two operators, first operator 1
 
@@ -441,7 +442,7 @@ public class AbstractStreamOperatorTest {
 		// take a snapshot from each one of the "parallel" instances of the operator
 		// and combine them into one so that we can scale down
 
-		OperatorStateHandles repackagedState =
+		OperatorSubtaskStateReport repackagedState =
 			AbstractStreamOperatorTestHarness.repackageState(
 				testHarness1.snapshot(0, 0),
 				testHarness2.snapshot(0, 0)
@@ -557,8 +558,8 @@ public class AbstractStreamOperatorTest {
 
 		final CloseableRegistry closeableRegistry = new CloseableRegistry();
 
-		RunnableFuture<KeyedStateHandle> futureKeyedStateHandle = mock(RunnableFuture.class);
-		RunnableFuture<OperatorStateHandle> futureOperatorStateHandle = mock(RunnableFuture.class);
+		RunnableFuture<Collection<KeyedStateSnapshot>> futureKeyedStateHandle = mock(RunnableFuture.class);
+		RunnableFuture<Collection<OperatorStateSnapshot>> futureOperatorStateHandle = mock(RunnableFuture.class);
 
 		StateSnapshotContextSynchronousImpl context = mock(StateSnapshotContextSynchronousImpl.class);
 		when(context.getKeyedStateStreamFuture()).thenReturn(futureKeyedStateHandle);
@@ -583,10 +584,11 @@ public class AbstractStreamOperatorTest {
 
 		doReturn(containingTask).when(operator).getContainingTask();
 
-		RunnableFuture<OperatorStateHandle> futureManagedOperatorStateHandle = mock(RunnableFuture.class);
+		RunnableFuture<Collection<OperatorStateSnapshot>> futureManagedOperatorStateHandle = mock(RunnableFuture.class);
 
 		OperatorStateBackend operatorStateBackend = mock(OperatorStateBackend.class);
-		when(operatorStateBackend.snapshot(eq(checkpointId), eq(timestamp), eq(streamFactory), any(CheckpointOptions.class))).thenReturn(futureManagedOperatorStateHandle);
+		when(operatorStateBackend.snapshot(eq(checkpointId), eq(timestamp), eq(streamFactory), any(CheckpointOptions.class))).
+			thenReturn(futureManagedOperatorStateHandle);
 
 		AbstractKeyedStateBackend<?> keyedStateBackend = mock(AbstractKeyedStateBackend.class);
 		when(keyedStateBackend.snapshot(eq(checkpointId), eq(timestamp), eq(streamFactory), eq(CheckpointOptions.forFullCheckpoint()))).thenThrow(failingException);

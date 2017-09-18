@@ -72,6 +72,8 @@ import org.apache.flink.runtime.state.OperatorStateHandle;
 import org.apache.flink.runtime.state.SlotStateManager;
 import org.apache.flink.runtime.state.StateBackendFactory;
 import org.apache.flink.runtime.state.StreamStateHandle;
+import org.apache.flink.runtime.state.snapshot.OperatorStateSnapshot;
+import org.apache.flink.runtime.state.snapshot.SnapshotUtils;
 import org.apache.flink.runtime.taskmanager.CheckpointResponder;
 import org.apache.flink.runtime.taskmanager.Task;
 import org.apache.flink.runtime.taskmanager.TaskExecutionState;
@@ -112,6 +114,7 @@ import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.net.URL;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
@@ -386,7 +389,7 @@ public class StreamTaskTest extends TestLogger {
 		OperatorSnapshotResult operatorSnapshotResult2 = mock(OperatorSnapshotResult.class);
 		OperatorSnapshotResult operatorSnapshotResult3 = mock(OperatorSnapshotResult.class);
 
-		RunnableFuture<OperatorStateHandle> failingFuture = mock(RunnableFuture.class);
+		RunnableFuture<Collection<OperatorStateSnapshot>> failingFuture = mock(RunnableFuture.class);
 		when(failingFuture.get()).thenThrow(new ExecutionException(new Exception("Test exception")));
 
 		when(operatorSnapshotResult3.getOperatorStateRawFuture()).thenReturn(failingFuture);
@@ -468,10 +471,10 @@ public class StreamTaskTest extends TestLogger {
 		OperatorStateHandle rawOperatorStateHandle = mock(OperatorStateHandle.class);
 
 		OperatorSnapshotResult operatorSnapshotResult = new OperatorSnapshotResult(
-			new DoneFuture<>(managedKeyedStateHandle),
-			new DoneFuture<>(rawKeyedStateHandle),
-			new DoneFuture<>(managedOperatorStateHandle),
-			new DoneFuture<>(rawOperatorStateHandle));
+			new DoneFuture<>(Collections.singletonList(SnapshotUtils.toPrimaryKeyedSnapshot(managedKeyedStateHandle))),
+			new DoneFuture<>(Collections.singletonList(SnapshotUtils.toPrimaryKeyedSnapshot(rawKeyedStateHandle))),
+			new DoneFuture<>(Collections.singletonList(SnapshotUtils.toPrimaryOperatorSnapshot(managedOperatorStateHandle))),
+			new DoneFuture<>(Collections.singletonList(SnapshotUtils.toPrimaryOperatorSnapshot(rawOperatorStateHandle))));
 
 		when(streamOperator.snapshotState(anyLong(), anyLong(), any(CheckpointOptions.class))).thenReturn(operatorSnapshotResult);
 
@@ -593,10 +596,10 @@ public class StreamTaskTest extends TestLogger {
 		OperatorStateHandle rawOperatorStateHandle = mock(OperatorStateHandle.class);
 
 		OperatorSnapshotResult operatorSnapshotResult = new OperatorSnapshotResult(
-			new DoneFuture<>(managedKeyedStateHandle),
-			new DoneFuture<>(rawKeyedStateHandle),
-			new DoneFuture<>(managedOperatorStateHandle),
-			new DoneFuture<>(rawOperatorStateHandle));
+			new DoneFuture<>(Collections.singletonList(SnapshotUtils.toPrimaryKeyedSnapshot(managedKeyedStateHandle))),
+			new DoneFuture<>(Collections.singletonList(SnapshotUtils.toPrimaryKeyedSnapshot(rawKeyedStateHandle))),
+			new DoneFuture<>(Collections.singletonList(SnapshotUtils.toPrimaryOperatorSnapshot(managedOperatorStateHandle))),
+			new DoneFuture<>(Collections.singletonList(SnapshotUtils.toPrimaryOperatorSnapshot(rawOperatorStateHandle))));
 
 		when(streamOperator.snapshotState(anyLong(), anyLong(), any(CheckpointOptions.class))).thenReturn(operatorSnapshotResult);
 

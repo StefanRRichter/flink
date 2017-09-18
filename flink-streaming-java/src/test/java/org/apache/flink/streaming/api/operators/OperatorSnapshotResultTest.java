@@ -20,10 +20,15 @@ package org.apache.flink.streaming.api.operators;
 
 import org.apache.flink.runtime.state.KeyedStateHandle;
 import org.apache.flink.runtime.state.OperatorStateHandle;
+import org.apache.flink.runtime.state.snapshot.KeyedStateSnapshot;
+import org.apache.flink.runtime.state.snapshot.OperatorStateSnapshot;
+import org.apache.flink.runtime.state.snapshot.SnapshotMetaData;
 import org.apache.flink.util.TestLogger;
 
 import org.junit.Test;
 
+import java.util.Collection;
+import java.util.Collections;
 import java.util.concurrent.RunnableFuture;
 
 import static org.mockito.Mockito.mock;
@@ -46,20 +51,28 @@ public class OperatorSnapshotResultTest extends TestLogger {
 		operatorSnapshotResult.cancel();
 
 		KeyedStateHandle keyedManagedStateHandle = mock(KeyedStateHandle.class);
-		RunnableFuture<KeyedStateHandle> keyedStateManagedFuture = mock(RunnableFuture.class);
-		when(keyedStateManagedFuture.get()).thenReturn(keyedManagedStateHandle);
+		RunnableFuture<Collection<KeyedStateSnapshot>> keyedStateManagedFuture = mock(RunnableFuture.class);
+		when(keyedStateManagedFuture.get()).thenReturn(
+			Collections.singletonList(
+				new KeyedStateSnapshot(SnapshotMetaData.createPrimarySnapshotMetaData(), keyedManagedStateHandle)));
 
 		KeyedStateHandle keyedRawStateHandle = mock(KeyedStateHandle.class);
-		RunnableFuture<KeyedStateHandle> keyedStateRawFuture = mock(RunnableFuture.class);
-		when(keyedStateRawFuture.get()).thenReturn(keyedRawStateHandle);
+		RunnableFuture<Collection<KeyedStateSnapshot>> keyedStateRawFuture = mock(RunnableFuture.class);
+		when(keyedStateRawFuture.get()).thenReturn(
+			Collections.singletonList(
+				new KeyedStateSnapshot(SnapshotMetaData.createPrimarySnapshotMetaData(), keyedRawStateHandle)));
 
 		OperatorStateHandle operatorManagedStateHandle = mock(OperatorStateHandle.class);
-		RunnableFuture<OperatorStateHandle> operatorStateManagedFuture = mock(RunnableFuture.class);
-		when(operatorStateManagedFuture.get()).thenReturn(operatorManagedStateHandle);
+		RunnableFuture<Collection<OperatorStateSnapshot>> operatorStateManagedFuture = mock(RunnableFuture.class);
+		when(operatorStateManagedFuture.get()).thenReturn(
+			Collections.singletonList(
+				new OperatorStateSnapshot(SnapshotMetaData.createPrimarySnapshotMetaData(), operatorManagedStateHandle)));
 
 		OperatorStateHandle operatorRawStateHandle = mock(OperatorStateHandle.class);
-		RunnableFuture<OperatorStateHandle> operatorStateRawFuture = mock(RunnableFuture.class);
-		when(operatorStateRawFuture.get()).thenReturn(operatorRawStateHandle);
+		RunnableFuture<Collection<OperatorStateSnapshot>> operatorStateRawFuture = mock(RunnableFuture.class);
+		when(operatorStateRawFuture.get()).thenReturn(
+			Collections.singletonList(
+				new OperatorStateSnapshot(SnapshotMetaData.createPrimarySnapshotMetaData(), operatorRawStateHandle)));
 
 		operatorSnapshotResult = new OperatorSnapshotResult(
 			keyedStateManagedFuture,

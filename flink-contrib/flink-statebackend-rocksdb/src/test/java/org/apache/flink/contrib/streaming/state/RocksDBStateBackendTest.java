@@ -39,6 +39,8 @@ import org.apache.flink.runtime.state.StreamStateHandle;
 import org.apache.flink.runtime.state.VoidNamespace;
 import org.apache.flink.runtime.state.VoidNamespaceSerializer;
 import org.apache.flink.runtime.state.filesystem.FsStateBackend;
+import org.apache.flink.runtime.state.snapshot.KeyedStateSnapshot;
+import org.apache.flink.runtime.state.snapshot.SnapshotUtils;
 import org.apache.flink.runtime.util.BlockerCheckpointStreamFactory;
 
 import org.apache.commons.io.FileUtils;
@@ -217,8 +219,12 @@ public class RocksDBStateBackendTest extends StateBackendTestBase<RocksDBStateBa
 	@Test
 	public void testRunningSnapshotAfterBackendClosed() throws Exception {
 		setupRocksKeyedStateBackend();
-		RunnableFuture<KeyedStateHandle> snapshot = keyedStateBackend.snapshot(0L, 0L, testStreamFactory,
-			CheckpointOptions.forFullCheckpoint());
+		RunnableFuture<Collection<KeyedStateSnapshot>> snapshot =
+			keyedStateBackend.snapshot(
+				0L,
+				0L,
+				testStreamFactory,
+				CheckpointOptions.forFullCheckpoint());
 
 		RocksDB spyDB = keyedStateBackend.db;
 
@@ -289,8 +295,12 @@ public class RocksDBStateBackendTest extends StateBackendTestBase<RocksDBStateBa
 		setupRocksKeyedStateBackend();
 
 		try {
-			RunnableFuture<KeyedStateHandle> snapshot = keyedStateBackend.snapshot(0L, 0L, testStreamFactory,
-				CheckpointOptions.forFullCheckpoint());
+			RunnableFuture<Collection<KeyedStateSnapshot>> snapshot =
+				keyedStateBackend.snapshot(
+					0L,
+					0L,
+					testStreamFactory,
+					CheckpointOptions.forFullCheckpoint());
 
 			RocksDB spyDB = keyedStateBackend.db;
 
@@ -324,8 +334,13 @@ public class RocksDBStateBackendTest extends StateBackendTestBase<RocksDBStateBa
 	public void testDismissingSnapshot() throws Exception {
 		setupRocksKeyedStateBackend();
 		try {
-			RunnableFuture<KeyedStateHandle> snapshot =
-				keyedStateBackend.snapshot(0L, 0L, testStreamFactory, CheckpointOptions.forFullCheckpoint());
+			RunnableFuture<Collection<KeyedStateSnapshot>> snapshot =
+				keyedStateBackend.snapshot(
+					0L,
+					0L,
+					testStreamFactory,
+					CheckpointOptions.forFullCheckpoint());
+
 			snapshot.cancel(true);
 			verifyRocksObjectsReleased();
 		} finally {
@@ -338,8 +353,13 @@ public class RocksDBStateBackendTest extends StateBackendTestBase<RocksDBStateBa
 	public void testDismissingSnapshotNotRunnable() throws Exception {
 		setupRocksKeyedStateBackend();
 		try {
-			RunnableFuture<KeyedStateHandle> snapshot =
-				keyedStateBackend.snapshot(0L, 0L, testStreamFactory, CheckpointOptions.forFullCheckpoint());
+			RunnableFuture<Collection<KeyedStateSnapshot>> snapshot =
+				keyedStateBackend.snapshot(
+					0L,
+					0L,
+					testStreamFactory,
+					CheckpointOptions.forFullCheckpoint());
+
 			snapshot.cancel(true);
 			Thread asyncSnapshotThread = new Thread(snapshot);
 			asyncSnapshotThread.start();
@@ -361,8 +381,13 @@ public class RocksDBStateBackendTest extends StateBackendTestBase<RocksDBStateBa
 	public void testCompletingSnapshot() throws Exception {
 		setupRocksKeyedStateBackend();
 		try {
-			RunnableFuture<KeyedStateHandle> snapshot =
-				keyedStateBackend.snapshot(0L, 0L, testStreamFactory, CheckpointOptions.forFullCheckpoint());
+			RunnableFuture<Collection<KeyedStateSnapshot>> snapshot =
+				keyedStateBackend.snapshot(
+					0L,
+					0L,
+					testStreamFactory,
+					CheckpointOptions.forFullCheckpoint());
+
 			Thread asyncSnapshotThread = new Thread(snapshot);
 			asyncSnapshotThread.start();
 			waiter.await(); // wait for snapshot to run
@@ -370,7 +395,7 @@ public class RocksDBStateBackendTest extends StateBackendTestBase<RocksDBStateBa
 			runStateUpdates();
 			blocker.trigger(); // allow checkpointing to start writing
 			waiter.await(); // wait for snapshot stream writing to run
-			KeyedStateHandle keyedStateHandle = snapshot.get();
+			KeyedStateHandle keyedStateHandle = SnapshotUtils.findPrimarySnapshotSingletonHandle(snapshot.get());
 			assertNotNull(keyedStateHandle);
 			assertTrue(keyedStateHandle.getStateSize() > 0);
 			assertEquals(2, keyedStateHandle.getKeyGroupRange().getNumberOfKeyGroups());
@@ -387,7 +412,13 @@ public class RocksDBStateBackendTest extends StateBackendTestBase<RocksDBStateBa
 	public void testCancelRunningSnapshot() throws Exception {
 		setupRocksKeyedStateBackend();
 		try {
-			RunnableFuture<KeyedStateHandle> snapshot = keyedStateBackend.snapshot(0L, 0L, testStreamFactory, CheckpointOptions.forFullCheckpoint());
+			RunnableFuture<Collection<KeyedStateSnapshot>> snapshot =
+				keyedStateBackend.snapshot(
+					0L,
+					0L,
+					testStreamFactory,
+					CheckpointOptions.forFullCheckpoint());
+
 			Thread asyncSnapshotThread = new Thread(snapshot);
 			asyncSnapshotThread.start();
 			waiter.await(); // wait for snapshot to run
@@ -463,7 +494,7 @@ public class RocksDBStateBackendTest extends StateBackendTestBase<RocksDBStateBa
 					backend.setCurrentKey(checkpointId);
 					state.update("Hello-" + checkpointId);
 
-					RunnableFuture<KeyedStateHandle> snapshot = backend.snapshot(
+					RunnableFuture<Collection<KeyedStateSnapshot>> snapshot = backend.snapshot(
 						checkpointId,
 						checkpointId,
 						createStreamFactory(),

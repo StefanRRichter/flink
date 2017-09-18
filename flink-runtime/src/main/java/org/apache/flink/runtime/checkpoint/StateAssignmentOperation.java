@@ -588,7 +588,7 @@ public class StateAssignmentOperation {
 	 * <p>This is publicly visible to be used in tests.
 	 */
 	public static List<KeyedStateHandle> getKeyedStateHandles(
-		Collection<? extends KeyedStateHandle> keyedStateHandles,
+		Iterable<? extends KeyedStateHandle> keyedStateHandles,
 		KeyGroupRange subtaskKeyGroupRange) {
 
 		List<KeyedStateHandle> subtaskKeyedStateHandles = new ArrayList<>();

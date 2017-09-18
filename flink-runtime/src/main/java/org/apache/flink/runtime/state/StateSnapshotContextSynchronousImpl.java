@@ -20,11 +20,16 @@ package org.apache.flink.runtime.state;
 
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.core.fs.CloseableRegistry;
+import org.apache.flink.runtime.state.snapshot.KeyedStateSnapshot;
+import org.apache.flink.runtime.state.snapshot.OperatorStateSnapshot;
+import org.apache.flink.runtime.state.snapshot.SnapshotMetaData;
 import org.apache.flink.util.ExceptionUtils;
 import org.apache.flink.util.Preconditions;
 
 import java.io.Closeable;
 import java.io.IOException;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.concurrent.RunnableFuture;
 
 /**
@@ -109,14 +114,26 @@ public class StateSnapshotContextSynchronousImpl implements StateSnapshotContext
 		return operatorStateCheckpointOutputStream;
 	}
 
-	public RunnableFuture<KeyedStateHandle> getKeyedStateStreamFuture() throws IOException {
-		KeyGroupsStateHandle keyGroupsStateHandle = closeAndUnregisterStreamToObtainStateHandle(keyedStateCheckpointOutputStream);
-		return new DoneFuture<KeyedStateHandle>(keyGroupsStateHandle);
+	public RunnableFuture<Collection<KeyedStateSnapshot>> getKeyedStateStreamFuture() throws IOException {
+		KeyGroupsStateHandle keyGroupsStateHandle =
+			closeAndUnregisterStreamToObtainStateHandle(keyedStateCheckpointOutputStream);
+
+		KeyedStateSnapshot keyedStateSnapshot = new KeyedStateSnapshot(
+			SnapshotMetaData.createPrimarySnapshotMetaData(),
+			keyGroupsStateHandle);
+
+		return new DoneFuture<>(Collections.singletonList(keyedStateSnapshot));
 	}
 
-	public RunnableFuture<OperatorStateHandle> getOperatorStateStreamFuture() throws IOException {
-		OperatorStateHandle operatorStateHandle = closeAndUnregisterStreamToObtainStateHandle(operatorStateCheckpointOutputStream);
-		return new DoneFuture<>(operatorStateHandle);
+	public RunnableFuture<Collection<OperatorStateSnapshot>> getOperatorStateStreamFuture() throws IOException {
+		OperatorStateHandle operatorStateHandle =
+			closeAndUnregisterStreamToObtainStateHandle(operatorStateCheckpointOutputStream);
+
+		OperatorStateSnapshot operatorStateSnapshot = new OperatorStateSnapshot(
+			SnapshotMetaData.createPrimarySnapshotMetaData(),
+			operatorStateHandle);
+
+		return new DoneFuture<>(Collections.singletonList(operatorStateSnapshot));
 	}
 
 	private <T extends StreamStateHandle> T closeAndUnregisterStreamToObtainStateHandle(
@@ -149,9 +166,7 @@ public class StateSnapshotContextSynchronousImpl implements StateSnapshotContext
 			try {
 				closeAndUnregisterStream(keyedStateCheckpointOutputStream);
 			} catch (IOException e) {
-				exception = ExceptionUtils.firstOrSuppressed(
-					new IOException("Could not close the raw keyed state checkpoint output stream.", e),
-					exception);
+				exception = new IOException("Could not close the raw keyed state checkpoint output stream.", e);
 			}
 		}
 
