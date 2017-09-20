@@ -46,7 +46,8 @@ import org.apache.flink.runtime.memory.MemoryManager;
 import org.apache.flink.runtime.metrics.groups.TaskMetricGroup;
 import org.apache.flink.runtime.query.KvStateRegistry;
 import org.apache.flink.runtime.query.TaskKvStateRegistry;
-import org.apache.flink.runtime.state.SlotStateManager;
+import org.apache.flink.runtime.state.LocalStateStore;
+import org.apache.flink.runtime.state.TaskStateManager;
 import org.apache.flink.runtime.taskmanager.CheckpointResponder;
 import org.apache.flink.runtime.taskmanager.TaskManagerRuntimeInfo;
 import org.apache.flink.runtime.util.TestingTaskManagerRuntimeInfo;
@@ -80,7 +81,7 @@ public class MockEnvironment implements Environment {
 
 	private final IOManager ioManager;
 
-	private final SlotStateManager slotStateManager;
+	private final TaskStateManager slotStateManager;
 
 	private final InputSplitProvider inputSplitProvider;
 
@@ -164,7 +165,15 @@ public class MockEnvironment implements Environment {
 
 		this.memManager = new MemoryManager(memorySize, 1);
 		this.ioManager = new IOManagerAsync();
-		this.slotStateManager = new SlotStateManager(jobID, getExecutionId(), mock(CheckpointResponder.class));
+
+		final LocalStateStore localStateStore = new LocalStateStore(jobID, getJobVertexId(), subtaskIndex);
+		this.slotStateManager =
+			new TaskStateManager(
+				jobID,
+				localStateStore,
+				getExecutionId(),
+				mock(CheckpointResponder.class));
+
 		this.executionConfig = executionConfig;
 		this.inputSplitProvider = inputSplitProvider;
 		this.bufferSize = bufferSize;
@@ -344,7 +353,7 @@ public class MockEnvironment implements Environment {
 	}
 
 	@Override
-	public SlotStateManager getSlotStateManager() {
+	public TaskStateManager getSlotStateManager() {
 		return slotStateManager;
 	}
 

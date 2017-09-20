@@ -70,7 +70,7 @@ import org.apache.flink.runtime.memory.MemoryManager;
 import org.apache.flink.runtime.metrics.groups.TaskMetricGroup;
 import org.apache.flink.runtime.query.TaskKvStateRegistry;
 import org.apache.flink.runtime.state.CheckpointListener;
-import org.apache.flink.runtime.state.SlotStateManager;
+import org.apache.flink.runtime.state.TaskStateManager;
 import org.apache.flink.util.ExceptionUtils;
 import org.apache.flink.util.Preconditions;
 import org.apache.flink.util.SerializedValue;
@@ -184,7 +184,7 @@ public class Task implements Runnable, TaskActions, CheckpointListener {
 	private final BroadcastVariableManager broadcastVariableManager;
 
 	/** The manager for state of operators running in this task/slot */
-	private final SlotStateManager slotStateManager;
+	private final TaskStateManager slotStateManager;
 
 	/** Serialized version of the job specific execution configuration (see {@link ExecutionConfig}). */
 	private final SerializedValue<ExecutionConfig> serializedExecutionConfig;
@@ -288,7 +288,7 @@ public class Task implements Runnable, TaskActions, CheckpointListener {
 		IOManager ioManager,
 		NetworkEnvironment networkEnvironment,
 		BroadcastVariableManager bcVarManager,
-		SlotStateManager slotStateManager,
+		TaskStateManager slotStateManager,
 		TaskManagerActions taskManagerActions,
 		InputSplitProvider inputSplitProvider,
 		CheckpointResponder checkpointResponder,

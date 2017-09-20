@@ -41,7 +41,7 @@ import org.apache.flink.runtime.metrics.groups.TaskManagerMetricGroup;
 import org.apache.flink.runtime.query.KvStateRegistry;
 import org.apache.flink.runtime.query.netty.DisabledKvStateRequestStats;
 import org.apache.flink.runtime.query.netty.KvStateServer;
-import org.apache.flink.runtime.state.TaskStateManager;
+import org.apache.flink.runtime.state.TaskExecutorLocalStateStoresManager;
 import org.apache.flink.runtime.taskexecutor.slot.TaskSlotTable;
 import org.apache.flink.runtime.taskexecutor.slot.TimerService;
 import org.apache.flink.runtime.taskexecutor.utils.TaskExecutorMetricsInitializer;
@@ -77,7 +77,7 @@ public class TaskManagerServices {
 	private final TaskSlotTable taskSlotTable;
 	private final JobManagerTable jobManagerTable;
 	private final JobLeaderService jobLeaderService;
-	private final TaskStateManager taskStateManager;
+	private final TaskExecutorLocalStateStoresManager taskStateManager;
 
 	private TaskManagerServices(
 		TaskManagerLocation taskManagerLocation,
@@ -91,7 +91,7 @@ public class TaskManagerServices {
 		TaskSlotTable taskSlotTable,
 		JobManagerTable jobManagerTable,
 		JobLeaderService jobLeaderService,
-		TaskStateManager taskStateManager) {
+		TaskExecutorLocalStateStoresManager taskStateManager) {
 
 		this.taskManagerLocation = Preconditions.checkNotNull(taskManagerLocation);
 		this.memoryManager = Preconditions.checkNotNull(memoryManager);
@@ -155,7 +155,7 @@ public class TaskManagerServices {
 		return jobLeaderService;
 	}
 
-	public TaskStateManager getTaskStateManager() {
+	public TaskExecutorLocalStateStoresManager getTaskStateManager() {
 		return taskStateManager;
 	}
 
@@ -223,7 +223,7 @@ public class TaskManagerServices {
 
 		final JobLeaderService jobLeaderService = new JobLeaderService(taskManagerLocation);
 
-		final TaskStateManager taskStateManager = new TaskStateManager();
+		final TaskExecutorLocalStateStoresManager taskStateManager = new TaskExecutorLocalStateStoresManager();
 		
 		return new TaskManagerServices(
 			taskManagerLocation,

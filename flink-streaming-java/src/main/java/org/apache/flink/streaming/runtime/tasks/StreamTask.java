@@ -43,7 +43,7 @@ import org.apache.flink.runtime.state.KeyGroupRange;
 import org.apache.flink.runtime.state.KeyedStateHandle;
 import org.apache.flink.runtime.state.OperatorStateBackend;
 import org.apache.flink.runtime.state.OperatorStateHandle;
-import org.apache.flink.runtime.state.SlotStateManager;
+import org.apache.flink.runtime.state.TaskStateManager;
 import org.apache.flink.runtime.state.StateBackend;
 import org.apache.flink.runtime.state.snapshot.KeyedStateSnapshot;
 import org.apache.flink.runtime.state.snapshot.OperatorSubtaskStateReport;
@@ -902,7 +902,7 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 				if (asyncCheckpointState.compareAndSet(CheckpointingOperation.AsynCheckpointState.RUNNING,
 					CheckpointingOperation.AsynCheckpointState.COMPLETED)) {
 
-					SlotStateManager slotStateManager = owner.getEnvironment().getSlotStateManager();
+					TaskStateManager slotStateManager = owner.getEnvironment().getSlotStateManager();
 					slotStateManager.reportStates(checkpointMetaData, checkpointMetrics, stateReportsByOperator);
 
 					LOG.debug("{} - finished asynchronous part of checkpoint {}. Asynchronous duration: {} ms",
