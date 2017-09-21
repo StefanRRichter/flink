@@ -20,7 +20,6 @@ package org.apache.flink.streaming.runtime.tasks;
 import org.apache.flink.annotation.Internal;
 import org.apache.flink.api.common.TaskInfo;
 import org.apache.flink.api.common.accumulators.Accumulator;
-import org.apache.flink.api.common.typeutils.TypeSerializer;
 import org.apache.flink.core.fs.CloseableRegistry;
 import org.apache.flink.core.fs.FileSystemSafetyNet;
 import org.apache.flink.runtime.checkpoint.CheckpointMetaData;
@@ -29,26 +28,17 @@ import org.apache.flink.runtime.checkpoint.CheckpointOptions;
 import org.apache.flink.runtime.checkpoint.OperatorSubtaskState;
 import org.apache.flink.runtime.checkpoint.TaskStateSnapshot;
 import org.apache.flink.runtime.execution.CancelTaskException;
-import org.apache.flink.runtime.execution.Environment;
 import org.apache.flink.runtime.io.network.api.CancelCheckpointMarker;
 import org.apache.flink.runtime.io.network.api.serialization.EventSerializer;
 import org.apache.flink.runtime.io.network.api.writer.ResultPartitionWriter;
 import org.apache.flink.runtime.jobgraph.OperatorID;
 import org.apache.flink.runtime.jobgraph.tasks.AbstractInvokable;
 import org.apache.flink.runtime.jobgraph.tasks.StatefulTask;
-import org.apache.flink.runtime.state.AbstractKeyedStateBackend;
 import org.apache.flink.runtime.state.AbstractStateBackend;
 import org.apache.flink.runtime.state.CheckpointStreamFactory;
-import org.apache.flink.runtime.state.KeyGroupRange;
-import org.apache.flink.runtime.state.KeyedStateHandle;
-import org.apache.flink.runtime.state.OperatorStateBackend;
-import org.apache.flink.runtime.state.OperatorStateHandle;
-import org.apache.flink.runtime.state.TaskStateManager;
 import org.apache.flink.runtime.state.StateBackend;
-import org.apache.flink.runtime.state.snapshot.KeyedStateSnapshot;
-import org.apache.flink.runtime.state.snapshot.OperatorSubtaskStateReport;
-import org.apache.flink.runtime.state.snapshot.SnapshotMetaData;
 import org.apache.flink.runtime.taskmanager.DispatcherThreadFactory;
+import org.apache.flink.runtime.util.OperatorSubtaskDescriptionText;
 import org.apache.flink.streaming.api.TimeCharacteristic;
 import org.apache.flink.streaming.api.graph.StreamConfig;
 import org.apache.flink.streaming.api.operators.OperatorSnapshotResult;
@@ -66,8 +56,6 @@ import org.slf4j.LoggerFactory;
 
 import java.io.Closeable;
 import java.io.IOException;
-import java.util.Collection;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
@@ -146,9 +134,6 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 	/** Our state backend. We use this to create checkpoint streams and a keyed state backend. */
 	private StateBackend stateBackend;
 
-	/** Keyed state backend for the head operator, if it is keyed. There can only ever be one. */
-	private AbstractKeyedStateBackend<?> keyedStateBackend;
-
 	/**
 	 * The internal {@link ProcessingTimeService} used to define the current
 	 * processing time (default = {@code System.currentTimeMillis()}) and
@@ -158,8 +143,6 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 
 	/** The map of user-defined accumulators of this task. */
 	private Map<String, Accumulator<?, ?>> accumulatorMap;
-
-	private TaskStateSnapshot taskStateSnapshot;
 
 	/** The currently active background materialization threads. */
 	private final CloseableRegistry cancelables = new CloseableRegistry();
@@ -506,14 +489,13 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 		return operatorChain.getStreamOutputs();
 	}
 
+	public StateBackend getStateBackend() {
+		return stateBackend;
+	}
+
 	// ------------------------------------------------------------------------
 	//  Checkpoint and Restore
 	// ------------------------------------------------------------------------
-
-	@Override
-	public void setInitialState(TaskStateSnapshot taskStateHandles) {
-		this.taskStateSnapshot = taskStateHandles;
-	}
 
 	@Override
 	public boolean triggerCheckpoint(CheckpointMetaData checkpointMetaData, CheckpointOptions checkpointOptions) throws Exception {
@@ -661,26 +643,11 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 
 	private void initializeState() throws Exception {
 
-		boolean restored = null != taskStateSnapshot;
-
-		if (restored) {
-			initializeOperators(true);
-			taskStateSnapshot = null; // free for GC
-		} else {
-			initializeOperators(false);
-		}
-	}
-
-	private void initializeOperators(boolean restored) throws Exception {
 		StreamOperator<?>[] allOperators = operatorChain.getAllOperators();
-		for (int chainIdx = 0; chainIdx < allOperators.length; ++chainIdx) {
-			StreamOperator<?> operator = allOperators[chainIdx];
+
+		for (StreamOperator<?> operator : allOperators) {
 			if (null != operator) {
-				if (restored && taskStateSnapshot != null) {
-					operator.initializeState(taskStateSnapshot.getSubtaskStateByOperatorID(operator.getOperatorID()));
-				} else {
-					operator.initializeState(null);
-				}
+				operator.initializeState();
 			}
 		}
 	}
@@ -705,65 +672,63 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 		}
 	}
 
-	public OperatorStateBackend createOperatorStateBackend(
-			StreamOperator<?> op, Collection<OperatorStateHandle> restoreStateHandles) throws Exception {
-
-		Environment env = getEnvironment();
-		String opId = createOperatorIdentifier(op, getConfiguration().getVertexID());
-
-		OperatorStateBackend operatorStateBackend = stateBackend.createOperatorStateBackend(env, opId);
-
-		// let operator state backend participate in the operator lifecycle, i.e. make it responsive to cancelation
-		cancelables.registerCloseable(operatorStateBackend);
-
-		// restore if we have some old state
-		if (null != restoreStateHandles) {
-			operatorStateBackend.restore(restoreStateHandles);
-		}
-
-		return operatorStateBackend;
-	}
-
-	public <K> AbstractKeyedStateBackend<K> createKeyedStateBackend(
-			TypeSerializer<K> keySerializer,
-			int numberOfKeyGroups,
-			KeyGroupRange keyGroupRange) throws Exception {
-
-		if (keyedStateBackend != null) {
-			throw new RuntimeException("The keyed state backend can only be created once.");
-		}
-
-		String operatorIdentifier = createOperatorIdentifier(
-				headOperator,
-				configuration.getVertexID());
-
-		keyedStateBackend = stateBackend.createKeyedStateBackend(
-				getEnvironment(),
-				getEnvironment().getJobID(),
-				operatorIdentifier,
-				keySerializer,
-				numberOfKeyGroups,
-				keyGroupRange,
-				getEnvironment().getTaskKvStateRegistry());
-
-		// let keyed state backend participate in the operator lifecycle, i.e. make it responsive to cancellation
-		cancelables.registerCloseable(keyedStateBackend);
-
-		// restore if we have some old state
-		Collection<KeyedStateHandle> restoreKeyedStateHandles = null;
-
-		if (taskStateSnapshot != null) {
-			OperatorSubtaskState stateByOperatorID =
-				taskStateSnapshot.getSubtaskStateByOperatorID(headOperator.getOperatorID());
-			restoreKeyedStateHandles = stateByOperatorID != null ? stateByOperatorID.getManagedKeyedState() : null;
-		}
-
-		keyedStateBackend.restore(restoreKeyedStateHandles);
-
-		@SuppressWarnings("unchecked")
-		AbstractKeyedStateBackend<K> typedBackend = (AbstractKeyedStateBackend<K>) keyedStateBackend;
-		return typedBackend;
-	}
+//	public OperatorStateBackend createOperatorStateBackend(
+//			StreamOperator<?> op, Collection<OperatorStateHandle> restoreStateHandles) throws Exception {
+//
+//		Environment env = getEnvironment();
+//		String opId = createOperatorIdentifier(op);
+//
+//		OperatorStateBackend operatorStateBackend = stateBackend.createOperatorStateBackend(env, opId);
+//
+//		// let operator state backend participate in the operator lifecycle, i.e. make it responsive to cancelation
+//		cancelables.registerCloseable(operatorStateBackend);
+//
+//		// restore if we have some old state
+//		if (null != restoreStateHandles) {
+//			operatorStateBackend.restore(restoreStateHandles);
+//		}
+//
+//		return operatorStateBackend;
+//	}
+//
+//	public <K> AbstractKeyedStateBackend<K> createKeyedStateBackend(
+//			TypeSerializer<K> keySerializer,
+//			int numberOfKeyGroups,
+//			KeyGroupRange keyGroupRange) throws Exception {
+//
+//		if (keyedStateBackend != null) {
+//			throw new RuntimeException("The keyed state backend can only be created once.");
+//		}
+//
+//		String operatorIdentifier = createOperatorIdentifier(headOperator);
+//
+//		keyedStateBackend = stateBackend.createKeyedStateBackend(
+//				getEnvironment(),
+//				getEnvironment().getJobID(),
+//				operatorIdentifier,
+//				keySerializer,
+//				numberOfKeyGroups,
+//				keyGroupRange,
+//				getEnvironment().getTaskKvStateRegistry());
+//
+//		// let keyed state backend participate in the operator lifecycle, i.e. make it responsive to cancellation
+//		cancelables.registerCloseable(keyedStateBackend);
+//
+//		// restore if we have some old state
+//		Collection<KeyedStateHandle> restoreKeyedStateHandles = null;
+//
+//		if (taskStateSnapshot != null) {
+//			OperatorSubtaskState stateByOperatorID =
+//				taskStateSnapshot.getSubtaskStateByOperatorID(headOperator.getOperatorID());
+//			restoreKeyedStateHandles = stateByOperatorID != null ? stateByOperatorID.getManagedKeyedState() : null;
+//		}
+//
+//		keyedStateBackend.restore(restoreKeyedStateHandles);
+//
+//		@SuppressWarnings("unchecked")
+//		AbstractKeyedStateBackend<K> typedBackend = (AbstractKeyedStateBackend<K>) keyedStateBackend;
+//		return typedBackend;
+//	}
 
 	/**
 	 * This is only visible because
@@ -771,25 +736,28 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 	 * checkpoint stream factory to write write-ahead logs. <b>This should not be used for
 	 * anything else.</b>
 	 */
-	public CheckpointStreamFactory createCheckpointStreamFactory(StreamOperator<?> operator) throws IOException {
+	public CheckpointStreamFactory createCheckpointStreamFactory(
+		StreamOperator<?> operator) throws IOException {
 		return stateBackend.createStreamFactory(
-				getEnvironment().getJobID(),
-				createOperatorIdentifier(operator, configuration.getVertexID()));
+			getEnvironment().getJobID(),
+			createOperatorIdentifier(operator));
 	}
 
-	public CheckpointStreamFactory createSavepointStreamFactory(StreamOperator<?> operator, String targetLocation) throws IOException {
+	public CheckpointStreamFactory createSavepointStreamFactory(
+		StreamOperator<?> operator, String targetLocation) throws IOException {
 		return stateBackend.createSavepointStreamFactory(
 			getEnvironment().getJobID(),
-			createOperatorIdentifier(operator, configuration.getVertexID()),
+			createOperatorIdentifier(operator),
 			targetLocation);
 	}
 
-	private String createOperatorIdentifier(StreamOperator<?> operator, int vertexId) {
-
+	private String createOperatorIdentifier(StreamOperator<?> operator) {
 		TaskInfo taskInfo = getEnvironment().getTaskInfo();
-		return operator.getClass().getSimpleName() +
-			"_" + operator.getOperatorID() +
-			"_(" + taskInfo.getIndexOfThisSubtask() + "/" + taskInfo.getNumberOfParallelSubtasks() + ")";
+		return new OperatorSubtaskDescriptionText(
+			operator.getOperatorID(),
+			operator.getClass(),
+			taskInfo.getIndexOfThisSubtask(),
+			taskInfo.getNumberOfParallelSubtasks()).toString();
 	}
 
 	/**
@@ -869,29 +837,24 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 			final long checkpointId = checkpointMetaData.getCheckpointId();
 			try {
 
-				Map<OperatorID, OperatorSubtaskStateReport> stateReportsByOperator =
-					new HashMap<>(operatorSnapshotsInProgress.size());
+				boolean hasState = false;
+				final TaskStateSnapshot taskOperatorSubtaskStates =
+					new TaskStateSnapshot(operatorSnapshotsInProgress.size());
 
 				for (Map.Entry<OperatorID, OperatorSnapshotResult> entry : operatorSnapshotsInProgress.entrySet()) {
+
 					OperatorID operatorID = entry.getKey();
 					OperatorSnapshotResult snapshotInProgress = entry.getValue();
 
-					KeyedStateHandle managedKeyedStateHandle =
-						FutureUtil.runIfNotDoneAndGet(snapshotInProgress.getKeyedStateManagedFuture());
-
-					KeyedStateSnapshot managedKeyedStateSnapshot =
-						new KeyedStateSnapshot(
-							SnapshotMetaData.createPrimarySnapshotMetaData(),
-							Collections.singletonList(managedKeyedStateHandle));
-
-					OperatorSubtaskStateReport operatorSubtaskStateReport = new OperatorSubtaskStateReport(
+					OperatorSubtaskState operatorSubtaskState = new OperatorSubtaskState(
 						FutureUtil.runIfNotDoneAndGet(snapshotInProgress.getOperatorStateManagedFuture()),
 						FutureUtil.runIfNotDoneAndGet(snapshotInProgress.getOperatorStateRawFuture()),
-						Collections.singleton(managedKeyedStateSnapshot),
+						FutureUtil.runIfNotDoneAndGet(snapshotInProgress.getKeyedStateManagedFuture()),
 						FutureUtil.runIfNotDoneAndGet(snapshotInProgress.getKeyedStateRawFuture())
 					);
 
-					stateReportsByOperator.put(operatorID, operatorSubtaskStateReport);
+					hasState |= operatorSubtaskState.hasState();
+					taskOperatorSubtaskStates.putSubtaskStateByOperatorID(operatorID, operatorSubtaskState);
 				}
 
 				final long asyncEndNanos = System.nanoTime();
@@ -902,19 +865,31 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 				if (asyncCheckpointState.compareAndSet(CheckpointingOperation.AsynCheckpointState.RUNNING,
 					CheckpointingOperation.AsynCheckpointState.COMPLETED)) {
 
-					TaskStateManager slotStateManager = owner.getEnvironment().getSlotStateManager();
-					slotStateManager.reportStates(checkpointMetaData, checkpointMetrics, stateReportsByOperator);
+					TaskStateSnapshot acknowledgedState = hasState ? taskOperatorSubtaskStates : null;
+
+					// we signal stateless tasks by reporting null, so that there are no attempts to assign empty state
+					// to stateless tasks on restore. This enables simple job modifications that only concern
+					// stateless without the need to assign them uids to match their (always empty) states.
+					owner.getEnvironment().getTaskStateManager().reportStateHandles(
+						checkpointMetaData,
+						checkpointMetrics,
+						acknowledgedState);
+
+//					owner.getEnvironment().acknowledgeCheckpoint(
+//						checkpointMetaData.getCheckpointId(),
+//						checkpointMetrics,
+//						acknowledgedState);
 
 					LOG.debug("{} - finished asynchronous part of checkpoint {}. Asynchronous duration: {} ms",
-						owner.getName(), checkpointId, asyncDurationMillis);
+						owner.getName(), checkpointMetaData.getCheckpointId(), asyncDurationMillis);
 
 					LOG.trace("{} - reported the following states in snapshot for checkpoint {}: {}.",
-						owner.getName(), checkpointId, stateReportsByOperator);
+						owner.getName(), checkpointMetaData.getCheckpointId(), acknowledgedState);
 
 				} else {
 					LOG.debug("{} - asynchronous part of checkpoint {} could not be completed because it was closed before.",
 						owner.getName(),
-						checkpointId);
+						checkpointMetaData.getCheckpointId());
 				}
 			} catch (Exception e) {
 				// the state is completed if an exception occurred in the acknowledgeCheckpoint call

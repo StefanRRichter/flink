@@ -142,6 +142,7 @@ public class StreamMockEnvironment implements Environment {
 		this.slotStateManager = new TaskStateManager(
 			jobID,
 			localStateStore,
+			null,
 			getExecutionId(),
 			mock(CheckpointResponder.class));
 	}
@@ -333,7 +334,7 @@ public class StreamMockEnvironment implements Environment {
 	}
 
 	@Override
-	public TaskStateManager getSlotStateManager() {
+	public TaskStateManager getTaskStateManager() {
 		return null;
 	}
 

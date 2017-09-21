@@ -171,6 +171,7 @@ public class MockEnvironment implements Environment {
 			new TaskStateManager(
 				jobID,
 				localStateStore,
+				null,
 				getExecutionId(),
 				mock(CheckpointResponder.class));
 
@@ -353,7 +354,7 @@ public class MockEnvironment implements Environment {
 	}
 
 	@Override
-	public TaskStateManager getSlotStateManager() {
+	public TaskStateManager getTaskStateManager() {
 		return slotStateManager;
 	}
 

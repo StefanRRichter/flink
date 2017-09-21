@@ -201,7 +201,7 @@ public class RuntimeEnvironment implements Environment {
 	}
 
 	@Override
-	public TaskStateManager getSlotStateManager() {
+	public TaskStateManager getTaskStateManager() {
 		return slotStateManager;
 	}
 

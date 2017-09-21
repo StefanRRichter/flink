@@ -25,6 +25,7 @@ import org.apache.flink.runtime.accumulators.AccumulatorSnapshot;
 import org.apache.flink.runtime.blob.BlobCache;
 import org.apache.flink.runtime.broadcast.BroadcastVariableManager;
 import org.apache.flink.runtime.checkpoint.CheckpointOptions;
+import org.apache.flink.runtime.checkpoint.TaskRestore;
 import org.apache.flink.runtime.clusterframework.types.AllocationID;
 import org.apache.flink.runtime.clusterframework.types.ResourceID;
 import org.apache.flink.runtime.clusterframework.types.SlotID;
@@ -379,9 +380,12 @@ public class TaskExecutor extends RpcEndpoint implements TaskExecutorGateway {
 				taskInformation.getJobVertexId(),
 				tdd.getSubtaskIndex());
 
+			final TaskRestore taskRestore = tdd.getTaskRestore();
+
 			final TaskStateManager taskStateManager = new TaskStateManager(
 				jobId,
 				localStateStore,
+				taskRestore,
 				tdd.getExecutionAttemptId(),
 				checkpointResponder);
 
@@ -395,7 +399,7 @@ public class TaskExecutor extends RpcEndpoint implements TaskExecutorGateway {
 				tdd.getProducedPartitions(),
 				tdd.getInputGates(),
 				tdd.getTargetSlotNumber(),
-				tdd.getTaskRestore(),
+				taskRestore,
 				memoryManager,
 				ioManager,
 				networkEnvironment,

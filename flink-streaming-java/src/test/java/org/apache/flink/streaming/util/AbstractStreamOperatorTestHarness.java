@@ -37,7 +37,6 @@ import org.apache.flink.runtime.operators.testutils.MockInputSplitProvider;
 import org.apache.flink.runtime.state.CheckpointStreamFactory;
 import org.apache.flink.runtime.state.KeyGroupRange;
 import org.apache.flink.runtime.state.KeyedStateHandle;
-import org.apache.flink.runtime.state.OperatorStateBackend;
 import org.apache.flink.runtime.state.OperatorStateHandle;
 import org.apache.flink.runtime.state.StateBackend;
 import org.apache.flink.runtime.state.memory.MemoryStateBackend;
@@ -209,26 +208,27 @@ public class AbstractStreamOperatorTestHarness<OUT> implements AutoCloseable {
 		}
 
 		try {
-			doAnswer(new Answer<OperatorStateBackend>() {
-				@Override
-				public OperatorStateBackend answer(InvocationOnMock invocationOnMock) throws Throwable {
-					final StreamOperator<?> operator = (StreamOperator<?>) invocationOnMock.getArguments()[0];
-					final Collection<OperatorStateHandle> stateHandles = (Collection<OperatorStateHandle>) invocationOnMock.getArguments()[1];
-					OperatorStateBackend osb;
-
-					osb = stateBackend.createOperatorStateBackend(
-						environment,
-						operator.getClass().getSimpleName());
-
-					mockTask.getCancelables().registerCloseable(osb);
-
-					if (null != stateHandles) {
-						osb.restore(stateHandles);
-					}
-
-					return osb;
-				}
-			}).when(mockTask).createOperatorStateBackend(any(StreamOperator.class), any(Collection.class));
+			// TODO!!!!!!!!!!!!!
+//			doAnswer(new Answer<OperatorStateBackend>() {
+//				@Override
+//				public OperatorStateBackend answer(InvocationOnMock invocationOnMock) throws Throwable {
+//					final StreamOperator<?> operator = (StreamOperator<?>) invocationOnMock.getArguments()[0];
+//					final Collection<OperatorStateHandle> stateHandles = (Collection<OperatorStateHandle>) invocationOnMock.getArguments()[1];
+//					OperatorStateBackend osb;
+//
+//					osb = stateBackend.createOperatorStateBackend(
+//						environment,
+//						operator.getClass().getSimpleName());
+//
+//					mockTask.getCancelables().registerCloseable(osb);
+//
+//					if (null != stateHandles) {
+//						osb.restore(stateHandles);
+//					}
+//
+//					return osb;
+//				}
+//			}).when(mockTask).createOperatorStateBackend(any(StreamOperator.class), any(Collection.class));
 		} catch (Exception e) {
 			throw new RuntimeException(e.getMessage(), e);
 		}
@@ -300,7 +300,7 @@ public class AbstractStreamOperatorTestHarness<OUT> implements AutoCloseable {
 	}
 
 	/**
-	 * Calls {@link org.apache.flink.streaming.api.operators.StreamOperator#initializeState(OperatorSubtaskState)}.
+	 * Calls {@link org.apache.flink.streaming.api.operators.StreamOperator#initializeState()}.
 	 * Calls {@link org.apache.flink.streaming.api.operators.StreamOperator#setup(StreamTask, StreamConfig, Output)}
 	 * if it was not called before.
 	 *
@@ -363,11 +363,14 @@ public class AbstractStreamOperatorTestHarness<OUT> implements AutoCloseable {
 				nullToEmptyCollection(localManagedKeyGroupState),
 				nullToEmptyCollection(localRawKeyGroupState));
 
-			operator.initializeState(massagedOperatorStateHandles);
+			//TODO!!!!!!!!!
+//			operator.initializeState(massagedOperatorStateHandles);
 		} else {
-			operator.initializeState(null);
+			//TODO!!!!!!!!!
+//			operator.initializeState(null);
 		}
 		initializeCalled = true;
+		throw new UnsupportedOperationException("TODO fix me!");
 	}
 
 	private static <T> Collection<T> nullToEmptyCollection(Collection<T> collection) {

@@ -143,7 +143,7 @@ public class DummyEnvironment implements Environment {
 	}
 
 	@Override
-	public TaskStateManager getSlotStateManager() {
+	public TaskStateManager getTaskStateManager() {
 		return null;
 	}
 

@@ -168,6 +168,7 @@ public class JvmExitOnFatalErrorTest {
 					new TaskStateManager(
 						jid,
 						localStateStore,
+						null,
 						executionAttemptID,
 						mock(CheckpointResponder.class));
 

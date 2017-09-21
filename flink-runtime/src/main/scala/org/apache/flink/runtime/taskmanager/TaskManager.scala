@@ -1190,6 +1190,7 @@ class TaskManager(
       val slotStateManager = new TaskStateManager(
         jobInformation.getJobId,
         localStateStore,
+        tdd.getTaskRestore,
         tdd.getExecutionAttemptId,
         checkpointResponder)
 

@@ -1035,13 +1035,15 @@ public class StreamTaskTest extends TestLogger {
 
 		@Override
 		protected void init() throws Exception {
-			operatorStateBackend = createOperatorStateBackend(
-				Mockito.mock(StreamOperator.class),
-				null);
-			keyedStateBackend = createKeyedStateBackend(
-				Mockito.mock(TypeSerializer.class),
-				4,
-				Mockito.mock(KeyGroupRange.class));
+
+			//TODO!!!!!!!!!!!!!
+//			operatorStateBackend = createOperatorStateBackend(
+//				Mockito.mock(StreamOperator.class),
+//				null);
+//			keyedStateBackend = createKeyedStateBackend(
+//				Mockito.mock(TypeSerializer.class),
+//				4,
+//				Mockito.mock(KeyGroupRange.class));
 		}
 
 		@Override

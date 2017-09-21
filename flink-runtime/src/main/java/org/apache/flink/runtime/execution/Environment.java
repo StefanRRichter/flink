@@ -145,7 +145,7 @@ public interface Environment {
 
 	BroadcastVariableManager getBroadcastVariableManager();
 
-	TaskStateManager getSlotStateManager();
+	TaskStateManager getTaskStateManager();
 
 	/**
 	 * Return the registry for accumulators which are periodically sent to the job manager.

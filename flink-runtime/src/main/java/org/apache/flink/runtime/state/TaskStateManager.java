@@ -22,6 +22,7 @@ import org.apache.flink.api.common.JobID;
 import org.apache.flink.runtime.checkpoint.CheckpointMetaData;
 import org.apache.flink.runtime.checkpoint.CheckpointMetrics;
 import org.apache.flink.runtime.checkpoint.OperatorSubtaskState;
+import org.apache.flink.runtime.checkpoint.TaskRestore;
 import org.apache.flink.runtime.checkpoint.TaskStateSnapshot;
 import org.apache.flink.runtime.executiongraph.ExecutionAttemptID;
 import org.apache.flink.runtime.jobgraph.OperatorID;
@@ -32,41 +33,57 @@ import org.apache.flink.runtime.taskmanager.CheckpointResponder;
 import org.apache.flink.util.Preconditions;
 
 import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
 
 /**
- * Manages the all checkpointed state for a slot on a TM.
+ * Manages the state for a task.
  */
 public class TaskStateManager implements CheckpointListener {
 
 	private final JobID jobId;
-//	private final JobVertexID jobVertexID;
-//	private final int subtaskIndex;
-
+	private final TaskRestore jobManagerTaskRestore;
 	private final LocalStateStore localStateStore;
-
 	private final ExecutionAttemptID executionAttemptID;
 	private final CheckpointResponder checkpointResponder;
+
+//	private final JobVertexID jobVertexID;
+//	private final int subtaskIndex;
 
 	public TaskStateManager(
 		JobID jobId,
 		LocalStateStore localStateStore,
+		TaskRestore jobManagerTaskRestore,
 		ExecutionAttemptID executionAttemptID,
 		CheckpointResponder checkpointResponder) {
 
 		this.jobId = jobId;
 		this.localStateStore = localStateStore;
+		this.jobManagerTaskRestore = jobManagerTaskRestore;
 		this.executionAttemptID = executionAttemptID;
 		this.checkpointResponder = checkpointResponder;
+	}
+
+	public void reportStateHandles(
+		@Nonnull CheckpointMetaData checkpointMetaData,
+		@Nonnull CheckpointMetrics checkpointMetrics,
+		@Nullable TaskStateSnapshot acknowledgedState) {
+
+		checkpointResponder.acknowledgeCheckpoint(
+			jobId,
+			executionAttemptID,
+			checkpointMetaData.getCheckpointId(),
+			checkpointMetrics,
+			acknowledgedState);
 	}
 
 	/**
 	 * Called to report the states of a new operator snapshot.
 	 */
-	public void reportStates(
+	public void reportStateSnapshots(
 		@Nonnull CheckpointMetaData checkpointMetaData,
 		@Nonnull CheckpointMetrics checkpointMetrics,
 		@Nonnull Map<OperatorID, OperatorSubtaskStateReport> subtaskStateReportsByOperator) {
@@ -127,6 +144,25 @@ public class TaskStateManager implements CheckpointListener {
 			checkpointMetaData.getCheckpointId(),
 			checkpointMetrics,
 			taskStateSnapshot);
+	}
+
+
+	//TODO!!!!! this will later return OperatorSubtaskStateReport
+	public OperatorSubtaskState operatorStates(OperatorID operatorID) {
+
+		if (jobManagerTaskRestore == null) {
+			return null;
+		}
+
+		TaskStateSnapshot taskStateSnapshot = jobManagerTaskRestore.getTaskStateSnapshot();
+		return taskStateSnapshot.getSubtaskStateByOperatorID(operatorID);
+
+//TODO!!!!!!!
+//		/*
+//		1) lookup local states for a matching operatorID / checkpointID.
+//		2) if nothing available: look into job manager provided state.
+//		3) massage it into a snapshots and return stuff.
+//		 */
 	}
 
 	/**
