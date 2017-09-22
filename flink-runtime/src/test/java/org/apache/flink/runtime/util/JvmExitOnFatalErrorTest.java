@@ -53,6 +53,7 @@ import org.apache.flink.runtime.operators.testutils.UnregisteredTaskMetricsGroup
 import org.apache.flink.runtime.query.TaskKvStateRegistry;
 import org.apache.flink.runtime.state.LocalStateStore;
 import org.apache.flink.runtime.state.TaskStateManager;
+import org.apache.flink.runtime.state.TaskStateManagerImpl;
 import org.apache.flink.runtime.taskexecutor.TaskManagerConfiguration;
 import org.apache.flink.runtime.taskmanager.CheckpointResponder;
 import org.apache.flink.runtime.taskmanager.Task;
@@ -165,9 +166,10 @@ public class JvmExitOnFatalErrorTest {
 
 				final LocalStateStore localStateStore = new LocalStateStore(jid, jobVertexId, 0);
 				final TaskStateManager slotStateManager =
-					new TaskStateManager(
+					new TaskStateManagerImpl(
 						jid,
 						localStateStore,
+						null,
 						executionAttemptID,
 						mock(CheckpointResponder.class));
 

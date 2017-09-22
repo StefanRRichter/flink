@@ -48,6 +48,7 @@ import org.apache.flink.runtime.query.KvStateRegistry;
 import org.apache.flink.runtime.query.TaskKvStateRegistry;
 import org.apache.flink.runtime.state.LocalStateStore;
 import org.apache.flink.runtime.state.TaskStateManager;
+import org.apache.flink.runtime.state.TaskStateManagerImpl;
 import org.apache.flink.runtime.taskmanager.CheckpointResponder;
 import org.apache.flink.runtime.taskmanager.TaskManagerRuntimeInfo;
 import org.apache.flink.runtime.util.TestingTaskManagerRuntimeInfo;
@@ -168,9 +169,10 @@ public class MockEnvironment implements Environment {
 
 		final LocalStateStore localStateStore = new LocalStateStore(jobID, getJobVertexId(), subtaskIndex);
 		this.slotStateManager =
-			new TaskStateManager(
+			new TaskStateManagerImpl(
 				jobID,
 				localStateStore,
+				null,
 				getExecutionId(),
 				mock(CheckpointResponder.class));
 
@@ -353,7 +355,7 @@ public class MockEnvironment implements Environment {
 	}
 
 	@Override
-	public TaskStateManager getSlotStateManager() {
+	public TaskStateManager getTaskStateManager() {
 		return slotStateManager;
 	}
 

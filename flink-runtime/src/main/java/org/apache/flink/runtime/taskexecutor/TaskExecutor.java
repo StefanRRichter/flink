@@ -25,6 +25,7 @@ import org.apache.flink.runtime.accumulators.AccumulatorSnapshot;
 import org.apache.flink.runtime.blob.BlobCache;
 import org.apache.flink.runtime.broadcast.BroadcastVariableManager;
 import org.apache.flink.runtime.checkpoint.CheckpointOptions;
+import org.apache.flink.runtime.checkpoint.TaskRestore;
 import org.apache.flink.runtime.clusterframework.types.AllocationID;
 import org.apache.flink.runtime.clusterframework.types.ResourceID;
 import org.apache.flink.runtime.clusterframework.types.SlotID;
@@ -67,6 +68,7 @@ import org.apache.flink.runtime.rpc.RpcService;
 import org.apache.flink.runtime.rpc.akka.AkkaRpcServiceUtils;
 import org.apache.flink.runtime.state.LocalStateStore;
 import org.apache.flink.runtime.state.TaskStateManager;
+import org.apache.flink.runtime.state.TaskStateManagerImpl;
 import org.apache.flink.runtime.state.TaskExecutorLocalStateStoresManager;
 import org.apache.flink.runtime.taskexecutor.exceptions.CheckpointException;
 import org.apache.flink.runtime.taskexecutor.exceptions.PartitionException;
@@ -379,9 +381,12 @@ public class TaskExecutor extends RpcEndpoint implements TaskExecutorGateway {
 				taskInformation.getJobVertexId(),
 				tdd.getSubtaskIndex());
 
-			final TaskStateManager taskStateManager = new TaskStateManager(
+			final TaskRestore taskRestore = tdd.getTaskRestore();
+
+			final TaskStateManager taskStateManager = new TaskStateManagerImpl(
 				jobId,
 				localStateStore,
+				taskRestore,
 				tdd.getExecutionAttemptId(),
 				checkpointResponder);
 
@@ -395,7 +400,7 @@ public class TaskExecutor extends RpcEndpoint implements TaskExecutorGateway {
 				tdd.getProducedPartitions(),
 				tdd.getInputGates(),
 				tdd.getTargetSlotNumber(),
-				tdd.getTaskRestore(),
+				taskRestore,
 				memoryManager,
 				ioManager,
 				networkEnvironment,

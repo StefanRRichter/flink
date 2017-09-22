@@ -54,9 +54,11 @@ import org.apache.flink.runtime.query.KvStateRegistry;
 import org.apache.flink.runtime.query.TaskKvStateRegistry;
 import org.apache.flink.runtime.state.LocalStateStore;
 import org.apache.flink.runtime.state.TaskStateManager;
+import org.apache.flink.runtime.state.TaskStateManagerImpl;
 import org.apache.flink.runtime.taskmanager.CheckpointResponder;
 import org.apache.flink.runtime.taskmanager.TaskManagerRuntimeInfo;
 import org.apache.flink.runtime.util.TestingTaskManagerRuntimeInfo;
+import org.apache.flink.util.Preconditions;
 
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
@@ -110,10 +112,19 @@ public class StreamMockEnvironment implements Environment {
 
 	private final ExecutionConfig executionConfig;
 
+	private final TaskStateManager taskStateManager;
+
 	private volatile boolean wasFailedExternally = false;
 
-	public StreamMockEnvironment(Configuration jobConfig, Configuration taskConfig, ExecutionConfig executionConfig,
-								long memorySize, MockInputSplitProvider inputSplitProvider, int bufferSize) {
+	public StreamMockEnvironment(
+		Configuration jobConfig,
+		Configuration taskConfig,
+		ExecutionConfig executionConfig,
+		long memorySize,
+		MockInputSplitProvider inputSplitProvider,
+		int bufferSize,
+		TaskStateManager taskStateManager) {
+
 		int subtaskIndex = 0;
 		this.taskInfo = new TaskInfo(
 			"", /* task name */
@@ -128,6 +139,7 @@ public class StreamMockEnvironment implements Environment {
 
 		this.memManager = new MemoryManager(memorySize, 1);
 		this.ioManager = new IOManagerAsync();
+		this.taskStateManager = Preconditions.checkNotNull(taskStateManager);
 		this.inputSplitProvider = inputSplitProvider;
 		this.bufferSize = bufferSize;
 
@@ -139,16 +151,23 @@ public class StreamMockEnvironment implements Environment {
 
 		final LocalStateStore localStateStore = new LocalStateStore(jobID, getJobVertexId(), subtaskIndex);
 
-		this.slotStateManager = new TaskStateManager(
+		this.slotStateManager = new TaskStateManagerImpl(
 			jobID,
 			localStateStore,
+			null,
 			getExecutionId(),
 			mock(CheckpointResponder.class));
 	}
 
-	public StreamMockEnvironment(Configuration jobConfig, Configuration taskConfig, long memorySize,
-								MockInputSplitProvider inputSplitProvider, int bufferSize) {
-		this(jobConfig, taskConfig, new ExecutionConfig(), memorySize, inputSplitProvider, bufferSize);
+	public StreamMockEnvironment(
+		Configuration jobConfig,
+		Configuration taskConfig,
+		long memorySize,
+		MockInputSplitProvider inputSplitProvider,
+		int bufferSize,
+		TaskStateManager taskStateManager) {
+
+		this(jobConfig, taskConfig, new ExecutionConfig(), memorySize, inputSplitProvider, bufferSize, taskStateManager);
 	}
 
 	public void addInputGate(InputGate gate) {
@@ -333,8 +352,8 @@ public class StreamMockEnvironment implements Environment {
 	}
 
 	@Override
-	public TaskStateManager getSlotStateManager() {
-		return null;
+	public TaskStateManager getTaskStateManager() {
+		return taskStateManager;
 	}
 
 	@Override

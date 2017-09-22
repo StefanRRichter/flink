@@ -19,15 +19,21 @@
 package org.apache.flink.streaming.runtime.tasks;
 
 import org.apache.flink.api.common.ExecutionConfig;
+import org.apache.flink.api.common.JobID;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.api.common.typeutils.TypeSerializer;
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.runtime.checkpoint.CheckpointMetaData;
+import org.apache.flink.runtime.checkpoint.CheckpointMetrics;
+import org.apache.flink.runtime.checkpoint.OperatorSubtaskState;
+import org.apache.flink.runtime.checkpoint.TaskStateSnapshot;
 import org.apache.flink.runtime.event.AbstractEvent;
 import org.apache.flink.runtime.io.network.partition.consumer.StreamTestSingleInputGate;
 import org.apache.flink.runtime.jobgraph.OperatorID;
 import org.apache.flink.runtime.jobgraph.tasks.AbstractInvokable;
 import org.apache.flink.runtime.memory.MemoryManager;
 import org.apache.flink.runtime.operators.testutils.MockInputSplitProvider;
+import org.apache.flink.runtime.state.TaskStateManager;
 import org.apache.flink.streaming.api.TimeCharacteristic;
 import org.apache.flink.streaming.api.collector.selector.OutputSelector;
 import org.apache.flink.streaming.api.graph.StreamConfig;
@@ -40,6 +46,9 @@ import org.apache.flink.streaming.runtime.streamrecord.StreamElement;
 import org.apache.flink.streaming.runtime.streamrecord.StreamElementSerializer;
 
 import org.junit.Assert;
+
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 
 import java.io.IOException;
 import java.util.Collections;
@@ -76,6 +85,8 @@ public class StreamTaskTestHarness<OUT> {
 	public Configuration taskConfig;
 	protected StreamConfig streamConfig;
 
+	protected TaskStateManager taskStateManager;
+
 	private AbstractInvokable task;
 
 	private TypeSerializer<OUT> outputSerializer;
@@ -84,6 +95,9 @@ public class StreamTaskTestHarness<OUT> {
 	private LinkedBlockingQueue<Object> outputList;
 
 	protected TaskThread taskThread;
+
+	protected TaskStateSnapshot taskStateSnapshot;
+
 
 	// These don't get initialized, the one-input/two-input specific test harnesses
 	// must initialize these if they want to simulate input. We have them here so that all the
@@ -107,6 +121,34 @@ public class StreamTaskTestHarness<OUT> {
 
 		outputSerializer = outputType.createSerializer(executionConfig);
 		outputStreamRecordSerializer = new StreamElementSerializer<OUT>(outputSerializer);
+
+		this.taskStateManager = new TaskStateManager() {
+
+			@Override
+			public void notifyCheckpointComplete(long checkpointId) throws Exception {
+
+			}
+
+			@Override
+			public void reportStateHandles(
+				@Nonnull CheckpointMetaData checkpointMetaData,
+				@Nonnull CheckpointMetrics checkpointMetrics,
+				@Nullable TaskStateSnapshot acknowledgedState) {
+
+				taskStateSnapshot = acknowledgedState;
+			}
+
+			@Override
+			public OperatorSubtaskState operatorStates(OperatorID operatorID) {
+				TaskStateSnapshot snapshot = taskStateSnapshot;
+				return snapshot != null ? snapshot.getSubtaskStateByOperatorID(operatorID) : null;
+			}
+
+			@Override
+			public JobID getJobId() {
+				return mockEnv.getJobID();
+			}
+		};
 	}
 
 	public ProcessingTimeService getProcessingTimeService() {
@@ -120,6 +162,14 @@ public class StreamTaskTestHarness<OUT> {
 	 * This must be overwritten for OneInputStreamTask or TwoInputStreamTask test harnesses.
 	 */
 	protected void initializeInputs() throws IOException, InterruptedException {}
+
+	public TaskStateManager getTaskStateManager() {
+		return taskStateManager;
+	}
+
+	public void setTaskStateSnapshot(TaskStateSnapshot taskStateSnapshot) {
+		this.taskStateSnapshot = taskStateSnapshot;
+	}
 
 	@SuppressWarnings("unchecked")
 	private void initializeOutput() {
@@ -161,7 +211,13 @@ public class StreamTaskTestHarness<OUT> {
 
 	public StreamMockEnvironment createEnvironment() {
 		return new StreamMockEnvironment(
-				jobConfig, taskConfig, executionConfig, memorySize, new MockInputSplitProvider(), bufferSize);
+			jobConfig,
+			taskConfig,
+			executionConfig,
+			memorySize,
+			new MockInputSplitProvider(),
+			bufferSize,
+			taskStateManager);
 	}
 
 	/**

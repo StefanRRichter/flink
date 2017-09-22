@@ -18,9 +18,7 @@
 
 package org.apache.flink.streaming.util;
 
-import org.apache.flink.api.common.JobID;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
-import org.apache.flink.api.common.typeutils.TypeSerializer;
 import org.apache.flink.api.java.ClosureCleaner;
 import org.apache.flink.api.java.functions.KeySelector;
 import org.apache.flink.runtime.checkpoint.StateAssignmentOperation;
@@ -34,16 +32,9 @@ import org.apache.flink.streaming.api.operators.OneInputStreamOperator;
 import org.apache.flink.streaming.runtime.tasks.OperatorStateHandles;
 import org.apache.flink.util.Migration;
 
-import org.mockito.invocation.InvocationOnMock;
-import org.mockito.stubbing.Answer;
-
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
-
-import static org.mockito.Matchers.any;
-import static org.mockito.Mockito.anyInt;
-import static org.mockito.Mockito.doAnswer;
 
 /**
  * Extension of {@link OneInputStreamOperatorTestHarness} that allows the operator to get
@@ -100,36 +91,37 @@ public class KeyedOneInputStreamOperatorTestHarness<K, IN, OUT>
 
 	private void setupMockTaskCreateKeyedBackend() {
 
-		try {
-			doAnswer(new Answer<KeyedStateBackend>() {
-				@Override
-				public KeyedStateBackend answer(InvocationOnMock invocationOnMock) throws Throwable {
-
-					final TypeSerializer keySerializer = (TypeSerializer) invocationOnMock.getArguments()[0];
-					final int numberOfKeyGroups = (Integer) invocationOnMock.getArguments()[1];
-					final KeyGroupRange keyGroupRange = (KeyGroupRange) invocationOnMock.getArguments()[2];
-
-					if (keyedStateBackend != null) {
-						keyedStateBackend.dispose();
-					}
-
-					keyedStateBackend = stateBackend.createKeyedStateBackend(
-							mockTask.getEnvironment(),
-							new JobID(),
-							"test_op",
-							keySerializer,
-							numberOfKeyGroups,
-							keyGroupRange,
-							mockTask.getEnvironment().getTaskKvStateRegistry());
-
-					keyedStateBackend.restore(restoredKeyedState);
-
-					return keyedStateBackend;
-				}
-			}).when(mockTask).createKeyedStateBackend(any(TypeSerializer.class), anyInt(), any(KeyGroupRange.class));
-		} catch (Exception e) {
-			throw new RuntimeException(e.getMessage(), e);
-		}
+		//TODO!!!!!!!!!!!!!!
+//		try {
+//			doAnswer(new Answer<KeyedStateBackend>() {
+//				@Override
+//				public KeyedStateBackend answer(InvocationOnMock invocationOnMock) throws Throwable {
+//
+//					final TypeSerializer keySerializer = (TypeSerializer) invocationOnMock.getArguments()[0];
+//					final int numberOfKeyGroups = (Integer) invocationOnMock.getArguments()[1];
+//					final KeyGroupRange keyGroupRange = (KeyGroupRange) invocationOnMock.getArguments()[2];
+//
+//					if (keyedStateBackend != null) {
+//						keyedStateBackend.dispose();
+//					}
+//
+//					keyedStateBackend = stateBackend.createKeyedStateBackend(
+//							mockTask.getEnvironment(),
+//							new JobID(),
+//							"test_op",
+//							keySerializer,
+//							numberOfKeyGroups,
+//							keyGroupRange,
+//							mockTask.getEnvironment().getTaskKvStateRegistry());
+//
+//					keyedStateBackend.restore(restoredKeyedState);
+//
+//					return keyedStateBackend;
+//				}
+//			}).when(mockTask).createKeyedStateBackend(any(TypeSerializer.class), anyInt(), any(KeyGroupRange.class));
+//		} catch (Exception e) {
+//			throw new RuntimeException(e.getMessage(), e);
+//		}
 	}
 
 	private static boolean hasMigrationHandles(Collection<KeyedStateHandle> allKeyGroupsHandles) {

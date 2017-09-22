@@ -25,11 +25,14 @@ import org.apache.flink.api.common.typeutils.TypeSerializer;
 import org.apache.flink.api.java.typeutils.TypeExtractor;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.core.fs.CloseableRegistry;
+import org.apache.flink.runtime.checkpoint.CheckpointMetaData;
+import org.apache.flink.runtime.checkpoint.CheckpointMetrics;
 import org.apache.flink.runtime.checkpoint.CheckpointOptions;
 import org.apache.flink.runtime.checkpoint.OperatorStateRepartitioner;
 import org.apache.flink.runtime.checkpoint.OperatorSubtaskState;
 import org.apache.flink.runtime.checkpoint.RoundRobinOperatorStateRepartitioner;
 import org.apache.flink.runtime.checkpoint.StateAssignmentOperation;
+import org.apache.flink.runtime.checkpoint.TaskStateSnapshot;
 import org.apache.flink.runtime.execution.Environment;
 import org.apache.flink.runtime.jobgraph.OperatorID;
 import org.apache.flink.runtime.operators.testutils.MockEnvironment;
@@ -37,9 +40,9 @@ import org.apache.flink.runtime.operators.testutils.MockInputSplitProvider;
 import org.apache.flink.runtime.state.CheckpointStreamFactory;
 import org.apache.flink.runtime.state.KeyGroupRange;
 import org.apache.flink.runtime.state.KeyedStateHandle;
-import org.apache.flink.runtime.state.OperatorStateBackend;
 import org.apache.flink.runtime.state.OperatorStateHandle;
 import org.apache.flink.runtime.state.StateBackend;
+import org.apache.flink.runtime.state.TaskStateManager;
 import org.apache.flink.runtime.state.memory.MemoryStateBackend;
 import org.apache.flink.streaming.api.TimeCharacteristic;
 import org.apache.flink.streaming.api.graph.StreamConfig;
@@ -48,6 +51,8 @@ import org.apache.flink.streaming.api.operators.AbstractStreamOperatorTest;
 import org.apache.flink.streaming.api.operators.OperatorSnapshotResult;
 import org.apache.flink.streaming.api.operators.Output;
 import org.apache.flink.streaming.api.operators.StreamOperator;
+import org.apache.flink.streaming.api.operators.StreamTaskStateManager;
+import org.apache.flink.streaming.api.operators.StreamTaskStateManagerImpl;
 import org.apache.flink.streaming.api.watermark.Watermark;
 import org.apache.flink.streaming.runtime.streamrecord.LatencyMarker;
 import org.apache.flink.streaming.runtime.streamrecord.StreamRecord;
@@ -61,8 +66,12 @@ import org.apache.flink.util.FutureUtil;
 import org.apache.flink.util.OutputTag;
 import org.apache.flink.util.Preconditions;
 
+import org.mockito.internal.util.MockUtil;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
+
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -76,6 +85,7 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 import static org.mockito.Matchers.any;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.when;
 
 /**
@@ -96,6 +106,12 @@ public class AbstractStreamOperatorTestHarness<OUT> implements AutoCloseable {
 	protected final TestProcessingTimeService processingTimeService;
 
 	protected final StreamTask<?, ?> mockTask;
+
+	protected final StreamTaskStateManager streamTaskStateManager;
+
+	protected final TaskStateManager taskStateManager;
+
+	protected OperatorSubtaskState currentOperatorSubtaskState;
 
 	final Environment environment;
 
@@ -152,11 +168,55 @@ public class AbstractStreamOperatorTestHarness<OUT> implements AutoCloseable {
 		this.closableRegistry = new CloseableRegistry();
 		this.checkpointLock = new Object();
 
-		this.environment = Preconditions.checkNotNull(environment);
+		Preconditions.checkNotNull(environment);
+
+		MockUtil mockUtil = new MockUtil();
+		if (mockUtil.isMock(environment) || mockUtil.isSpy(environment)) {
+			this.environment = environment;
+		} else {
+			this.environment = spy(environment);
+		}
+
+		this.taskStateManager = new TaskStateManager() {
+			@Override
+			public void reportStateHandles(
+				@Nonnull CheckpointMetaData checkpointMetaData,
+				@Nonnull CheckpointMetrics checkpointMetrics,
+				@Nullable TaskStateSnapshot acknowledgedState) {
+
+				environment.acknowledgeCheckpoint(
+					checkpointMetaData.getCheckpointId(),
+					checkpointMetrics,
+					acknowledgedState);
+			}
+
+			@Override
+			public OperatorSubtaskState operatorStates(OperatorID operatorID) {
+				return currentOperatorSubtaskState;
+			}
+
+			@Override
+			public JobID getJobId() {
+				return environment.getJobID();
+			}
+
+			@Override
+			public void notifyCheckpointComplete(long checkpointId) throws Exception {
+
+			}
+		};
+
+		when(this.environment.getTaskStateManager()).thenReturn(this.taskStateManager);
 
 		mockTask = mock(StreamTask.class);
 		processingTimeService = new TestProcessingTimeService();
 		processingTimeService.setCurrentTime(0);
+
+		this.streamTaskStateManager = new StreamTaskStateManagerImpl(
+			environment,
+			stateBackend,
+			processingTimeService,
+			closableRegistry);
 
 		StreamStatusMaintainer mockStreamStatusMaintainer = new StreamStatusMaintainer() {
 			StreamStatus currentStreamStatus = StreamStatus.ACTIVE;
@@ -180,6 +240,7 @@ public class AbstractStreamOperatorTestHarness<OUT> implements AutoCloseable {
 		when(mockTask.getTaskConfiguration()).thenReturn(underlyingConfig);
 		when(mockTask.getEnvironment()).thenReturn(environment);
 		when(mockTask.getExecutionConfig()).thenReturn(executionConfig);
+		when(mockTask.getStreamTaskStateManager()).thenReturn(streamTaskStateManager);
 
 		ClassLoader cl = environment.getUserClassLoader();
 		when(mockTask.getUserCodeClassLoader()).thenReturn(cl);
@@ -208,30 +269,31 @@ public class AbstractStreamOperatorTestHarness<OUT> implements AutoCloseable {
 			throw new RuntimeException(e.getMessage(), e);
 		}
 
-		try {
-			doAnswer(new Answer<OperatorStateBackend>() {
-				@Override
-				public OperatorStateBackend answer(InvocationOnMock invocationOnMock) throws Throwable {
-					final StreamOperator<?> operator = (StreamOperator<?>) invocationOnMock.getArguments()[0];
-					final Collection<OperatorStateHandle> stateHandles = (Collection<OperatorStateHandle>) invocationOnMock.getArguments()[1];
-					OperatorStateBackend osb;
-
-					osb = stateBackend.createOperatorStateBackend(
-						environment,
-						operator.getClass().getSimpleName());
-
-					mockTask.getCancelables().registerCloseable(osb);
-
-					if (null != stateHandles) {
-						osb.restore(stateHandles);
-					}
-
-					return osb;
-				}
-			}).when(mockTask).createOperatorStateBackend(any(StreamOperator.class), any(Collection.class));
-		} catch (Exception e) {
-			throw new RuntimeException(e.getMessage(), e);
-		}
+//		try {
+//			// TODO!!!!!!!!!!!!!
+//			doAnswer(new Answer<OperatorStateBackend>() {
+//				@Override
+//				public OperatorStateBackend answer(InvocationOnMock invocationOnMock) throws Throwable {
+//					final StreamOperator<?> operator = (StreamOperator<?>) invocationOnMock.getArguments()[0];
+//					final Collection<OperatorStateHandle> stateHandles = (Collection<OperatorStateHandle>) invocationOnMock.getArguments()[1];
+//					OperatorStateBackend osb;
+//
+//					osb = stateBackend.createOperatorStateBackend(
+//						environment,
+//						operator.getClass().getSimpleName());
+//
+//					mockTask.getCancelables().registerCloseable(osb);
+//
+//					if (null != stateHandles) {
+//						osb.restore(stateHandles);
+//					}
+//
+//					return osb;
+//				}
+//			}).when(mockTask).createOperatorStateBackend(any(StreamOperator.class), any(Collection.class));
+//		} catch (Exception e) {
+//			throw new RuntimeException(e.getMessage(), e);
+//		}
 
 		doAnswer(new Answer<ProcessingTimeService>() {
 			@Override
@@ -300,7 +362,7 @@ public class AbstractStreamOperatorTestHarness<OUT> implements AutoCloseable {
 	}
 
 	/**
-	 * Calls {@link org.apache.flink.streaming.api.operators.StreamOperator#initializeState(OperatorSubtaskState)}.
+	 * Calls {@link org.apache.flink.streaming.api.operators.StreamOperator#initializeState()}.
 	 * Calls {@link org.apache.flink.streaming.api.operators.StreamOperator#setup(StreamTask, StreamConfig, Output)}
 	 * if it was not called before.
 	 *
@@ -357,16 +419,14 @@ public class AbstractStreamOperatorTestHarness<OUT> implements AutoCloseable {
 					rawOperatorState,
 					numSubtasks).get(subtaskIndex);
 
-			OperatorSubtaskState massagedOperatorStateHandles = new OperatorSubtaskState(
+			this.currentOperatorSubtaskState = new OperatorSubtaskState(
 				nullToEmptyCollection(localManagedOperatorState),
 				nullToEmptyCollection(localRawOperatorState),
 				nullToEmptyCollection(localManagedKeyGroupState),
 				nullToEmptyCollection(localRawKeyGroupState));
-
-			operator.initializeState(massagedOperatorStateHandles);
-		} else {
-			operator.initializeState(null);
 		}
+
+		operator.initializeState();
 		initializeCalled = true;
 	}
 

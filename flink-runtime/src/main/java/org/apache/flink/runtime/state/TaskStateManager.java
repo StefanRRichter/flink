@@ -23,117 +23,20 @@ import org.apache.flink.runtime.checkpoint.CheckpointMetaData;
 import org.apache.flink.runtime.checkpoint.CheckpointMetrics;
 import org.apache.flink.runtime.checkpoint.OperatorSubtaskState;
 import org.apache.flink.runtime.checkpoint.TaskStateSnapshot;
-import org.apache.flink.runtime.executiongraph.ExecutionAttemptID;
 import org.apache.flink.runtime.jobgraph.OperatorID;
-import org.apache.flink.runtime.state.snapshot.KeyedStateSnapshot;
-import org.apache.flink.runtime.state.snapshot.OperatorSubtaskStateReport;
-import org.apache.flink.runtime.state.snapshot.SnapshotMetaData;
-import org.apache.flink.runtime.taskmanager.CheckpointResponder;
-import org.apache.flink.util.Preconditions;
 
 import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 
-import java.util.Collection;
-import java.util.HashMap;
-import java.util.Map;
+public interface TaskStateManager extends CheckpointListener {
 
-/**
- * Manages the all checkpointed state for a slot on a TM.
- */
-public class TaskStateManager implements CheckpointListener {
-
-	private final JobID jobId;
-//	private final JobVertexID jobVertexID;
-//	private final int subtaskIndex;
-
-	private final LocalStateStore localStateStore;
-
-	private final ExecutionAttemptID executionAttemptID;
-	private final CheckpointResponder checkpointResponder;
-
-	public TaskStateManager(
-		JobID jobId,
-		LocalStateStore localStateStore,
-		ExecutionAttemptID executionAttemptID,
-		CheckpointResponder checkpointResponder) {
-
-		this.jobId = jobId;
-		this.localStateStore = localStateStore;
-		this.executionAttemptID = executionAttemptID;
-		this.checkpointResponder = checkpointResponder;
-	}
-
-	/**
-	 * Called to report the states of a new operator snapshot.
-	 */
-	public void reportStates(
+	void reportStateHandles(
 		@Nonnull CheckpointMetaData checkpointMetaData,
 		@Nonnull CheckpointMetrics checkpointMetrics,
-		@Nonnull Map<OperatorID, OperatorSubtaskStateReport> subtaskStateReportsByOperator) {
+		@Nullable TaskStateSnapshot acknowledgedState);
 
-		Preconditions.checkNotNull(subtaskStateReportsByOperator);
+	//TODO!!!!! this will later return OperatorSubtaskStateReport
+	OperatorSubtaskState operatorStates(OperatorID operatorID);
 
-		Map<OperatorID, OperatorSubtaskState> subtaskStateByOperatorId =
-			new HashMap<>(subtaskStateReportsByOperator.size());
-
-		for (Map.Entry<OperatorID, OperatorSubtaskStateReport> entry : subtaskStateReportsByOperator.entrySet()) {
-
-			OperatorID operatorID = entry.getKey();
-			OperatorSubtaskStateReport subtaskStateReport = entry.getValue();
-
-			if (subtaskStateReport != null && subtaskStateReport.hasState()) {
-
-				KeyedStateHandle primaryKeyedBackendStateImage = null;
-				Collection<KeyedStateSnapshot> managedKeyedState = subtaskStateReport.getManagedKeyedState();
-
-				if (managedKeyedState != null) {
-					for (KeyedStateSnapshot managedKeyedSnapshot : managedKeyedState) {
-
-						if (managedKeyedSnapshot == null) {
-							continue;
-						}
-
-						if (SnapshotMetaData.Ownership.JobManager.equals(managedKeyedSnapshot.getMetaData().getOwnership())) {
-							for (KeyedStateHandle keyedStateHandle : managedKeyedSnapshot) {
-
-								Preconditions.checkState(primaryKeyedBackendStateImage == null,
-									"More than one primary state image!");
-
-								primaryKeyedBackendStateImage = keyedStateHandle;
-							}
-							//TODO store secondary (local) states
-						}
-					}
-
-					OperatorSubtaskState operatorSubtaskState = new OperatorSubtaskState(
-						subtaskStateReport.getManagedOperatorState(),
-						subtaskStateReport.getRawOperatorState(),
-						primaryKeyedBackendStateImage,
-						subtaskStateReport.getRawKeyedState());
-
-					if (operatorSubtaskState.hasState()) {
-						subtaskStateByOperatorId.put(operatorID, operatorSubtaskState);
-					}
-				}
-			}
-		}
-
-		TaskStateSnapshot taskStateSnapshot = subtaskStateByOperatorId.isEmpty() ?
-			null : new TaskStateSnapshot(subtaskStateByOperatorId);
-
-		checkpointResponder.acknowledgeCheckpoint(
-			jobId,
-			executionAttemptID,
-			checkpointMetaData.getCheckpointId(),
-			checkpointMetrics,
-			taskStateSnapshot);
-	}
-
-	/**
-	 * Tracking when local state can be disposed.
-	 */
-	@Override
-	public void notifyCheckpointComplete(long checkpointId) throws Exception {
-		//TODO activate and prune local state
-	}
+	JobID getJobId();
 }

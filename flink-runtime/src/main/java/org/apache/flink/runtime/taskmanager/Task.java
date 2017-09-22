@@ -682,18 +682,16 @@ public class Task implements Runnable, TaskActions, CheckpointListener {
 			// the state into the task. the state is non-empty if this is an execution
 			// of a task that failed but had backuped state from a checkpoint
 
-			if (null != taskRestore && taskRestore.getTaskStateSnapshot() != null) {
-				if (invokable instanceof StatefulTask) {
-					StatefulTask op = (StatefulTask) invokable;
-					op.setInitialState(taskRestore.getTaskStateSnapshot());
-				} else {
-					throw new IllegalStateException("Found operator state for a non-stateful task invokable");
-				}
-				// be memory and GC friendly - since the code stays in invoke() for a potentially long time,
-				// we clear the reference to the state handle
-				//noinspection UnusedAssignment
-				taskRestore = null;
-			}
+//			if (null != taskRestore && taskRestore.getTaskStateSnapshot() != null) {
+//				if (invokable instanceof StatefulTask) {
+//				} else {
+//					throw new IllegalStateException("Found operator state for a non-stateful task invokable");
+//				}
+//				// be memory and GC friendly - since the code stays in invoke() for a potentially long time,
+//				// we clear the reference to the state handle
+//				//noinspection UnusedAssignment
+//				taskRestore = null;
+//			}
 
 			// ----------------------------------------------------------------
 			//  actual task core work

@@ -97,7 +97,7 @@ public class RuntimeEnvironment implements Environment {
 			MemoryManager memManager,
 			IOManager ioManager,
 			BroadcastVariableManager bcVarManager,
-			TaskStateManager slotStateManager,
+			TaskStateManager taskStateManager,
 			AccumulatorRegistry accumulatorRegistry,
 			TaskKvStateRegistry kvStateRegistry,
 			InputSplitProvider splitProvider,
@@ -120,7 +120,7 @@ public class RuntimeEnvironment implements Environment {
 		this.memManager = checkNotNull(memManager);
 		this.ioManager = checkNotNull(ioManager);
 		this.bcVarManager = checkNotNull(bcVarManager);
-		this.slotStateManager = checkNotNull(slotStateManager);
+		this.slotStateManager = checkNotNull(taskStateManager);
 		this.accumulatorRegistry = checkNotNull(accumulatorRegistry);
 		this.kvStateRegistry = checkNotNull(kvStateRegistry);
 		this.splitProvider = checkNotNull(splitProvider);
@@ -201,7 +201,7 @@ public class RuntimeEnvironment implements Environment {
 	}
 
 	@Override
-	public TaskStateManager getSlotStateManager() {
+	public TaskStateManager getTaskStateManager() {
 		return slotStateManager;
 	}
 
