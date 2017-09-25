@@ -239,32 +239,6 @@ public class AbstractStreamOperatorTestHarness<OUT> implements AutoCloseable {
 			throw new RuntimeException(e.getMessage(), e);
 		}
 
-//		try {
-//			// TODO!!!!!!!!!!!!!
-//			doAnswer(new Answer<OperatorStateBackend>() {
-//				@Override
-//				public OperatorStateBackend answer(InvocationOnMock invocationOnMock) throws Throwable {
-//					final StreamOperator<?> operator = (StreamOperator<?>) invocationOnMock.getArguments()[0];
-//					final Collection<OperatorStateHandle> stateHandles = (Collection<OperatorStateHandle>) invocationOnMock.getArguments()[1];
-//					OperatorStateBackend osb;
-//
-//					osb = stateBackend.createOperatorStateBackend(
-//						environment,
-//						operator.getClass().getSimpleName());
-//
-//					mockTask.getCancelables().registerCloseable(osb);
-//
-//					if (null != stateHandles) {
-//						osb.restore(stateHandles);
-//					}
-//
-//					return osb;
-//				}
-//			}).when(mockTask).createOperatorStateBackend(any(StreamOperator.class), any(Collection.class));
-//		} catch (Exception e) {
-//			throw new RuntimeException(e.getMessage(), e);
-//		}
-
 		doAnswer(new Answer<ProcessingTimeService>() {
 			@Override
 			public ProcessingTimeService answer(InvocationOnMock invocation) throws Throwable {

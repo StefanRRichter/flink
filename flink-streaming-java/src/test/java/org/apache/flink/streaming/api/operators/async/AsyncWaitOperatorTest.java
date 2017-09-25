@@ -505,9 +505,6 @@ public class AsyncWaitOperatorTest extends TestLogger {
 		streamConfig.setStreamOperator(operator);
 		streamConfig.setOperatorID(operatorID);
 
-//		final WrappingTaskStateManager wrappingTaskStateManager =
-//			new WrappingTaskStateManager(testHarness.getTaskStateManager());
-
 		final TaskStateManagerTestMock taskStateManagerMock = testHarness.getTaskStateManager();
 
 		final AcknowledgeStreamMockEnvironment env = new AcknowledgeStreamMockEnvironment(

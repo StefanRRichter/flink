@@ -34,9 +34,11 @@ import javax.annotation.Nullable;
 import java.util.HashMap;
 import java.util.Map;
 
+/**
+ * Implementation of {@link TaskStateManager} for tests.
+ */
 public class TaskStateManagerTestMock implements TaskStateManager {
 
-	//	private Environment environment;
 	private long reportedCheckpointId;
 
 	private JobID jobId;
@@ -106,7 +108,6 @@ public class TaskStateManagerTestMock implements TaskStateManager {
 
 	}
 
-	@Override
 	public JobID getJobId() {
 		return jobId;
 	}

@@ -86,7 +86,6 @@ public class StreamMockEnvironment implements Environment {
 
 	private final IOManager ioManager;
 
-
 	private final InputSplitProvider inputSplitProvider;
 
 	private final Configuration jobConfiguration;

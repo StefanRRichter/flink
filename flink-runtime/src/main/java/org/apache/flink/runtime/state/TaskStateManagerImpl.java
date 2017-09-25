@@ -40,18 +40,32 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * Manages the state for a task.
+ * This class is the default implementation of {@link TaskStateManager} and collaborates with the job manager
+ * through {@link CheckpointResponder}) as well as a task-manager-local state store. Like this, client code does
+ * not have to deal with the differences between remote or local state on recovery because this class handles both
+ * cases transparently.
+ *
+ * Reported state is tagged by clients so that this class can properly forward to the right receiver for the
+ * checkpointed state.
+ *
+ * TODO: all interaction with local state store must still be implemented!
  */
 public class TaskStateManagerImpl implements TaskStateManager {
 
+	/** The id of the job for which this manager was created, can report, and recover. */
 	private final JobID jobId;
-	private final TaskRestore jobManagerTaskRestore;
-	private final LocalStateStore localStateStore;
-	private final ExecutionAttemptID executionAttemptID;
-	private final CheckpointResponder checkpointResponder;
 
-//	private final JobVertexID jobVertexID;
-//	private final int subtaskIndex;
+	/** The execution attempt id that this manager reports for. */
+	private final ExecutionAttemptID executionAttemptID;
+
+	/** The data given by the job manager to restore the job. This is not set for a new job without previous state. */
+	private final TaskRestore jobManagerTaskRestore;
+
+	/** The local state store to which this manager reports local state snapshots. */
+	private final LocalStateStore localStateStore;
+
+	/** The checkpoint responder through which this manager can report to the job manager. */
+	private final CheckpointResponder checkpointResponder;
 
 	public TaskStateManagerImpl(
 		JobID jobId,

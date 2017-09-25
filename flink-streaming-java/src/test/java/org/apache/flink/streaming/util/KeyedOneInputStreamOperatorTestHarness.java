@@ -26,7 +26,6 @@ import org.apache.flink.runtime.state.KeyedStateBackend;
 import org.apache.flink.runtime.state.heap.HeapKeyedStateBackend;
 import org.apache.flink.streaming.api.operators.AbstractStreamOperator;
 import org.apache.flink.streaming.api.operators.OneInputStreamOperator;
-import org.apache.flink.streaming.runtime.tasks.OperatorStateHandles;
 
 /**
  * Extension of {@link OneInputStreamOperatorTestHarness} that allows the operator to get
@@ -34,14 +33,6 @@ import org.apache.flink.streaming.runtime.tasks.OperatorStateHandles;
  */
 public class KeyedOneInputStreamOperatorTestHarness<K, IN, OUT>
 		extends OneInputStreamOperatorTestHarness<IN, OUT> {
-
-//	// in case the operator creates one we store it here so that we
-//	// can snapshot its state
-//	private AbstractKeyedStateBackend<?> keyedStateBackend = null;
-
-//	// when we restore we keep the state here so that we can call restore
-//	// when the operator requests the keyed state backend
-//	private List<KeyedStateHandle> restoredKeyedState = null;
 
 	public KeyedOneInputStreamOperatorTestHarness(
 			OneInputStreamOperator<IN, OUT> operator,
@@ -55,8 +46,6 @@ public class KeyedOneInputStreamOperatorTestHarness<K, IN, OUT>
 		ClosureCleaner.clean(keySelector, false);
 		config.setStatePartitioner(0, keySelector);
 		config.setStateKeySerializer(keyType.createSerializer(executionConfig));
-
-		setupMockTaskCreateKeyedBackend();
 	}
 
 	public KeyedOneInputStreamOperatorTestHarness(
@@ -77,45 +66,6 @@ public class KeyedOneInputStreamOperatorTestHarness<K, IN, OUT>
 		ClosureCleaner.clean(keySelector, false);
 		config.setStatePartitioner(0, keySelector);
 		config.setStateKeySerializer(keyType.createSerializer(executionConfig));
-
-		setupMockTaskCreateKeyedBackend();
-	}
-
-	private void setupMockTaskCreateKeyedBackend() {
-
-//		taskStateManager.setTaskStateSnapshotsByCheckpointId(restoredKeyedState);
-
-//		//TODO!!!!!!!!!!!!!!
-//		try {
-//			doAnswer(new Answer<KeyedStateBackend>() {
-//				@Override
-//				public KeyedStateBackend answer(InvocationOnMock invocationOnMock) throws Throwable {
-//
-//					final TypeSerializer keySerializer = (TypeSerializer) invocationOnMock.getArguments()[0];
-//					final int numberOfKeyGroups = (Integer) invocationOnMock.getArguments()[1];
-//					final KeyGroupRange keyGroupRange = (KeyGroupRange) invocationOnMock.getArguments()[2];
-//
-//					if (keyedStateBackend != null) {
-//						keyedStateBackend.dispose();
-//					}
-//
-//					keyedStateBackend = stateBackend.createKeyedStateBackend(
-//							mockTask.getEnvironment(),
-//							new JobID(),
-//							"test_op",
-//							keySerializer,
-//							numberOfKeyGroups,
-//							keyGroupRange,
-//							mockTask.getEnvironment().getTaskKvStateRegistry());
-//
-//					keyedStateBackend.restore(restoredKeyedState);
-//
-//					return keyedStateBackend;
-//				}
-//			}).when(mockTask).createKeyedStateBackend(any(TypeSerializer.class), anyInt(), any(KeyGroupRange.class));
-//		} catch (Exception e) {
-//			throw new RuntimeException(e.getMessage(), e);
-//		}
 	}
 
 	public int numKeyedStateEntries() {
@@ -136,34 +86,5 @@ public class KeyedOneInputStreamOperatorTestHarness<K, IN, OUT>
 		} else {
 			throw new UnsupportedOperationException();
 		}
-	}
-
-	@Override
-	public void initializeState(OperatorStateHandles operatorStateHandles) throws Exception {
-//		if (operatorStateHandles != null) {
-//			int numKeyGroups = getEnvironment().getTaskInfo().getMaxNumberOfParallelSubtasks();
-//			int numSubtasks = getEnvironment().getTaskInfo().getNumberOfParallelSubtasks();
-//			int subtaskIndex = getEnvironment().getTaskInfo().getIndexOfThisSubtask();
-//
-//			// create a new OperatorStateHandles that only contains the state for our key-groups
-//
-//			List<KeyGroupRange> keyGroupPartitions = StateAssignmentOperation.createKeyGroupPartitions(
-//				numKeyGroups,
-//				numSubtasks);
-//
-//			KeyGroupRange localKeyGroupRange =
-//				keyGroupPartitions.get(subtaskIndex);
-//
-//			restoredKeyedState = null;
-//			Collection<KeyedStateHandle> managedKeyedState = operatorStateHandles.getManagedKeyedState();
-//			if (managedKeyedState != null) {
-//
-//				restoredKeyedState = StateAssignmentOperation.getKeyedStateHandles(
-//					managedKeyedState,
-//					localKeyGroupRange);
-//			}
-//		}
-
-		super.initializeState(operatorStateHandles);
 	}
 }

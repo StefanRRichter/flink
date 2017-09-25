@@ -592,9 +592,6 @@ public class OneInputStreamTaskTest extends TestLogger {
 		TaskStateSnapshot stateHandles = env.getCheckpointStateHandles();
 		Assert.assertEquals(numberChainedTasks, stateHandles.getSubtaskStateMappings().size());
 
-		//TODO!!!!!!!
-//		restoredTask.setInitialState(stateHandles);
-
 		TestingStreamOperator.numberRestoreCalls = 0;
 
 		restoredTaskHarness.invoke();
