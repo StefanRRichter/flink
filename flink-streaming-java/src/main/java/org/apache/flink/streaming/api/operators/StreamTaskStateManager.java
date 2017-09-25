@@ -20,9 +20,24 @@ package org.apache.flink.streaming.api.operators;
 
 import org.apache.flink.api.common.typeutils.TypeSerializer;
 
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
+
+/**
+ * TODO.
+ */
 public interface StreamTaskStateManager {
 
+	/**
+	 * Returns the {@link StreamOperatorStateContext} for an {@link AbstractStreamOperator} that runs in the stream
+	 * task that owns this manager.
+	 *
+	 * @param operator the operator for which the context is created. Cannot be null.
+	 * @param keySerializer the key-serializer for the operator. Can be null.
+	 * @return a context from which the given operator can initialize everything related to state.
+	 * @throws Exception when something went wrong while creating the context.
+	 */
 	StreamOperatorStateContext streamOperatorStateContext(
-		AbstractStreamOperator<?> operator,
-		TypeSerializer<?> keySerializer) throws Exception;
+		@Nonnull AbstractStreamOperator<?> operator,
+		@Nullable TypeSerializer<?> keySerializer) throws Exception;
 }

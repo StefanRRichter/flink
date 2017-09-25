@@ -25,8 +25,6 @@ import org.apache.flink.api.common.typeutils.TypeSerializer;
 import org.apache.flink.api.java.typeutils.TypeExtractor;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.core.fs.CloseableRegistry;
-import org.apache.flink.runtime.checkpoint.CheckpointMetaData;
-import org.apache.flink.runtime.checkpoint.CheckpointMetrics;
 import org.apache.flink.runtime.checkpoint.CheckpointOptions;
 import org.apache.flink.runtime.checkpoint.OperatorStateRepartitioner;
 import org.apache.flink.runtime.checkpoint.OperatorSubtaskState;
@@ -42,7 +40,7 @@ import org.apache.flink.runtime.state.KeyGroupRange;
 import org.apache.flink.runtime.state.KeyedStateHandle;
 import org.apache.flink.runtime.state.OperatorStateHandle;
 import org.apache.flink.runtime.state.StateBackend;
-import org.apache.flink.runtime.state.TaskStateManager;
+import org.apache.flink.runtime.state.TaskStateManagerTestMock;
 import org.apache.flink.runtime.state.memory.MemoryStateBackend;
 import org.apache.flink.streaming.api.TimeCharacteristic;
 import org.apache.flink.streaming.api.graph.StreamConfig;
@@ -69,9 +67,6 @@ import org.apache.flink.util.Preconditions;
 import org.mockito.internal.util.MockUtil;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
-
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -109,9 +104,7 @@ public class AbstractStreamOperatorTestHarness<OUT> implements AutoCloseable {
 
 	protected final StreamTaskStateManager streamTaskStateManager;
 
-	protected final TaskStateManager taskStateManager;
-
-	protected OperatorSubtaskState currentOperatorSubtaskState;
+	protected final TaskStateManagerTestMock taskStateManager;
 
 	final Environment environment;
 
@@ -148,6 +141,7 @@ public class AbstractStreamOperatorTestHarness<OUT> implements AutoCloseable {
 				1024,
 				new Configuration(),
 				new ExecutionConfig(),
+				new TaskStateManagerTestMock(),
 				maxParallelism,
 				numSubtasks,
 				subtaskIndex));
@@ -155,56 +149,32 @@ public class AbstractStreamOperatorTestHarness<OUT> implements AutoCloseable {
 
 	public AbstractStreamOperatorTestHarness(
 			StreamOperator<OUT> operator,
-			final Environment environment) throws Exception {
+			final Environment env) throws Exception {
 		this.operator = operator;
 		this.outputList = new ConcurrentLinkedQueue<>();
 		this.sideOutputLists = new HashMap<>();
 
-		Configuration underlyingConfig = environment.getTaskConfiguration();
+		Configuration underlyingConfig = env.getTaskConfiguration();
 		this.config = new StreamConfig(underlyingConfig);
 		this.config.setCheckpointingEnabled(true);
 		this.config.setOperatorID(new OperatorID());
-		this.executionConfig = environment.getExecutionConfig();
+		this.executionConfig = env.getExecutionConfig();
 		this.closableRegistry = new CloseableRegistry();
 		this.checkpointLock = new Object();
 
-		Preconditions.checkNotNull(environment);
+		Preconditions.checkNotNull(env);
 
 		MockUtil mockUtil = new MockUtil();
-		if (mockUtil.isMock(environment) || mockUtil.isSpy(environment)) {
-			this.environment = environment;
+
+		if (mockUtil.isMock(env) || mockUtil.isSpy(env)) {
+			this.environment = env;
 		} else {
-			this.environment = spy(environment);
+			this.environment = spy(env);
 		}
 
-		this.taskStateManager = new TaskStateManager() {
-			@Override
-			public void reportStateHandles(
-				@Nonnull CheckpointMetaData checkpointMetaData,
-				@Nonnull CheckpointMetrics checkpointMetrics,
-				@Nullable TaskStateSnapshot acknowledgedState) {
-
-				environment.acknowledgeCheckpoint(
-					checkpointMetaData.getCheckpointId(),
-					checkpointMetrics,
-					acknowledgedState);
-			}
-
-			@Override
-			public OperatorSubtaskState operatorStates(OperatorID operatorID) {
-				return currentOperatorSubtaskState;
-			}
-
-			@Override
-			public JobID getJobId() {
-				return environment.getJobID();
-			}
-
-			@Override
-			public void notifyCheckpointComplete(long checkpointId) throws Exception {
-
-			}
-		};
+		this.taskStateManager = new TaskStateManagerTestMock(
+			env.getJobID(),
+			env.getExecutionId());
 
 		when(this.environment.getTaskStateManager()).thenReturn(this.taskStateManager);
 
@@ -238,11 +208,11 @@ public class AbstractStreamOperatorTestHarness<OUT> implements AutoCloseable {
 		when(mockTask.getCheckpointLock()).thenReturn(checkpointLock);
 		when(mockTask.getConfiguration()).thenReturn(config);
 		when(mockTask.getTaskConfiguration()).thenReturn(underlyingConfig);
-		when(mockTask.getEnvironment()).thenReturn(environment);
+		when(mockTask.getEnvironment()).thenReturn(env);
 		when(mockTask.getExecutionConfig()).thenReturn(executionConfig);
 		when(mockTask.getStreamTaskStateManager()).thenReturn(streamTaskStateManager);
 
-		ClassLoader cl = environment.getUserClassLoader();
+		ClassLoader cl = env.getUserClassLoader();
 		when(mockTask.getUserCodeClassLoader()).thenReturn(cl);
 
 		when(mockTask.getCancelables()).thenReturn(this.closableRegistry);
@@ -419,11 +389,17 @@ public class AbstractStreamOperatorTestHarness<OUT> implements AutoCloseable {
 					rawOperatorState,
 					numSubtasks).get(subtaskIndex);
 
-			this.currentOperatorSubtaskState = new OperatorSubtaskState(
+			OperatorSubtaskState operatorSubtaskState = new OperatorSubtaskState(
 				nullToEmptyCollection(localManagedOperatorState),
 				nullToEmptyCollection(localRawOperatorState),
 				nullToEmptyCollection(localManagedKeyGroupState),
 				nullToEmptyCollection(localRawKeyGroupState));
+
+			TaskStateSnapshot taskStateSnapshot = new TaskStateSnapshot();
+			taskStateSnapshot.putSubtaskStateByOperatorID(operator.getOperatorID(), operatorSubtaskState);
+
+			taskStateManager.setReportedCheckpointId(0);
+			taskStateManager.setTaskStateSnapshotsByCheckpointId(Collections.singletonMap(0L, taskStateSnapshot));
 		}
 
 		operator.initializeState();

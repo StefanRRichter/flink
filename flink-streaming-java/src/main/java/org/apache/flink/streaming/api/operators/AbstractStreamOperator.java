@@ -196,6 +196,7 @@ public abstract class AbstractStreamOperator<OUT>
 
 		stateKeySelector1 = config.getStatePartitioner(0, getUserCodeClassloader());
 		stateKeySelector2 = config.getStatePartitioner(1, getUserCodeClassloader());
+
 		this.streamTaskStateManager = containingTask.getStreamTaskStateManager();
 	}
 

@@ -72,7 +72,6 @@ public class KeyedTwoInputStreamOperatorTestHarness<K, IN1, IN2, OUT>
 		this(operator, keySelector1, keySelector2, keyType, 1, 1, 0);
 	}
 
-
 	private void setupMockTaskCreateKeyedBackend() {
 //TODO !!!!!!!!!
 //		try {

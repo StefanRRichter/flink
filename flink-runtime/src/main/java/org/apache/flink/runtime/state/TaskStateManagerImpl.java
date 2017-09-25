@@ -174,9 +174,4 @@ public class TaskStateManagerImpl implements TaskStateManager {
 	public void notifyCheckpointComplete(long checkpointId) throws Exception {
 		//TODO activate and prune local state
 	}
-
-	@Override
-	public JobID getJobId() {
-		return jobId;
-	}
 }

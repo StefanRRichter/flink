@@ -18,7 +18,6 @@
 
 package org.apache.flink.runtime.state;
 
-import org.apache.flink.api.common.JobID;
 import org.apache.flink.runtime.checkpoint.CheckpointMetaData;
 import org.apache.flink.runtime.checkpoint.CheckpointMetrics;
 import org.apache.flink.runtime.checkpoint.OperatorSubtaskState;
@@ -28,6 +27,9 @@ import org.apache.flink.runtime.jobgraph.OperatorID;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
+/**
+ * TODO.
+ */
 public interface TaskStateManager extends CheckpointListener {
 
 	void reportStateHandles(
@@ -37,6 +39,4 @@ public interface TaskStateManager extends CheckpointListener {
 
 	//TODO!!!!! this will later return OperatorSubtaskStateReport
 	OperatorSubtaskState operatorStates(OperatorID operatorID);
-
-	JobID getJobId();
 }

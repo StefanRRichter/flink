@@ -21,20 +21,12 @@ package org.apache.flink.streaming.util;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.api.java.ClosureCleaner;
 import org.apache.flink.api.java.functions.KeySelector;
-import org.apache.flink.runtime.checkpoint.StateAssignmentOperation;
 import org.apache.flink.runtime.execution.Environment;
-import org.apache.flink.runtime.state.AbstractKeyedStateBackend;
-import org.apache.flink.runtime.state.KeyGroupRange;
 import org.apache.flink.runtime.state.KeyedStateBackend;
-import org.apache.flink.runtime.state.KeyedStateHandle;
 import org.apache.flink.runtime.state.heap.HeapKeyedStateBackend;
+import org.apache.flink.streaming.api.operators.AbstractStreamOperator;
 import org.apache.flink.streaming.api.operators.OneInputStreamOperator;
 import org.apache.flink.streaming.runtime.tasks.OperatorStateHandles;
-import org.apache.flink.util.Migration;
-
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.List;
 
 /**
  * Extension of {@link OneInputStreamOperatorTestHarness} that allows the operator to get
@@ -43,13 +35,13 @@ import java.util.List;
 public class KeyedOneInputStreamOperatorTestHarness<K, IN, OUT>
 		extends OneInputStreamOperatorTestHarness<IN, OUT> {
 
-	// in case the operator creates one we store it here so that we
-	// can snapshot its state
-	private AbstractKeyedStateBackend<?> keyedStateBackend = null;
+//	// in case the operator creates one we store it here so that we
+//	// can snapshot its state
+//	private AbstractKeyedStateBackend<?> keyedStateBackend = null;
 
-	// when we restore we keep the state here so that we can call restore
-	// when the operator requests the keyed state backend
-	private List<KeyedStateHandle> restoredKeyedState = null;
+//	// when we restore we keep the state here so that we can call restore
+//	// when the operator requests the keyed state backend
+//	private List<KeyedStateHandle> restoredKeyedState = null;
 
 	public KeyedOneInputStreamOperatorTestHarness(
 			OneInputStreamOperator<IN, OUT> operator,
@@ -91,7 +83,9 @@ public class KeyedOneInputStreamOperatorTestHarness<K, IN, OUT>
 
 	private void setupMockTaskCreateKeyedBackend() {
 
-		//TODO!!!!!!!!!!!!!!
+//		taskStateManager.setTaskStateSnapshotsByCheckpointId(restoredKeyedState);
+
+//		//TODO!!!!!!!!!!!!!!
 //		try {
 //			doAnswer(new Answer<KeyedStateBackend>() {
 //				@Override
@@ -124,16 +118,9 @@ public class KeyedOneInputStreamOperatorTestHarness<K, IN, OUT>
 //		}
 	}
 
-	private static boolean hasMigrationHandles(Collection<KeyedStateHandle> allKeyGroupsHandles) {
-		for (KeyedStateHandle handle : allKeyGroupsHandles) {
-			if (handle instanceof Migration) {
-				return true;
-			}
-		}
-		return false;
-	}
-
 	public int numKeyedStateEntries() {
+		AbstractStreamOperator<?> abstractStreamOperator = (AbstractStreamOperator<?>) operator;
+		KeyedStateBackend<Object> keyedStateBackend = abstractStreamOperator.getKeyedStateBackend();
 		if (keyedStateBackend instanceof HeapKeyedStateBackend) {
 			return ((HeapKeyedStateBackend) keyedStateBackend).numStateEntries();
 		} else {
@@ -142,6 +129,8 @@ public class KeyedOneInputStreamOperatorTestHarness<K, IN, OUT>
 	}
 
 	public <N> int numKeyedStateEntries(N namespace) {
+		AbstractStreamOperator<?> abstractStreamOperator = (AbstractStreamOperator<?>) operator;
+		KeyedStateBackend<Object> keyedStateBackend = abstractStreamOperator.getKeyedStateBackend();
 		if (keyedStateBackend instanceof HeapKeyedStateBackend) {
 			return ((HeapKeyedStateBackend) keyedStateBackend).numStateEntries(namespace);
 		} else {
@@ -151,37 +140,29 @@ public class KeyedOneInputStreamOperatorTestHarness<K, IN, OUT>
 
 	@Override
 	public void initializeState(OperatorStateHandles operatorStateHandles) throws Exception {
-		if (operatorStateHandles != null) {
-			int numKeyGroups = getEnvironment().getTaskInfo().getMaxNumberOfParallelSubtasks();
-			int numSubtasks = getEnvironment().getTaskInfo().getNumberOfParallelSubtasks();
-			int subtaskIndex = getEnvironment().getTaskInfo().getIndexOfThisSubtask();
-
-			// create a new OperatorStateHandles that only contains the state for our key-groups
-
-			List<KeyGroupRange> keyGroupPartitions = StateAssignmentOperation.createKeyGroupPartitions(
-					numKeyGroups,
-					numSubtasks);
-
-			KeyGroupRange localKeyGroupRange =
-					keyGroupPartitions.get(subtaskIndex);
-
-			restoredKeyedState = null;
-			Collection<KeyedStateHandle> managedKeyedState = operatorStateHandles.getManagedKeyedState();
-			if (managedKeyedState != null) {
-
-				// if we have migration handles, don't reshuffle state and preserve
-				// the migration tag
-				if (hasMigrationHandles(managedKeyedState)) {
-					List<KeyedStateHandle> result = new ArrayList<>(managedKeyedState.size());
-					result.addAll(managedKeyedState);
-					restoredKeyedState = result;
-				} else {
-					restoredKeyedState = StateAssignmentOperation.getKeyedStateHandles(
-							managedKeyedState,
-							localKeyGroupRange);
-				}
-			}
-		}
+//		if (operatorStateHandles != null) {
+//			int numKeyGroups = getEnvironment().getTaskInfo().getMaxNumberOfParallelSubtasks();
+//			int numSubtasks = getEnvironment().getTaskInfo().getNumberOfParallelSubtasks();
+//			int subtaskIndex = getEnvironment().getTaskInfo().getIndexOfThisSubtask();
+//
+//			// create a new OperatorStateHandles that only contains the state for our key-groups
+//
+//			List<KeyGroupRange> keyGroupPartitions = StateAssignmentOperation.createKeyGroupPartitions(
+//				numKeyGroups,
+//				numSubtasks);
+//
+//			KeyGroupRange localKeyGroupRange =
+//				keyGroupPartitions.get(subtaskIndex);
+//
+//			restoredKeyedState = null;
+//			Collection<KeyedStateHandle> managedKeyedState = operatorStateHandles.getManagedKeyedState();
+//			if (managedKeyedState != null) {
+//
+//				restoredKeyedState = StateAssignmentOperation.getKeyedStateHandles(
+//					managedKeyedState,
+//					localKeyGroupRange);
+//			}
+//		}
 
 		super.initializeState(operatorStateHandles);
 	}

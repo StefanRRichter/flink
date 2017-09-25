@@ -54,14 +54,31 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.NoSuchElementException;
 
+/**
+ * This class is the main implementation of a {@link StreamTaskStateManager}. This class obtains the state to create
+ * {@link StreamOperatorStateContext} objects for stream operators from the {@link TaskStateManager} of the task that
+ * runs the stream task and hence the operator.
+ *
+ * <p>This implementation operates on top a {@link TaskStateManager}, from which it receives everything required to
+ * restore state in the backends from checkpoints or savepoints.
+ */
 public class StreamTaskStateManagerImpl implements StreamTaskStateManager {
 
+	/**
+	 * The environment of the task. This is required as parameter to construct state backends via their factory.
+	 */
 	private final Environment environment;
 
+	/** This processing time service is required to construct an internal timer service manager. */
 	private final ProcessingTimeService processingTimeService;
+
+	/** TODO remove, pull registration out? */
 	private final CloseableRegistry closeableRegistry;
 
+	/** The state manager of the tasks provides the information used to restore potential previous state. */
 	private final TaskStateManager taskStateManager;
+
+	/** This object is the factory for everything related to state backends and checkpointing. */
 	private final StateBackend stateBackend;
 
 	public StreamTaskStateManagerImpl(
@@ -79,9 +96,6 @@ public class StreamTaskStateManagerImpl implements StreamTaskStateManager {
 
 	// -----------------------------------------------------------------------------------------------------------------
 
-	/**
-	 * This is the main (and only ?) publicly called method
-	 */
 	@Override
 	public StreamOperatorStateContext streamOperatorStateContext(
 		AbstractStreamOperator<?> operator,
@@ -262,7 +276,7 @@ public class StreamTaskStateManagerImpl implements StreamTaskStateManager {
 	}
 
 	private CheckpointStreamFactory streamFactory(String operatorIdentifierText) throws IOException {
-		return stateBackend.createStreamFactory(taskStateManager.getJobId(), operatorIdentifierText);
+		return stateBackend.createStreamFactory(environment.getJobID(), operatorIdentifierText);
 	}
 
 	private Iterable<StatePartitionStreamProvider> rawOperatorStateInputs(

@@ -1006,7 +1006,9 @@ public class CEPOperatorTest extends TestLogger {
 			OperatorStateHandles snapshot = harness.snapshot(0L, 0L);
 			harness.close();
 
-			SelectCepOperator<Event, Integer, Map<String, List<Event>>> operator2 = getKeyedCepOperatorWithComparator(false);
+			SelectCepOperator<Event, Integer, Map<String, List<Event>>> operator2 =
+				getKeyedCepOperatorWithComparator(false);
+
 			harness = CepOperatorTestUtilities.getCepTestHarness(operator2);
 			harness.setup();
 			harness.initializeState(snapshot);

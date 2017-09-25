@@ -26,27 +26,47 @@ import org.apache.flink.runtime.state.StatePartitionStreamProvider;
 
 import java.io.IOException;
 
+/**
+ * This interface represents a context from which a stream operator can initialize everything related to state.
+ */
 public interface StreamOperatorStateContext {
 
+	/**
+	 * Returns true, the states provided by this context are restored from a checkpoint/savepoint.
+	 */
 	boolean isRestored();
 
-	AbstractKeyedStateBackend<?> keyedStateBackend() throws Exception;
-
+	/**
+	 * Returns the operator state backend for the stream operator.
+	 */
 	OperatorStateBackend operatorStateBackend() throws Exception;
 
+
+	/**
+	 * Returns the keyed state backend for the stream operator. This method returns null for non-keyed operators.
+	 */
+	AbstractKeyedStateBackend<?> keyedStateBackend() throws Exception;
+
+	/**
+	 * Returns the internal timer service manager for the stream operator. This method returns null for non-keyed
+	 * operators.
+	 */
 	InternalTimeServiceManager<?, ?> internalTimerServiceManager() throws Exception;
 
+	/**
+	 * Returns the checkpoint stream factory for the stream operator.
+	 */
 	CheckpointStreamFactory checkpointStreamFactory() throws IOException;
 
 	/**
 	 * Returns an iterable to obtain input streams for previously stored operator state partitions that are assigned to
-	 * this operator.
+	 * this stream operator.
 	 */
 	Iterable<StatePartitionStreamProvider> rawOperatorStateInputs();
 
 	/**
 	 * Returns an iterable to obtain input streams for previously stored keyed state partitions that are assigned to
-	 * this operator. This method can only be called on keyed operators.
+	 * this operator. This method returns null for non-keyed operators.
 	 */
 	Iterable<KeyGroupStatePartitionStreamProvider> rawKeyedStateInputs();
 

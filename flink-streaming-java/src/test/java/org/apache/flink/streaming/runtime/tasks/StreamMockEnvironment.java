@@ -54,8 +54,6 @@ import org.apache.flink.runtime.query.KvStateRegistry;
 import org.apache.flink.runtime.query.TaskKvStateRegistry;
 import org.apache.flink.runtime.state.LocalStateStore;
 import org.apache.flink.runtime.state.TaskStateManager;
-import org.apache.flink.runtime.state.TaskStateManagerImpl;
-import org.apache.flink.runtime.taskmanager.CheckpointResponder;
 import org.apache.flink.runtime.taskmanager.TaskManagerRuntimeInfo;
 import org.apache.flink.runtime.util.TestingTaskManagerRuntimeInfo;
 import org.apache.flink.util.Preconditions;
@@ -88,7 +86,6 @@ public class StreamMockEnvironment implements Environment {
 
 	private final IOManager ioManager;
 
-	private final TaskStateManager slotStateManager;
 
 	private final InputSplitProvider inputSplitProvider;
 
@@ -100,7 +97,9 @@ public class StreamMockEnvironment implements Environment {
 
 	private final List<ResultPartitionWriter> outputs;
 
-	private final JobID jobID = new JobID();
+	private final JobID jobID;
+
+	private final ExecutionAttemptID executionAttemptID;
 
 	private final BroadcastVariableManager bcVarManager = new BroadcastVariableManager();
 
@@ -124,6 +123,31 @@ public class StreamMockEnvironment implements Environment {
 		MockInputSplitProvider inputSplitProvider,
 		int bufferSize,
 		TaskStateManager taskStateManager) {
+		this(
+			new JobID(),
+			new ExecutionAttemptID(0L, 0L),
+			jobConfig,
+			taskConfig,
+			executionConfig,
+			memorySize,
+			inputSplitProvider,
+			bufferSize,
+			taskStateManager);
+	}
+
+	public StreamMockEnvironment(
+		JobID jobID,
+		ExecutionAttemptID executionAttemptID,
+		Configuration jobConfig,
+		Configuration taskConfig,
+		ExecutionConfig executionConfig,
+		long memorySize,
+		MockInputSplitProvider inputSplitProvider,
+		int bufferSize,
+		TaskStateManager taskStateManager) {
+
+		this.jobID = jobID;
+		this.executionAttemptID = executionAttemptID;
 
 		int subtaskIndex = 0;
 		this.taskInfo = new TaskInfo(
@@ -136,7 +160,6 @@ public class StreamMockEnvironment implements Environment {
 		this.taskConfiguration = taskConfig;
 		this.inputs = new LinkedList<InputGate>();
 		this.outputs = new LinkedList<ResultPartitionWriter>();
-
 		this.memManager = new MemoryManager(memorySize, 1);
 		this.ioManager = new IOManagerAsync();
 		this.taskStateManager = Preconditions.checkNotNull(taskStateManager);
@@ -150,13 +173,6 @@ public class StreamMockEnvironment implements Environment {
 		this.kvStateRegistry = registry.createTaskRegistry(jobID, getJobVertexId());
 
 		final LocalStateStore localStateStore = new LocalStateStore(jobID, getJobVertexId(), subtaskIndex);
-
-		this.slotStateManager = new TaskStateManagerImpl(
-			jobID,
-			localStateStore,
-			null,
-			getExecutionId(),
-			mock(CheckpointResponder.class));
 	}
 
 	public StreamMockEnvironment(
@@ -343,7 +359,7 @@ public class StreamMockEnvironment implements Environment {
 
 	@Override
 	public ExecutionAttemptID getExecutionId() {
-		return new ExecutionAttemptID(0L, 0L);
+		return executionAttemptID;
 	}
 
 	@Override

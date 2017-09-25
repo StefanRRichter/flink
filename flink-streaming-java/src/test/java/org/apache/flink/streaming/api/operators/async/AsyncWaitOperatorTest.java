@@ -19,7 +19,6 @@
 package org.apache.flink.streaming.api.operators.async;
 
 import org.apache.flink.api.common.ExecutionConfig;
-import org.apache.flink.api.common.JobID;
 import org.apache.flink.api.common.TaskInfo;
 import org.apache.flink.api.common.functions.MapFunction;
 import org.apache.flink.api.common.functions.RichMapFunction;
@@ -28,9 +27,7 @@ import org.apache.flink.api.common.typeutils.base.IntSerializer;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.core.testutils.OneShotLatch;
 import org.apache.flink.runtime.checkpoint.CheckpointMetaData;
-import org.apache.flink.runtime.checkpoint.CheckpointMetrics;
 import org.apache.flink.runtime.checkpoint.CheckpointOptions;
-import org.apache.flink.runtime.checkpoint.OperatorSubtaskState;
 import org.apache.flink.runtime.checkpoint.TaskStateSnapshot;
 import org.apache.flink.runtime.execution.Environment;
 import org.apache.flink.runtime.io.network.api.CheckpointBarrier;
@@ -41,6 +38,7 @@ import org.apache.flink.runtime.metrics.groups.TaskMetricGroup;
 import org.apache.flink.runtime.operators.testutils.MockInputSplitProvider;
 import org.apache.flink.runtime.operators.testutils.UnregisteredTaskMetricsGroup;
 import org.apache.flink.runtime.state.TaskStateManager;
+import org.apache.flink.runtime.state.TaskStateManagerTestMock;
 import org.apache.flink.runtime.taskmanager.TaskManagerRuntimeInfo;
 import org.apache.flink.runtime.util.TestingTaskManagerRuntimeInfo;
 import org.apache.flink.streaming.api.datastream.AsyncDataStream;
@@ -76,7 +74,6 @@ import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
 
 import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
 
 import java.util.ArrayDeque;
 import java.util.Collections;
@@ -508,8 +505,10 @@ public class AsyncWaitOperatorTest extends TestLogger {
 		streamConfig.setStreamOperator(operator);
 		streamConfig.setOperatorID(operatorID);
 
-		final WrappingTaskStateManager wrappingTaskStateManager =
-			new WrappingTaskStateManager(testHarness.getTaskStateManager());
+//		final WrappingTaskStateManager wrappingTaskStateManager =
+//			new WrappingTaskStateManager(testHarness.getTaskStateManager());
+
+		final TaskStateManagerTestMock taskStateManagerMock = testHarness.getTaskStateManager();
 
 		final AcknowledgeStreamMockEnvironment env = new AcknowledgeStreamMockEnvironment(
 				testHarness.jobConfig,
@@ -518,7 +517,7 @@ public class AsyncWaitOperatorTest extends TestLogger {
 				testHarness.memorySize,
 				new MockInputSplitProvider(),
 				testHarness.bufferSize,
-				wrappingTaskStateManager);
+				taskStateManagerMock);
 
 		testHarness.invoke(env);
 		testHarness.waitForTaskRunning();
@@ -539,9 +538,10 @@ public class AsyncWaitOperatorTest extends TestLogger {
 
 		task.triggerCheckpoint(checkpointMetaData, CheckpointOptions.forFullCheckpoint());
 
-		wrappingTaskStateManager.getCheckpointLatch().await();
+		taskStateManagerMock.setWaitForReportLatch(new OneShotLatch());
+		taskStateManagerMock.getWaitForReportLatch().await();
 
-		assertEquals(checkpointId, wrappingTaskStateManager.getCheckpointId());
+		assertEquals(checkpointId, taskStateManagerMock.getReportedCheckpointId());
 
 		LazyAsyncFunction.countDown();
 
@@ -550,11 +550,12 @@ public class AsyncWaitOperatorTest extends TestLogger {
 
 		// set the operator state from previous attempt into the restored one
 		final OneInputStreamTask<Integer, Integer> restoredTask = new OneInputStreamTask<>();
-		TaskStateSnapshot subtaskStates = wrappingTaskStateManager.getTaskStateSnapshot();
+		TaskStateSnapshot subtaskStates = taskStateManagerMock.getLastTaskStateSnapshot();
 
 		final OneInputStreamTaskTestHarness<Integer, Integer> restoredTaskHarness =
 				new OneInputStreamTaskTestHarness<>(restoredTask, BasicTypeInfo.INT_TYPE_INFO, BasicTypeInfo.INT_TYPE_INFO);
-		restoredTaskHarness.setTaskStateSnapshot(subtaskStates);
+
+		restoredTaskHarness.setTaskStateSnapshot(checkpointId, subtaskStates);
 		restoredTaskHarness.setupOutputForSingletonOperatorChain();
 
 		AsyncWaitOperator<Integer, Integer> restoredOperator = new AsyncWaitOperator<>(
@@ -995,59 +996,6 @@ public class AsyncWaitOperatorTest extends TestLogger {
 		@Override
 		public void asyncInvoke(IN input, ResultFuture<OUT> resultFuture) throws Exception {
 			// no op
-		}
-	}
-
-	private static class WrappingTaskStateManager implements TaskStateManager {
-
-		private final TaskStateManager delegate;
-		private TaskStateSnapshot taskStateSnapshot;
-		private OneShotLatch checkpointLatch;
-		private long checkpointId;
-
-
-		private WrappingTaskStateManager(TaskStateManager delegate) {
-			this.delegate = delegate;
-			this.checkpointLatch = new OneShotLatch();
-		}
-
-		@Override
-		public void reportStateHandles(
-			@Nonnull CheckpointMetaData checkpointMetaData,
-			@Nonnull CheckpointMetrics checkpointMetrics,
-			@Nullable TaskStateSnapshot acknowledgedState) {
-
-			delegate.reportStateHandles(checkpointMetaData, checkpointMetrics, acknowledgedState);
-			this.taskStateSnapshot = acknowledgedState;
-			this.checkpointId = checkpointMetaData.getCheckpointId();
-			checkpointLatch.trigger();
-		}
-
-		@Override
-		public OperatorSubtaskState operatorStates(OperatorID operatorID) {
-			return delegate.operatorStates(operatorID);
-		}
-
-		@Override
-		public JobID getJobId() {
-			return delegate.getJobId();
-		}
-
-		@Override
-		public void notifyCheckpointComplete(long checkpointId) throws Exception {
-			delegate.notifyCheckpointComplete(checkpointId);
-		}
-
-		public TaskStateSnapshot getTaskStateSnapshot() {
-			return taskStateSnapshot;
-		}
-
-		public OneShotLatch getCheckpointLatch() {
-			return checkpointLatch;
-		}
-
-		public long getCheckpointId() {
-			return checkpointId;
 		}
 	}
 }

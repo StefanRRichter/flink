@@ -131,20 +131,20 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 	protected OperatorChain<OUT, OP> operatorChain;
 
 	/** The configuration of this streaming task. */
-	private StreamConfig configuration;
+	protected StreamConfig configuration;
 
 	/** Our state backend. We use this to create checkpoint streams and a keyed state backend. */
-	private StateBackend stateBackend;
+	protected StateBackend stateBackend;
 
 	/** State manager for this stream task. */
-	private StreamTaskStateManager streamTaskStateManager;
+	protected StreamTaskStateManager streamTaskStateManager;
 
 	/**
 	 * The internal {@link ProcessingTimeService} used to define the current
 	 * processing time (default = {@code System.currentTimeMillis()}) and
 	 * register timers for tasks to be executed in the future.
 	 */
-	private ProcessingTimeService timerService;
+	protected ProcessingTimeService timerService;
 
 	/** The map of user-defined accumulators of this task. */
 	private Map<String, Accumulator<?, ?>> accumulatorMap;
@@ -194,6 +194,14 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 		timerService = timeProvider;
 	}
 
+	protected StreamTaskStateManager createStreamTaskStateManager() {
+		return new StreamTaskStateManagerImpl(
+			getEnvironment(),
+			stateBackend,
+			timerService,
+			cancelables);
+	}
+
 	@Override
 	public final void invoke() throws Exception {
 
@@ -218,11 +226,7 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 				timerService = new SystemProcessingTimeService(this, getCheckpointLock(), timerThreadFactory);
 			}
 
-			streamTaskStateManager = new StreamTaskStateManagerImpl(
-				getEnvironment(),
-				stateBackend,
-				timerService,
-				cancelables);
+			streamTaskStateManager = createStreamTaskStateManager();
 
 			operatorChain = new OperatorChain<>(this);
 			headOperator = operatorChain.getHeadOperator();

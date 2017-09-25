@@ -27,8 +27,6 @@ import org.apache.flink.core.testutils.OneShotLatch;
 import org.apache.flink.runtime.blob.BlobCache;
 import org.apache.flink.runtime.blob.BlobKey;
 import org.apache.flink.runtime.broadcast.BroadcastVariableManager;
-import org.apache.flink.runtime.checkpoint.CheckpointMetaData;
-import org.apache.flink.runtime.checkpoint.CheckpointMetrics;
 import org.apache.flink.runtime.checkpoint.OperatorSubtaskState;
 import org.apache.flink.runtime.checkpoint.TaskRestore;
 import org.apache.flink.runtime.checkpoint.TaskStateSnapshot;
@@ -61,7 +59,7 @@ import org.apache.flink.runtime.state.KeyedStateHandle;
 import org.apache.flink.runtime.state.OperatorStateHandle;
 import org.apache.flink.runtime.state.StateInitializationContext;
 import org.apache.flink.runtime.state.StreamStateHandle;
-import org.apache.flink.runtime.state.TaskStateManager;
+import org.apache.flink.runtime.state.TaskStateManagerTestMock;
 import org.apache.flink.runtime.taskmanager.CheckpointResponder;
 import org.apache.flink.runtime.taskmanager.Task;
 import org.apache.flink.runtime.taskmanager.TaskManagerActions;
@@ -75,9 +73,6 @@ import org.apache.flink.streaming.api.operators.StreamSource;
 import org.apache.flink.util.SerializedValue;
 
 import org.junit.Test;
-
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
 
 import java.io.EOFException;
 import java.io.IOException;
@@ -250,30 +245,12 @@ public class InterruptSensitiveRestoreTest {
 			SourceStreamTask.class.getName(),
 			taskConfig);
 
-		TaskStateManager taskStateManager = new TaskStateManager() {
-			@Override
-			public void reportStateHandles(
-				@Nonnull CheckpointMetaData checkpointMetaData,
-				@Nonnull CheckpointMetrics checkpointMetrics,
-				@Nullable TaskStateSnapshot acknowledgedState) {
-
-			}
-
-			@Override
-			public OperatorSubtaskState operatorStates(OperatorID operatorID) {
-				return taskRestore.getTaskStateSnapshot().getSubtaskStateByOperatorID(operatorID);
-			}
-
-			@Override
-			public JobID getJobId() {
-				return jobInformation.getJobId();
-			}
-
-			@Override
-			public void notifyCheckpointComplete(long checkpointId) throws Exception {
-
-			}
-		};
+		TaskStateManagerTestMock taskStateManager = new TaskStateManagerTestMock();
+		taskStateManager.setReportedCheckpointId(taskRestore.getRestoreCheckpointId());
+		taskStateManager.setTaskStateSnapshotsByCheckpointId(
+			Collections.singletonMap(
+				taskRestore.getRestoreCheckpointId(),
+				taskRestore.getTaskStateSnapshot()));
 
 		return new Task(
 			jobInformation,

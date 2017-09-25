@@ -50,7 +50,7 @@ import org.apache.flink.runtime.memory.MemoryManager;
 import org.apache.flink.runtime.metrics.groups.TaskIOMetricGroup;
 import org.apache.flink.runtime.metrics.groups.TaskMetricGroup;
 import org.apache.flink.runtime.query.TaskKvStateRegistry;
-import org.apache.flink.runtime.state.TaskStateManagerImpl;
+import org.apache.flink.runtime.state.TaskStateManagerTestMock;
 import org.apache.flink.runtime.util.TestingTaskManagerRuntimeInfo;
 import org.apache.flink.util.SerializedValue;
 
@@ -194,7 +194,7 @@ public class TaskAsyncCallTest {
 			mock(IOManager.class),
 			networkEnvironment,
 			mock(BroadcastVariableManager.class),
-			mock(TaskStateManagerImpl.class),
+			new TaskStateManagerTestMock(),
 			mock(TaskManagerActions.class),
 			mock(InputSplitProvider.class),
 			mock(CheckpointResponder.class),
