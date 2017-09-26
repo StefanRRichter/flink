@@ -198,8 +198,7 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 		return new StreamTaskStateManagerImpl(
 			getEnvironment(),
 			stateBackend,
-			timerService,
-			cancelables);
+			timerService);
 	}
 
 	@Override

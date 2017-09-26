@@ -65,12 +65,17 @@ import org.apache.flink.runtime.state.AbstractKeyedStateBackend;
 import org.apache.flink.runtime.state.AbstractStateBackend;
 import org.apache.flink.runtime.state.CheckpointStreamFactory;
 import org.apache.flink.runtime.state.DoneFuture;
+import org.apache.flink.runtime.state.FunctionInitializationContext;
+import org.apache.flink.runtime.state.FunctionSnapshotContext;
 import org.apache.flink.runtime.state.KeyGroupRange;
+import org.apache.flink.runtime.state.KeyGroupStatePartitionStreamProvider;
 import org.apache.flink.runtime.state.KeyedStateHandle;
 import org.apache.flink.runtime.state.LocalStateStore;
 import org.apache.flink.runtime.state.OperatorStateBackend;
 import org.apache.flink.runtime.state.OperatorStateHandle;
 import org.apache.flink.runtime.state.StateBackendFactory;
+import org.apache.flink.runtime.state.StateInitializationContext;
+import org.apache.flink.runtime.state.StatePartitionStreamProvider;
 import org.apache.flink.runtime.state.StreamStateHandle;
 import org.apache.flink.runtime.state.TaskStateManager;
 import org.apache.flink.runtime.state.TaskStateManagerImpl;
@@ -85,9 +90,11 @@ import org.apache.flink.runtime.testingUtils.TestingUtils;
 import org.apache.flink.runtime.util.DirectExecutorService;
 import org.apache.flink.runtime.util.TestingTaskManagerRuntimeInfo;
 import org.apache.flink.streaming.api.TimeCharacteristic;
+import org.apache.flink.streaming.api.checkpoint.CheckpointedFunction;
 import org.apache.flink.streaming.api.functions.source.SourceFunction;
 import org.apache.flink.streaming.api.graph.StreamConfig;
 import org.apache.flink.streaming.api.operators.AbstractStreamOperator;
+import org.apache.flink.streaming.api.operators.InternalTimeServiceManager;
 import org.apache.flink.streaming.api.operators.OperatorSnapshotResult;
 import org.apache.flink.streaming.api.operators.Output;
 import org.apache.flink.streaming.api.operators.StreamOperator;
@@ -97,13 +104,13 @@ import org.apache.flink.streaming.api.operators.StreamTaskStateManager;
 import org.apache.flink.streaming.api.operators.StreamTaskStateManagerImpl;
 import org.apache.flink.streaming.runtime.streamrecord.StreamRecord;
 import org.apache.flink.streaming.runtime.streamstatus.StreamStatusMaintainer;
+import org.apache.flink.util.CloseableIterable;
 import org.apache.flink.util.ExceptionUtils;
 import org.apache.flink.util.SerializedValue;
 import org.apache.flink.util.TestLogger;
 
 import akka.dispatch.Futures;
 import org.junit.Assert;
-import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.ArgumentCaptor;
@@ -215,15 +222,16 @@ public class StreamTaskTest extends TestLogger {
 		assertEquals(ExecutionState.CANCELED, task.getExecutionState());
 	}
 
-	@Ignore
 	@Test
 	public void testStateBackendLoadingAndClosing() throws Exception {
 		Configuration taskManagerConfig = new Configuration();
 		taskManagerConfig.setString(CoreOptions.STATE_BACKEND, MockStateBackend.class.getName());
 
 		StreamConfig cfg = new StreamConfig(new Configuration());
+		cfg.setStateKeySerializer(mock(TypeSerializer.class));
 		cfg.setOperatorID(new OperatorID(4711L, 42L));
-		cfg.setStreamOperator(new StreamSource<>(new MockSourceFunction()));
+		TestStreamSource<Long, MockSourceFunction> streamSource = new TestStreamSource<>(new MockSourceFunction());
+		cfg.setStreamOperator(streamSource);
 		cfg.setTimeCharacteristic(TimeCharacteristic.ProcessingTime);
 
 		Task task = createTask(StateBackendTestSource.class, cfg, taskManagerConfig);
@@ -234,16 +242,18 @@ public class StreamTaskTest extends TestLogger {
 		// wait for clean termination
 		task.getExecutingThread().join();
 
-		// ensure that the state backends are closed
-		verify(StateBackendTestSource.operatorStateBackend).close();
-		verify(StateBackendTestSource.keyedStateBackend).close();
-		verify(StateBackendTestSource.operatorStateBackend).dispose();
-		verify(StateBackendTestSource.keyedStateBackend).dispose();
+		// ensure that the state backends and stream iterables are closed ...
+		verify(TestStreamSource.operatorStateBackend).close();
+		verify(TestStreamSource.keyedStateBackend).close();
+		verify(TestStreamSource.rawOperatorStateInputs).close();
+		verify(TestStreamSource.rawKeyedStateInputs).close();
+		// ... and disposed
+		verify(TestStreamSource.operatorStateBackend).dispose();
+		verify(TestStreamSource.keyedStateBackend).dispose();
 
 		assertEquals(ExecutionState.FINISHED, task.getExecutionState());
 	}
 
-	@Ignore
 	@Test
 	public void testStateBackendClosingOnFailure() throws Exception {
 		Configuration taskManagerConfig = new Configuration();
@@ -263,10 +273,14 @@ public class StreamTaskTest extends TestLogger {
 		task.getExecutingThread().join();
 
 		// ensure that the state backends are closed
-		verify(StateBackendTestSource.operatorStateBackend).close();
-		verify(StateBackendTestSource.keyedStateBackend).close();
-		verify(StateBackendTestSource.operatorStateBackend).dispose();
-		verify(StateBackendTestSource.keyedStateBackend).dispose();
+		// ensure that the state backends and stream iterables are closed ...
+		verify(TestStreamSource.operatorStateBackend).close();
+		verify(TestStreamSource.keyedStateBackend).close();
+		verify(TestStreamSource.rawOperatorStateInputs).close();
+		verify(TestStreamSource.rawKeyedStateInputs).close();
+		// ... and disposed
+		verify(TestStreamSource.operatorStateBackend).dispose();
+		verify(TestStreamSource.keyedStateBackend).dispose();
 
 		assertEquals(ExecutionState.FAILED, task.getExecutionState());
 	}
@@ -526,8 +540,7 @@ public class StreamTaskTest extends TestLogger {
 		StreamTaskStateManager streamTaskStateManager = new StreamTaskStateManagerImpl(
 			mockEnvironment,
 			mockStateBackend,
-			mock(ProcessingTimeService.class),
-			new CloseableRegistry());
+			mock(ProcessingTimeService.class));
 
 		Whitebox.setInternalState(streamTask, "isRunning", true);
 		Whitebox.setInternalState(streamTask, "lock", new Object());
@@ -1020,7 +1033,7 @@ public class StreamTaskTest extends TestLogger {
 		}
 	}
 
-	private static class MockSourceFunction implements SourceFunction<Long> {
+	private static class MockSourceFunction implements SourceFunction<Long>, CheckpointedFunction {
 		private static final long serialVersionUID = 1L;
 
 		@Override
@@ -1028,6 +1041,15 @@ public class StreamTaskTest extends TestLogger {
 
 		@Override
 		public void cancel() {}
+
+		@Override
+		public void snapshotState(FunctionSnapshotContext context) throws Exception {
+
+		}
+
+		@Override
+		public void initializeState(FunctionInitializationContext context) throws Exception {
+		}
 	}
 
 	/**
@@ -1064,34 +1086,9 @@ public class StreamTaskTest extends TestLogger {
 
 		private static volatile boolean fail;
 
-		private static volatile OperatorStateBackend operatorStateBackend;
-		private static volatile AbstractKeyedStateBackend keyedStateBackend;
-
 		@Override
 		protected void init() throws Exception {
 
-			try {
-				StreamTaskStateManager streamTaskStateManager = getStreamTaskStateManager();
-				StreamOperatorStateContext streamOperatorStateContext = streamTaskStateManager.streamOperatorStateContext(
-					Mockito.mock(AbstractStreamOperator.class), Mockito.mock(TypeSerializer.class));
-
-				operatorStateBackend = streamOperatorStateContext.operatorStateBackend();
-				keyedStateBackend = streamOperatorStateContext.keyedStateBackend();
-
-				System.out.println(operatorStateBackend);
-				System.out.println(keyedStateBackend);
-			} catch (Exception ex) {
-				ex.printStackTrace();
-			}
-
-//			//TODO!!!!!!!!!!!!!
-//			operatorStateBackend = createOperatorStateBackend(
-//				Mockito.mock(StreamOperator.class),
-//				null);
-//			keyedStateBackend = createKeyedStateBackend(
-//				Mockito.mock(TypeSerializer.class),
-//				4,
-//				Mockito.mock(KeyGroupRange.class));
 		}
 
 		@Override
@@ -1107,6 +1104,52 @@ public class StreamTaskTest extends TestLogger {
 		@Override
 		protected void cancelTask() throws Exception {}
 
+		@Override
+		protected StreamTaskStateManager createStreamTaskStateManager() {
+			final StreamTaskStateManager streamTaskStateManager = super.createStreamTaskStateManager();
+			return (operator, keySerializer, closeableRegistry) -> {
+
+				final StreamOperatorStateContext context =
+					streamTaskStateManager.streamOperatorStateContext(operator, keySerializer, closeableRegistry);
+
+				return new StreamOperatorStateContext() {
+					@Override
+					public boolean isRestored() {
+						return context.isRestored();
+					}
+
+					@Override
+					public OperatorStateBackend operatorStateBackend() {
+						return context.operatorStateBackend();
+					}
+
+					@Override
+					public AbstractKeyedStateBackend<?> keyedStateBackend() {
+						return context.keyedStateBackend();
+					}
+
+					@Override
+					public InternalTimeServiceManager<?, ?> internalTimerServiceManager() {
+						return spy(context.internalTimerServiceManager());
+					}
+
+					@Override
+					public CheckpointStreamFactory checkpointStreamFactory() {
+						return spy(context.checkpointStreamFactory());
+					}
+
+					@Override
+					public CloseableIterable<StatePartitionStreamProvider> rawOperatorStateInputs() {
+						return spy(context.rawOperatorStateInputs());
+					}
+
+					@Override
+					public CloseableIterable<KeyGroupStatePartitionStreamProvider> rawKeyedStateInputs() {
+						return spy(context.rawKeyedStateInputs());
+					}
+				};
+			};
+		}
 	}
 
 	/**
@@ -1242,6 +1285,29 @@ public class StreamTaskTest extends TestLogger {
 		public void close() {
 			canceled = true;
 			interrupt();
+		}
+	}
+
+	static class TestStreamSource<OUT, SRC extends SourceFunction<OUT>> extends StreamSource<OUT, SRC> {
+
+		static AbstractKeyedStateBackend<?> keyedStateBackend;
+		static OperatorStateBackend operatorStateBackend;
+		static CloseableIterable<StatePartitionStreamProvider> rawOperatorStateInputs;
+		static CloseableIterable<KeyGroupStatePartitionStreamProvider> rawKeyedStateInputs;
+
+		public TestStreamSource(SRC sourceFunction) {
+			super(sourceFunction);
+		}
+
+		@Override
+		public void initializeState(StateInitializationContext context) throws Exception {
+			keyedStateBackend = (AbstractKeyedStateBackend<?>) getKeyedStateBackend();
+			operatorStateBackend = getOperatorStateBackend();
+			rawOperatorStateInputs =
+				(CloseableIterable<StatePartitionStreamProvider>) context.getRawOperatorStateInputs();
+			rawKeyedStateInputs =
+				(CloseableIterable<KeyGroupStatePartitionStreamProvider>) context.getRawKeyedStateInputs();
+			super.initializeState(context);
 		}
 	}
 }

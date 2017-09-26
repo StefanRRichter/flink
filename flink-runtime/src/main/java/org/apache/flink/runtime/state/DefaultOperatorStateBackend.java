@@ -147,7 +147,6 @@ public class DefaultOperatorStateBackend implements OperatorStateBackend {
 
 	@Override
 	public void dispose() {
-		IOUtils.closeQuietly(this);
 		registeredStates.clear();
 	}
 

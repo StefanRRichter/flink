@@ -130,8 +130,7 @@
 //						stateStore,
 //						mock(KeyedStateStore.class),
 //						keyedStateHandles,
-//						operatorStateHandles,
-//						closableRegistry);
+//						operatorStateHandles);
 //	}
 //
 //	@Test

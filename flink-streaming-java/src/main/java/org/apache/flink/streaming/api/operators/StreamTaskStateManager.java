@@ -19,6 +19,7 @@
 package org.apache.flink.streaming.api.operators;
 
 import org.apache.flink.api.common.typeutils.TypeSerializer;
+import org.apache.flink.core.fs.CloseableRegistry;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -34,10 +35,12 @@ public interface StreamTaskStateManager {
 	 *
 	 * @param operator the operator for which the context is created. Cannot be null.
 	 * @param keySerializer the key-serializer for the operator. Can be null.
+	 * @param streamTaskCloseableRegistry the closeable registry to which created closeable objects will be registered.
 	 * @return a context from which the given operator can initialize everything related to state.
 	 * @throws Exception when something went wrong while creating the context.
 	 */
 	StreamOperatorStateContext streamOperatorStateContext(
 		@Nonnull AbstractStreamOperator<?> operator,
-		@Nullable TypeSerializer<?> keySerializer) throws Exception;
+		@Nullable TypeSerializer<?> keySerializer,
+		CloseableRegistry streamTaskCloseableRegistry) throws Exception;
 }

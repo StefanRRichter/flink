@@ -23,8 +23,7 @@ import org.apache.flink.runtime.state.CheckpointStreamFactory;
 import org.apache.flink.runtime.state.KeyGroupStatePartitionStreamProvider;
 import org.apache.flink.runtime.state.OperatorStateBackend;
 import org.apache.flink.runtime.state.StatePartitionStreamProvider;
-
-import java.io.IOException;
+import org.apache.flink.util.CloseableIterable;
 
 /**
  * This interface represents a context from which a stream operator can initialize everything related to state.
@@ -39,35 +38,35 @@ public interface StreamOperatorStateContext {
 	/**
 	 * Returns the operator state backend for the stream operator.
 	 */
-	OperatorStateBackend operatorStateBackend() throws Exception;
+	OperatorStateBackend operatorStateBackend();
 
 
 	/**
 	 * Returns the keyed state backend for the stream operator. This method returns null for non-keyed operators.
 	 */
-	AbstractKeyedStateBackend<?> keyedStateBackend() throws Exception;
+	AbstractKeyedStateBackend<?> keyedStateBackend();
 
 	/**
 	 * Returns the internal timer service manager for the stream operator. This method returns null for non-keyed
 	 * operators.
 	 */
-	InternalTimeServiceManager<?, ?> internalTimerServiceManager() throws Exception;
+	InternalTimeServiceManager<?, ?> internalTimerServiceManager();
 
 	/**
 	 * Returns the checkpoint stream factory for the stream operator.
 	 */
-	CheckpointStreamFactory checkpointStreamFactory() throws IOException;
+	CheckpointStreamFactory checkpointStreamFactory();
 
 	/**
 	 * Returns an iterable to obtain input streams for previously stored operator state partitions that are assigned to
 	 * this stream operator.
 	 */
-	Iterable<StatePartitionStreamProvider> rawOperatorStateInputs();
+	CloseableIterable<StatePartitionStreamProvider> rawOperatorStateInputs();
 
 	/**
 	 * Returns an iterable to obtain input streams for previously stored keyed state partitions that are assigned to
 	 * this operator. This method returns null for non-keyed operators.
 	 */
-	Iterable<KeyGroupStatePartitionStreamProvider> rawKeyedStateInputs();
+	CloseableIterable<KeyGroupStatePartitionStreamProvider> rawKeyedStateInputs();
 
 }

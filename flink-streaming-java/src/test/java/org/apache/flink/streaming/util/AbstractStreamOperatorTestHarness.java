@@ -185,8 +185,7 @@ public class AbstractStreamOperatorTestHarness<OUT> implements AutoCloseable {
 		this.streamTaskStateManager = new StreamTaskStateManagerImpl(
 			environment,
 			stateBackend,
-			processingTimeService,
-			closableRegistry);
+			processingTimeService);
 
 		StreamStatusMaintainer mockStreamStatusMaintainer = new StreamStatusMaintainer() {
 			StreamStatus currentStreamStatus = StreamStatus.ACTIVE;

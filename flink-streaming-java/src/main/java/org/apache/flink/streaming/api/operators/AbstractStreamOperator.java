@@ -28,6 +28,7 @@ import org.apache.flink.api.common.typeutils.TypeSerializer;
 import org.apache.flink.api.java.functions.KeySelector;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.MetricOptions;
+import org.apache.flink.core.fs.CloseableRegistry;
 import org.apache.flink.core.memory.DataOutputViewStreamWrapper;
 import org.apache.flink.metrics.Counter;
 import org.apache.flink.metrics.Gauge;
@@ -59,13 +60,16 @@ import org.apache.flink.streaming.runtime.streamrecord.LatencyMarker;
 import org.apache.flink.streaming.runtime.streamrecord.StreamRecord;
 import org.apache.flink.streaming.runtime.tasks.ProcessingTimeService;
 import org.apache.flink.streaming.runtime.tasks.StreamTask;
+import org.apache.flink.util.CloseableIterable;
 import org.apache.flink.util.ExceptionUtils;
+import org.apache.flink.util.IOUtils;
 import org.apache.flink.util.OutputTag;
 
 import org.apache.commons.math3.stat.descriptive.DescriptiveStatistics;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.Closeable;
 import java.io.IOException;
 import java.io.Serializable;
 import java.util.ConcurrentModificationException;
@@ -196,8 +200,6 @@ public abstract class AbstractStreamOperator<OUT>
 
 		stateKeySelector1 = config.getStatePartitioner(0, getUserCodeClassloader());
 		stateKeySelector2 = config.getStatePartitioner(1, getUserCodeClassloader());
-
-		this.streamTaskStateManager = containingTask.getStreamTaskStateManager();
 	}
 
 	@Override
@@ -209,41 +211,52 @@ public abstract class AbstractStreamOperator<OUT>
 	public final void initializeState() throws Exception {
 
 		final TypeSerializer<?> keySerializer = config.getStateKeySerializer(getUserCodeClassloader());
+		final CloseableRegistry streamTaskCloseableRegistry = getContainingTask().getCancelables();
 
-		StreamOperatorStateContext stateContext =
-			streamTaskStateManager.streamOperatorStateContext(this, keySerializer);
+		final StreamTaskStateManager streamTaskStateManager =
+			getContainingTask().getStreamTaskStateManager();
 
-		boolean restoring = stateContext.isRestored();
+		final StreamOperatorStateContext context =
+			streamTaskStateManager.streamOperatorStateContext(
+				this,
+				keySerializer,
+				streamTaskCloseableRegistry);
 
-		this.operatorStateBackend = stateContext.operatorStateBackend();
-
-		this.keyedStateBackend = stateContext.keyedStateBackend();
-
-		//TODO: check if maybe we want to register the backend as closeables rather than clsoing them in operator.close, so that cancel goes fast
+		this.operatorStateBackend = context.operatorStateBackend();
+		this.keyedStateBackend = context.keyedStateBackend();
 
 		if (keyedStateBackend != null) {
 			this.keyedStateStore = new DefaultKeyedStateStore(keyedStateBackend, getExecutionConfig());
 		}
 
 		if (getKeyedStateBackend() != null && timeServiceManager == null) {
-			timeServiceManager = stateContext.internalTimerServiceManager();
+			timeServiceManager = context.internalTimerServiceManager();
 		}
 
-		checkpointStreamFactory = stateContext.checkpointStreamFactory();
+		checkpointStreamFactory = context.checkpointStreamFactory();
 
-		Iterable<KeyGroupStatePartitionStreamProvider> keyedStateInputs = stateContext.rawKeyedStateInputs();
-		Iterable<StatePartitionStreamProvider> operatorStateInputs = stateContext.rawOperatorStateInputs();
+		CloseableIterable<KeyGroupStatePartitionStreamProvider> keyedStateInputs = context.rawKeyedStateInputs();;
+		CloseableIterable<StatePartitionStreamProvider> operatorStateInputs = context.rawOperatorStateInputs();;
 
-		StateInitializationContext initializationContext = new StateInitializationContextImpl(
-			restoring, // information whether we restore or start for the first time
-			operatorStateBackend, // access to operator state backend
-			keyedStateStore, // access to keyed state backend
-			keyedStateInputs, // access to operator state stream
-			operatorStateInputs); // access to keyed state stream
+		try {
+			StateInitializationContext initializationContext = new StateInitializationContextImpl(
+				context.isRestored(), // information whether we restore or start for the first time
+				operatorStateBackend, // access to operator state backend
+				keyedStateStore, // access to keyed state backend
+				keyedStateInputs, // access to operator state stream
+				operatorStateInputs); // access to keyed state stream
 
-		initializeState(initializationContext); // TODO: make this an empty method!!!!!
+			initializeState(initializationContext);
+		} finally {
+			closeFromRegistry(operatorStateInputs, streamTaskCloseableRegistry);
+			closeFromRegistry(keyedStateInputs, streamTaskCloseableRegistry);
+		}
+	}
 
-		//TODO ensure the raw streams are closed after this initialization!!!!!!
+	private static void closeFromRegistry(Closeable closeable, CloseableRegistry registry) {
+		if (registry.unregisterCloseable(closeable)) {
+			IOUtils.closeQuietly(closeable);
+		}
 	}
 
 	/**
@@ -274,8 +287,10 @@ public abstract class AbstractStreamOperator<OUT>
 
 		Exception exception = null;
 
+		CloseableRegistry cancelables = getContainingTask().getCancelables();
+
 		try {
-			if (operatorStateBackend != null) {
+			if (cancelables.unregisterCloseable(operatorStateBackend)) {
 				operatorStateBackend.close();
 			}
 		} catch (Exception e) {
@@ -283,7 +298,7 @@ public abstract class AbstractStreamOperator<OUT>
 		}
 
 		try {
-			if (keyedStateBackend != null) {
+			if (cancelables.unregisterCloseable(keyedStateBackend)) {
 				keyedStateBackend.close();
 			}
 		} catch (Exception e) {

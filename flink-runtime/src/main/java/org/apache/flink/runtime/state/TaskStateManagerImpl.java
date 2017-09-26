@@ -48,7 +48,7 @@ import java.util.Map;
  * Reported state is tagged by clients so that this class can properly forward to the right receiver for the
  * checkpointed state.
  *
- * TODO: all interaction with local state store must still be implemented!
+ * TODO: all interaction with local state store must still be implemented! It is currently just a placeholder.
  */
 public class TaskStateManagerImpl implements TaskStateManager {
 
@@ -173,12 +173,12 @@ public class TaskStateManagerImpl implements TaskStateManager {
 		TaskStateSnapshot taskStateSnapshot = jobManagerTaskRestore.getTaskStateSnapshot();
 		return taskStateSnapshot.getSubtaskStateByOperatorID(operatorID);
 
-//TODO!!!!!!!
-//		/*
-//		1) lookup local states for a matching operatorID / checkpointID.
-//		2) if nothing available: look into job manager provided state.
-//		3) massage it into a snapshots and return stuff.
-//		 */
+		/*
+		TODO!!!!!!!
+		1) lookup local states for a matching operatorID / checkpointID.
+		2) if nothing available: look into job manager provided state.
+		3) massage it into a snapshots and return stuff.
+		 */
 	}
 
 	/**
