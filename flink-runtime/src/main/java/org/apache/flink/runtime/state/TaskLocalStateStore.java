@@ -30,7 +30,7 @@ import org.apache.flink.runtime.jobgraph.JobVertexID;
  *
  * TODO this is currently a placeholder / mock that still must be implemented!
  */
-public class LocalStateStore {
+public class TaskLocalStateStore {
 
 	/** */
 	private final JobID jobID;
@@ -41,7 +41,7 @@ public class LocalStateStore {
 	/** */
 	private final int subtaskIndex;
 
-	public LocalStateStore(
+	public TaskLocalStateStore(
 		JobID jobID,
 		JobVertexID jobVertexID,
 		int subtaskIndex) {

@@ -27,15 +27,24 @@ import javax.annotation.Nonnull;
 import java.util.HashMap;
 import java.util.Map;
 
+/**
+ * This class holds the all {@link TaskLocalStateStore} objects for a task executor (manager).
+ *
+ * TODO: this still still work in progress and partially still acts as a placeholder.
+ */
 public class TaskExecutorLocalStateStoresManager {
 
-	private final Map<JobID, Map<JobVertexSubtaskKey, LocalStateStore>> taskStateManagers;
+	/**
+	 * This map holds all local state stores for tasks running on the task manager / executor that own the instance of
+	 * this.
+	 */
+	private final Map<JobID, Map<JobVertexSubtaskKey, TaskLocalStateStore>> taskStateManagers;
 
 	public TaskExecutorLocalStateStoresManager() {
 		this.taskStateManagers = new HashMap<>();
 	}
 
-	public LocalStateStore localStateStoreForTask(
+	public TaskLocalStateStore localStateStoreForTask(
 		JobID jobId,
 		JobVertexID jobVertexID,
 		int subtaskIndex) {
@@ -43,16 +52,16 @@ public class TaskExecutorLocalStateStoresManager {
 		Preconditions.checkNotNull(jobId);
 		final JobVertexSubtaskKey taskKey = new JobVertexSubtaskKey(jobVertexID, subtaskIndex);
 
-		final Map<JobVertexSubtaskKey, LocalStateStore> taskStateManagers =
+		final Map<JobVertexSubtaskKey, TaskLocalStateStore> taskStateManagers =
 			this.taskStateManagers.computeIfAbsent(jobId, k -> new HashMap<>());
 
 		return taskStateManagers.computeIfAbsent(
-			taskKey, k -> new LocalStateStore(jobId, jobVertexID, subtaskIndex));
+			taskKey, k -> new TaskLocalStateStore(jobId, jobVertexID, subtaskIndex));
 	}
 
 	public void releaseJob(JobID jobID) {
 
-		Map<JobVertexSubtaskKey, LocalStateStore> cleanupLocalStores = taskStateManagers.remove(jobID);
+		Map<JobVertexSubtaskKey, TaskLocalStateStore> cleanupLocalStores = taskStateManagers.remove(jobID);
 
 		if (cleanupLocalStores != null) {
 			doRelease(cleanupLocalStores.values());
@@ -61,16 +70,16 @@ public class TaskExecutorLocalStateStoresManager {
 
 	public void releaseAll() {
 
-		for (Map<JobVertexSubtaskKey, LocalStateStore> stateStoreMap : taskStateManagers.values()) {
+		for (Map<JobVertexSubtaskKey, TaskLocalStateStore> stateStoreMap : taskStateManagers.values()) {
 			doRelease(stateStoreMap.values());
 		}
 
 		taskStateManagers.clear();
 	}
 
-	private void doRelease(Iterable<LocalStateStore> toRelease) {
+	private void doRelease(Iterable<TaskLocalStateStore> toRelease) {
 		if (toRelease != null) {
-			for (LocalStateStore stateStore : toRelease) {
+			for (TaskLocalStateStore stateStore : toRelease) {
 				stateStore.dispose();
 			}
 		}

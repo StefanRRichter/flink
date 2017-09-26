@@ -33,9 +33,9 @@ import org.apache.flink.runtime.broadcast.BroadcastVariableManager;
 import org.apache.flink.runtime.checkpoint.CheckpointMetaData;
 import org.apache.flink.runtime.checkpoint.CheckpointMetrics;
 import org.apache.flink.runtime.checkpoint.CheckpointOptions;
+import org.apache.flink.runtime.checkpoint.JobManagerTaskRestore;
 import org.apache.flink.runtime.checkpoint.OperatorSubtaskState;
 import org.apache.flink.runtime.checkpoint.SubtaskState;
-import org.apache.flink.runtime.checkpoint.TaskRestore;
 import org.apache.flink.runtime.checkpoint.TaskStateSnapshot;
 import org.apache.flink.runtime.clusterframework.types.AllocationID;
 import org.apache.flink.runtime.deployment.InputGateDeploymentDescriptor;
@@ -65,18 +65,16 @@ import org.apache.flink.runtime.state.AbstractKeyedStateBackend;
 import org.apache.flink.runtime.state.AbstractStateBackend;
 import org.apache.flink.runtime.state.CheckpointStreamFactory;
 import org.apache.flink.runtime.state.DoneFuture;
-import org.apache.flink.runtime.state.FunctionInitializationContext;
-import org.apache.flink.runtime.state.FunctionSnapshotContext;
 import org.apache.flink.runtime.state.KeyGroupRange;
 import org.apache.flink.runtime.state.KeyGroupStatePartitionStreamProvider;
 import org.apache.flink.runtime.state.KeyedStateHandle;
-import org.apache.flink.runtime.state.LocalStateStore;
 import org.apache.flink.runtime.state.OperatorStateBackend;
 import org.apache.flink.runtime.state.OperatorStateHandle;
 import org.apache.flink.runtime.state.StateBackendFactory;
 import org.apache.flink.runtime.state.StateInitializationContext;
 import org.apache.flink.runtime.state.StatePartitionStreamProvider;
 import org.apache.flink.runtime.state.StreamStateHandle;
+import org.apache.flink.runtime.state.TaskLocalStateStore;
 import org.apache.flink.runtime.state.TaskStateManager;
 import org.apache.flink.runtime.state.TaskStateManagerImpl;
 import org.apache.flink.runtime.state.TaskStateManagerTestMock;
@@ -90,7 +88,6 @@ import org.apache.flink.runtime.testingUtils.TestingUtils;
 import org.apache.flink.runtime.util.DirectExecutorService;
 import org.apache.flink.runtime.util.TestingTaskManagerRuntimeInfo;
 import org.apache.flink.streaming.api.TimeCharacteristic;
-import org.apache.flink.streaming.api.checkpoint.CheckpointedFunction;
 import org.apache.flink.streaming.api.functions.source.SourceFunction;
 import org.apache.flink.streaming.api.graph.StreamConfig;
 import org.apache.flink.streaming.api.operators.AbstractStreamOperator;
@@ -494,9 +491,9 @@ public class StreamTaskTest extends TestLogger {
 
 		TaskStateManager taskStateManager = new TaskStateManagerImpl(
 			new JobID(1L, 2L),
-			mock(LocalStateStore.class),
-			null,
 			new ExecutionAttemptID(1L, 2L),
+			mock(TaskLocalStateStore.class),
+			null,
 			checkpointResponder);
 
 		when(mockEnvironment.getTaskStateManager()).thenReturn(taskStateManager);
@@ -749,9 +746,9 @@ public class StreamTaskTest extends TestLogger {
 
 		TaskStateManager taskStateManager = new TaskStateManagerImpl(
 			new JobID(1L, 2L),
-			mock(LocalStateStore.class),
-			null,
 			new ExecutionAttemptID(1L, 2L),
+			mock(TaskLocalStateStore.class),
+			null,
 			checkpointResponder);
 
 		when(mockEnvironment.getTaskStateManager()).thenReturn(taskStateManager);
@@ -971,7 +968,7 @@ public class StreamTaskTest extends TestLogger {
 			Collections.<ResultPartitionDeploymentDescriptor>emptyList(),
 			Collections.<InputGateDeploymentDescriptor>emptyList(),
 			0,
-			new TaskRestore(1L, null),
+			new JobManagerTaskRestore(1L, null),
 			mock(MemoryManager.class),
 			mock(IOManager.class),
 			network,
@@ -1033,7 +1030,7 @@ public class StreamTaskTest extends TestLogger {
 		}
 	}
 
-	private static class MockSourceFunction implements SourceFunction<Long>, CheckpointedFunction {
+	private static class MockSourceFunction implements SourceFunction<Long> {
 		private static final long serialVersionUID = 1L;
 
 		@Override
@@ -1041,15 +1038,6 @@ public class StreamTaskTest extends TestLogger {
 
 		@Override
 		public void cancel() {}
-
-		@Override
-		public void snapshotState(FunctionSnapshotContext context) throws Exception {
-
-		}
-
-		@Override
-		public void initializeState(FunctionInitializationContext context) throws Exception {
-		}
 	}
 
 	/**
@@ -1135,17 +1123,29 @@ public class StreamTaskTest extends TestLogger {
 
 					@Override
 					public CheckpointStreamFactory checkpointStreamFactory() {
-						return spy(context.checkpointStreamFactory());
+						return replaceWithSpy(context.checkpointStreamFactory());
 					}
 
 					@Override
 					public CloseableIterable<StatePartitionStreamProvider> rawOperatorStateInputs() {
-						return spy(context.rawOperatorStateInputs());
+						return replaceWithSpy(context.rawOperatorStateInputs());
 					}
 
 					@Override
 					public CloseableIterable<KeyGroupStatePartitionStreamProvider> rawKeyedStateInputs() {
-						return spy(context.rawKeyedStateInputs());
+						return replaceWithSpy(context.rawKeyedStateInputs());
+					}
+
+					public <T extends Closeable> T replaceWithSpy(T closeable) {
+						T spyCloseable = spy(closeable);
+						if (closeableRegistry.unregisterCloseable(closeable)) {
+							try {
+								closeableRegistry.registerCloseable(spyCloseable);
+							} catch (IOException e) {
+								throw new RuntimeException(e);
+							}
+						}
+						return spyCloseable;
 					}
 				};
 			};

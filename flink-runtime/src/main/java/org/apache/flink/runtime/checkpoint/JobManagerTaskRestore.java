@@ -20,7 +20,10 @@ package org.apache.flink.runtime.checkpoint;
 
 import java.io.Serializable;
 
-public class TaskRestore implements Serializable {
+/**
+ * This class encapsulates the data from the job manager to restore a task.
+ */
+public class JobManagerTaskRestore implements Serializable {
 
 	private static final long serialVersionUID = 1L;
 
@@ -28,7 +31,7 @@ public class TaskRestore implements Serializable {
 
 	private final TaskStateSnapshot taskStateSnapshot;
 
-	public TaskRestore(long restoreCheckpointId, TaskStateSnapshot taskStateSnapshot) {
+	public JobManagerTaskRestore(long restoreCheckpointId, TaskStateSnapshot taskStateSnapshot) {
 		this.restoreCheckpointId = restoreCheckpointId;
 		this.taskStateSnapshot = taskStateSnapshot;
 	}

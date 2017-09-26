@@ -35,7 +35,7 @@ import org.apache.flink.runtime.blob.BlobKey;
 import org.apache.flink.runtime.broadcast.BroadcastVariableManager;
 import org.apache.flink.runtime.checkpoint.CheckpointMetaData;
 import org.apache.flink.runtime.checkpoint.CheckpointOptions;
-import org.apache.flink.runtime.checkpoint.TaskRestore;
+import org.apache.flink.runtime.checkpoint.JobManagerTaskRestore;
 import org.apache.flink.runtime.checkpoint.decline.CheckpointDeclineTaskNotCheckpointingException;
 import org.apache.flink.runtime.checkpoint.decline.CheckpointDeclineTaskNotReadyException;
 import org.apache.flink.runtime.clusterframework.types.AllocationID;
@@ -184,7 +184,7 @@ public class Task implements Runnable, TaskActions, CheckpointListener {
 	private final BroadcastVariableManager broadcastVariableManager;
 
 	/** The manager for state of operators running in this task/slot */
-	private final TaskStateManager slotStateManager;
+	private final TaskStateManager taskStateManager;
 
 	/** Serialized version of the job specific execution configuration (see {@link ExecutionConfig}). */
 	private final SerializedValue<ExecutionConfig> serializedExecutionConfig;
@@ -261,7 +261,7 @@ public class Task implements Runnable, TaskActions, CheckpointListener {
 	 * Provides previous state that the task can use for restore. Will be set
 	 * to null after the initialization, to be memory friendly.
 	 */
-	private volatile TaskRestore taskRestore;
+	private volatile JobManagerTaskRestore taskRestore;
 
 	/** Initialized from the Flink configuration. May also be set at the ExecutionConfig */
 	private long taskCancellationInterval;
@@ -283,12 +283,12 @@ public class Task implements Runnable, TaskActions, CheckpointListener {
 		Collection<ResultPartitionDeploymentDescriptor> resultPartitionDeploymentDescriptors,
 		Collection<InputGateDeploymentDescriptor> inputGateDeploymentDescriptors,
 		int targetSlotNumber,
-		TaskRestore taskRestore,
+		JobManagerTaskRestore taskRestore,
 		MemoryManager memManager,
 		IOManager ioManager,
 		NetworkEnvironment networkEnvironment,
 		BroadcastVariableManager bcVarManager,
-		TaskStateManager slotStateManager,
+		TaskStateManager taskStateManager,
 		TaskManagerActions taskManagerActions,
 		InputSplitProvider inputSplitProvider,
 		CheckpointResponder checkpointResponder,
@@ -335,7 +335,7 @@ public class Task implements Runnable, TaskActions, CheckpointListener {
 		this.memoryManager = Preconditions.checkNotNull(memManager);
 		this.ioManager = Preconditions.checkNotNull(ioManager);
 		this.broadcastVariableManager = Preconditions.checkNotNull(bcVarManager);
-		this.slotStateManager = Preconditions.checkNotNull(slotStateManager);
+		this.taskStateManager = Preconditions.checkNotNull(taskStateManager);
 		this.accumulatorRegistry = new AccumulatorRegistry(jobId, executionId);
 
 		this.inputSplitProvider = Preconditions.checkNotNull(inputSplitProvider);
@@ -670,28 +670,13 @@ public class Task implements Runnable, TaskActions, CheckpointListener {
 			Environment env = new RuntimeEnvironment(
 				jobId, vertexId, executionId, executionConfig, taskInfo,
 				jobConfiguration, taskConfiguration, userCodeClassLoader,
-				memoryManager, ioManager, broadcastVariableManager, slotStateManager,
+				memoryManager, ioManager, broadcastVariableManager, taskStateManager,
 				accumulatorRegistry, kvStateRegistry, inputSplitProvider,
 				distributedCacheEntries, writers, inputGates,
 				checkpointResponder, taskManagerConfig, metrics, this);
 
 			// let the task code create its readers and writers
 			invokable.setEnvironment(env);
-
-			// the very last thing before the actual execution starts running is to inject
-			// the state into the task. the state is non-empty if this is an execution
-			// of a task that failed but had backuped state from a checkpoint
-
-//			if (null != taskRestore && taskRestore.getTaskStateSnapshot() != null) {
-//				if (invokable instanceof StatefulTask) {
-//				} else {
-//					throw new IllegalStateException("Found operator state for a non-stateful task invokable");
-//				}
-//				// be memory and GC friendly - since the code stays in invoke() for a potentially long time,
-//				// we clear the reference to the state handle
-//				//noinspection UnusedAssignment
-//				taskRestore = null;
-//			}
 
 			// ----------------------------------------------------------------
 			//  actual task core work
@@ -1253,7 +1238,7 @@ public class Task implements Runnable, TaskActions, CheckpointListener {
 					public void run() {
 						try {
 							statefulTask.notifyCheckpointComplete(checkpointID);
-							slotStateManager.notifyCheckpointComplete(checkpointID);
+							taskStateManager.notifyCheckpointComplete(checkpointID);
 						}
 						catch (Throwable t) {
 							if (getExecutionState() == ExecutionState.RUNNING) {

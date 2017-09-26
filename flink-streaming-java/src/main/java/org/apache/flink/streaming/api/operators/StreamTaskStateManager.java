@@ -25,7 +25,9 @@ import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
 /**
- * TODO.
+ * This is the interface through which stream task expose a {@link StreamOperatorStateContext} to their operators.
+ * Operators, in turn, can use the context to initialize everything connected to their state, such as backends or
+ * a timer service manager.
  */
 public interface StreamTaskStateManager {
 
@@ -42,5 +44,5 @@ public interface StreamTaskStateManager {
 	StreamOperatorStateContext streamOperatorStateContext(
 		@Nonnull AbstractStreamOperator<?> operator,
 		@Nullable TypeSerializer<?> keySerializer,
-		CloseableRegistry streamTaskCloseableRegistry) throws Exception;
+		@Nonnull CloseableRegistry streamTaskCloseableRegistry) throws Exception;
 }

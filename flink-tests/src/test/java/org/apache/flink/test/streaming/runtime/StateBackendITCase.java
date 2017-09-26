@@ -40,7 +40,6 @@ import org.junit.Test;
 
 import java.io.IOException;
 
-import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 /**
@@ -85,8 +84,24 @@ public class StateBackendITCase extends StreamingMultipleProgramsTestBase {
 			fail();
 		}
 		catch (JobExecutionException e) {
+			boolean success = false;
 			Throwable t = e.getCause();
-			assertTrue("wrong exception", t instanceof SuccessException);
+			while (t != null) {
+				if (t instanceof SuccessException) {
+					success = true;
+					break;
+				} else {
+					if (t != t.getCause()) {
+						t = t.getCause();
+					} else {
+						break;
+					}
+				}
+			}
+
+			if (!success) {
+				fail();
+			}
 		}
 	}
 

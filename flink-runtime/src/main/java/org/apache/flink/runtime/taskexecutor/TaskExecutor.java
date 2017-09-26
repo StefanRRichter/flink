@@ -25,7 +25,7 @@ import org.apache.flink.runtime.accumulators.AccumulatorSnapshot;
 import org.apache.flink.runtime.blob.BlobCache;
 import org.apache.flink.runtime.broadcast.BroadcastVariableManager;
 import org.apache.flink.runtime.checkpoint.CheckpointOptions;
-import org.apache.flink.runtime.checkpoint.TaskRestore;
+import org.apache.flink.runtime.checkpoint.JobManagerTaskRestore;
 import org.apache.flink.runtime.clusterframework.types.AllocationID;
 import org.apache.flink.runtime.clusterframework.types.ResourceID;
 import org.apache.flink.runtime.clusterframework.types.SlotID;
@@ -66,7 +66,7 @@ import org.apache.flink.runtime.rpc.FatalErrorHandler;
 import org.apache.flink.runtime.rpc.RpcEndpoint;
 import org.apache.flink.runtime.rpc.RpcService;
 import org.apache.flink.runtime.rpc.akka.AkkaRpcServiceUtils;
-import org.apache.flink.runtime.state.LocalStateStore;
+import org.apache.flink.runtime.state.TaskLocalStateStore;
 import org.apache.flink.runtime.state.TaskStateManager;
 import org.apache.flink.runtime.state.TaskStateManagerImpl;
 import org.apache.flink.runtime.state.TaskExecutorLocalStateStoresManager;
@@ -376,18 +376,18 @@ public class TaskExecutor extends RpcEndpoint implements TaskExecutorGateway {
 			ResultPartitionConsumableNotifier resultPartitionConsumableNotifier = jobManagerConnection.getResultPartitionConsumableNotifier();
 			PartitionProducerStateChecker partitionStateChecker = jobManagerConnection.getPartitionStateChecker();
 
-			final LocalStateStore localStateStore = localStateStoresManager.localStateStoreForTask(
+			final TaskLocalStateStore localStateStore = localStateStoresManager.localStateStoreForTask(
 				jobId,
 				taskInformation.getJobVertexId(),
 				tdd.getSubtaskIndex());
 
-			final TaskRestore taskRestore = tdd.getTaskRestore();
+			final JobManagerTaskRestore taskRestore = tdd.getTaskRestore();
 
 			final TaskStateManager taskStateManager = new TaskStateManagerImpl(
 				jobId,
+				tdd.getExecutionAttemptId(),
 				localStateStore,
 				taskRestore,
-				tdd.getExecutionAttemptId(),
 				checkpointResponder);
 
 			Task task = new Task(

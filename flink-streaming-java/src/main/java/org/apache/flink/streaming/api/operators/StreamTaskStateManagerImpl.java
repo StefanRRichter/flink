@@ -187,7 +187,7 @@ public class StreamTaskStateManagerImpl implements StreamTaskStateManager {
 		}
 	}
 
-	private <K> InternalTimeServiceManager<?, K> internalTimeServiceManager(
+	protected <K> InternalTimeServiceManager<?, K> internalTimeServiceManager(
 		AbstractKeyedStateBackend<K> keyedStatedBackend,
 		KeyContext keyContext, //the operator
 		Iterable<KeyGroupStatePartitionStreamProvider> rawKeyedStates) throws Exception {
@@ -219,7 +219,7 @@ public class StreamTaskStateManagerImpl implements StreamTaskStateManager {
 		return timeServiceManager;
 	}
 
-	private OperatorStateBackend operatorStateBackend(
+	protected OperatorStateBackend operatorStateBackend(
 		String operatorIdentifierText,
 		OperatorSubtaskState operatorSubtaskStateFromJobManager,
 		CloseableRegistry backendCloseableRegistry) throws Exception {
@@ -231,6 +231,85 @@ public class StreamTaskStateManagerImpl implements StreamTaskStateManager {
 			operatorSubtaskStateFromJobManager,
 			backendCloseableRegistry);
 	}
+
+	protected <K> AbstractKeyedStateBackend<K> keyedStatedBackend(
+		TypeSerializer<K> keySerializer,
+		String operatorIdentifierText,
+		OperatorSubtaskState operatorSubtaskStateFromJobManager,
+		CloseableRegistry backendCloseableRegistry) throws Exception {
+
+		if (keySerializer == null) {
+			return null;
+		}
+
+		//TODO search in local state for a local recovery opportunity.
+
+		return createKeyedStatedBackendFromJobManagerState(
+			keySerializer,
+			operatorIdentifierText,
+			operatorSubtaskStateFromJobManager,
+			backendCloseableRegistry);
+	}
+
+	protected CheckpointStreamFactory streamFactory(String operatorIdentifierText) throws IOException {
+		return stateBackend.createStreamFactory(environment.getJobID(), operatorIdentifierText);
+	}
+
+	protected CloseableIterable<StatePartitionStreamProvider> rawOperatorStateInputs(
+		OperatorSubtaskState operatorSubtaskStateFromJobManager) {
+
+		if (operatorSubtaskStateFromJobManager != null) {
+
+			final CloseableRegistry closeableRegistry = new CloseableRegistry();
+
+			Collection<OperatorStateHandle> rawOperatorState =
+				operatorSubtaskStateFromJobManager.getRawOperatorState();
+
+			return new CloseableIterable<StatePartitionStreamProvider>() {
+				@Override
+				public void close() throws IOException {
+					closeableRegistry.close();
+				}
+
+				@Nonnull
+				@Override
+				public Iterator<StatePartitionStreamProvider> iterator() {
+					return new OperatorStateStreamIterator(
+						DefaultOperatorStateBackend.DEFAULT_OPERATOR_STATE_NAME,
+						rawOperatorState.iterator(), closeableRegistry);
+				}
+			};
+		}
+
+		return CloseableIterable.empty();
+	}
+
+	protected CloseableIterable<KeyGroupStatePartitionStreamProvider> rawKeyedStateInputs(
+		OperatorSubtaskState operatorSubtaskStateFromJobManager) {
+
+		if (operatorSubtaskStateFromJobManager != null) {
+
+			Collection<KeyedStateHandle> rawKeyedState = operatorSubtaskStateFromJobManager.getRawKeyedState();
+			Collection<KeyGroupsStateHandle> keyGroupsStateHandles = transform(rawKeyedState);
+			final CloseableRegistry closeableRegistry = new CloseableRegistry();
+
+			return new CloseableIterable<KeyGroupStatePartitionStreamProvider>() {
+				@Override
+				public void close() throws IOException {
+					closeableRegistry.close();
+				}
+
+				@Override
+				public Iterator<KeyGroupStatePartitionStreamProvider> iterator() {
+					return new KeyGroupStreamIterator(keyGroupsStateHandles.iterator(), closeableRegistry);
+				}
+			};
+		}
+
+		return CloseableIterable.empty();
+	}
+
+	// =================================================================================================================
 
 	private OperatorStateBackend createOperatorStateBackendFromJobManagerState(
 		String operatorIdentifierText,
@@ -251,25 +330,6 @@ public class StreamTaskStateManagerImpl implements StreamTaskStateManager {
 		operatorStateBackend.restore(managedOperatorState);
 
 		return operatorStateBackend;
-	}
-
-	private <K> AbstractKeyedStateBackend<K> keyedStatedBackend(
-		TypeSerializer<K> keySerializer,
-		String operatorIdentifierText,
-		OperatorSubtaskState operatorSubtaskStateFromJobManager,
-		CloseableRegistry backendCloseableRegistry) throws Exception {
-
-		if (keySerializer == null) {
-			return null;
-		}
-
-		//TODO search in local state for a local recovery opportunity.
-
-		return createKeyedStatedBackendFromJobManagerState(
-			keySerializer,
-			operatorIdentifierText,
-			operatorSubtaskStateFromJobManager,
-			backendCloseableRegistry);
 	}
 
 	private <K> AbstractKeyedStateBackend<K> createKeyedStatedBackendFromJobManagerState(
@@ -314,64 +374,6 @@ public class StreamTaskStateManagerImpl implements StreamTaskStateManager {
 			taskInfo.getMaxNumberOfParallelSubtasks(), //TODO check: this is numberOfKeyGroups !!!!
 			keyGroupRange,
 			environment.getTaskKvStateRegistry());
-	}
-
-	private CheckpointStreamFactory streamFactory(String operatorIdentifierText) throws IOException {
-		return stateBackend.createStreamFactory(environment.getJobID(), operatorIdentifierText);
-	}
-
-	private CloseableIterable<StatePartitionStreamProvider> rawOperatorStateInputs(
-		OperatorSubtaskState operatorSubtaskStateFromJobManager) {
-
-		if (operatorSubtaskStateFromJobManager != null) {
-
-			final CloseableRegistry closeableRegistry = new CloseableRegistry();
-
-			Collection<OperatorStateHandle> rawOperatorState =
-				operatorSubtaskStateFromJobManager.getRawOperatorState();
-
-			return new CloseableIterable<StatePartitionStreamProvider>() {
-				@Override
-				public void close() throws IOException {
-					closeableRegistry.close();
-				}
-
-				@Nonnull
-				@Override
-				public Iterator<StatePartitionStreamProvider> iterator() {
-					return new OperatorStateStreamIterator(
-						DefaultOperatorStateBackend.DEFAULT_OPERATOR_STATE_NAME,
-						rawOperatorState.iterator(), closeableRegistry);
-				}
-			};
-		}
-
-		return CloseableIterable.empty();
-	}
-
-	private CloseableIterable<KeyGroupStatePartitionStreamProvider> rawKeyedStateInputs(
-		OperatorSubtaskState operatorSubtaskStateFromJobManager) {
-
-		if (operatorSubtaskStateFromJobManager != null) {
-
-			Collection<KeyedStateHandle> rawKeyedState = operatorSubtaskStateFromJobManager.getRawKeyedState();
-			Collection<KeyGroupsStateHandle> keyGroupsStateHandles = transform(rawKeyedState);
-			final CloseableRegistry closeableRegistry = new CloseableRegistry();
-
-			return new CloseableIterable<KeyGroupStatePartitionStreamProvider>() {
-				@Override
-				public void close() throws IOException {
-					closeableRegistry.close();
-				}
-
-				@Override
-				public Iterator<KeyGroupStatePartitionStreamProvider> iterator() {
-					return new KeyGroupStreamIterator(keyGroupsStateHandles.iterator(), closeableRegistry);
-				}
-			};
-		}
-
-		return CloseableIterable.empty();
 	}
 
 	// =================================================================================================================

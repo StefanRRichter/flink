@@ -21,8 +21,12 @@ package org.apache.flink.runtime.util;
 import org.apache.flink.runtime.jobgraph.OperatorID;
 import org.apache.flink.util.Preconditions;
 
+/**
+ * This class generates a string that can be used to identify an operator subtask.
+ */
 public class OperatorSubtaskDescriptionText {
 
+	/** Cached description result. */
 	private final String description;
 
 	public OperatorSubtaskDescriptionText(OperatorID operatorId, Class<?> operatorClass, int subtaskIndex, int numberOfTasks) {

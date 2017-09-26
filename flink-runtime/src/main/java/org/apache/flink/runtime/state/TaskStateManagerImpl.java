@@ -22,7 +22,7 @@ import org.apache.flink.api.common.JobID;
 import org.apache.flink.runtime.checkpoint.CheckpointMetaData;
 import org.apache.flink.runtime.checkpoint.CheckpointMetrics;
 import org.apache.flink.runtime.checkpoint.OperatorSubtaskState;
-import org.apache.flink.runtime.checkpoint.TaskRestore;
+import org.apache.flink.runtime.checkpoint.JobManagerTaskRestore;
 import org.apache.flink.runtime.checkpoint.TaskStateSnapshot;
 import org.apache.flink.runtime.executiongraph.ExecutionAttemptID;
 import org.apache.flink.runtime.jobgraph.OperatorID;
@@ -59,19 +59,19 @@ public class TaskStateManagerImpl implements TaskStateManager {
 	private final ExecutionAttemptID executionAttemptID;
 
 	/** The data given by the job manager to restore the job. This is not set for a new job without previous state. */
-	private final TaskRestore jobManagerTaskRestore;
+	private final JobManagerTaskRestore jobManagerTaskRestore;
 
 	/** The local state store to which this manager reports local state snapshots. */
-	private final LocalStateStore localStateStore;
+	private final TaskLocalStateStore localStateStore;
 
 	/** The checkpoint responder through which this manager can report to the job manager. */
 	private final CheckpointResponder checkpointResponder;
 
 	public TaskStateManagerImpl(
 		JobID jobId,
-		LocalStateStore localStateStore,
-		TaskRestore jobManagerTaskRestore,
 		ExecutionAttemptID executionAttemptID,
+		TaskLocalStateStore localStateStore,
+		JobManagerTaskRestore jobManagerTaskRestore,
 		CheckpointResponder checkpointResponder) {
 
 		this.jobId = jobId;

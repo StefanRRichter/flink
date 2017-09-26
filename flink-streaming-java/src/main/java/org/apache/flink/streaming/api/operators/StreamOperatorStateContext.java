@@ -26,7 +26,8 @@ import org.apache.flink.runtime.state.StatePartitionStreamProvider;
 import org.apache.flink.util.CloseableIterable;
 
 /**
- * This interface represents a context from which a stream operator can initialize everything related to state.
+ * This interface represents a context from which a stream operator can initialize everything connected state to
+ * state such as e.g. backends, raw state, and timer service manager.
  */
 public interface StreamOperatorStateContext {
 

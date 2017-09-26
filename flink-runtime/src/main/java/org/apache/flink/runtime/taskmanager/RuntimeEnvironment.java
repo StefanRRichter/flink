@@ -64,7 +64,7 @@ public class RuntimeEnvironment implements Environment {
 	private final MemoryManager memManager;
 	private final IOManager ioManager;
 	private final BroadcastVariableManager bcVarManager;
-	private final TaskStateManager slotStateManager;
+	private final TaskStateManager taskStateManager;
 	private final InputSplitProvider splitProvider;
 	
 	private final Map<String, Future<Path>> distCacheEntries;
@@ -120,7 +120,7 @@ public class RuntimeEnvironment implements Environment {
 		this.memManager = checkNotNull(memManager);
 		this.ioManager = checkNotNull(ioManager);
 		this.bcVarManager = checkNotNull(bcVarManager);
-		this.slotStateManager = checkNotNull(taskStateManager);
+		this.taskStateManager = checkNotNull(taskStateManager);
 		this.accumulatorRegistry = checkNotNull(accumulatorRegistry);
 		this.kvStateRegistry = checkNotNull(kvStateRegistry);
 		this.splitProvider = checkNotNull(splitProvider);
@@ -202,7 +202,7 @@ public class RuntimeEnvironment implements Environment {
 
 	@Override
 	public TaskStateManager getTaskStateManager() {
-		return slotStateManager;
+		return taskStateManager;
 	}
 
 	@Override

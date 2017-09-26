@@ -64,6 +64,7 @@ import org.apache.flink.util.CloseableIterable;
 import org.apache.flink.util.ExceptionUtils;
 import org.apache.flink.util.IOUtils;
 import org.apache.flink.util.OutputTag;
+import org.apache.flink.util.Preconditions;
 
 import org.apache.commons.math3.stat.descriptive.DescriptiveStatistics;
 import org.slf4j.Logger;
@@ -211,10 +212,13 @@ public abstract class AbstractStreamOperator<OUT>
 	public final void initializeState() throws Exception {
 
 		final TypeSerializer<?> keySerializer = config.getStateKeySerializer(getUserCodeClassloader());
-		final CloseableRegistry streamTaskCloseableRegistry = getContainingTask().getCancelables();
 
+		final StreamTask<?, ?> containingTask =
+			Preconditions.checkNotNull(getContainingTask());
+		final CloseableRegistry streamTaskCloseableRegistry =
+			Preconditions.checkNotNull(containingTask.getCancelables());
 		final StreamTaskStateManager streamTaskStateManager =
-			getContainingTask().getStreamTaskStateManager();
+			Preconditions.checkNotNull(containingTask.getStreamTaskStateManager());
 
 		final StreamOperatorStateContext context =
 			streamTaskStateManager.streamOperatorStateContext(
@@ -229,14 +233,11 @@ public abstract class AbstractStreamOperator<OUT>
 			this.keyedStateStore = new DefaultKeyedStateStore(keyedStateBackend, getExecutionConfig());
 		}
 
-		if (getKeyedStateBackend() != null && timeServiceManager == null) {
-			timeServiceManager = context.internalTimerServiceManager();
-		}
-
+		timeServiceManager = context.internalTimerServiceManager();
 		checkpointStreamFactory = context.checkpointStreamFactory();
 
-		CloseableIterable<KeyGroupStatePartitionStreamProvider> keyedStateInputs = context.rawKeyedStateInputs();;
-		CloseableIterable<StatePartitionStreamProvider> operatorStateInputs = context.rawOperatorStateInputs();;
+		CloseableIterable<KeyGroupStatePartitionStreamProvider> keyedStateInputs = context.rawKeyedStateInputs();
+		CloseableIterable<StatePartitionStreamProvider> operatorStateInputs = context.rawOperatorStateInputs();
 
 		try {
 			StateInitializationContext initializationContext = new StateInitializationContextImpl(
@@ -287,7 +288,13 @@ public abstract class AbstractStreamOperator<OUT>
 
 		Exception exception = null;
 
-		CloseableRegistry cancelables = getContainingTask().getCancelables();
+		StreamTask<?, ?> containingTask = getContainingTask();
+
+		if (containingTask == null) {
+			return; // without a containing task, we have nothing to do here.
+		}
+
+		CloseableRegistry cancelables = containingTask.getCancelables();
 
 		try {
 			if (cancelables.unregisterCloseable(operatorStateBackend)) {

@@ -54,9 +54,14 @@ public class DummyEnvironment implements Environment {
 	private final ExecutionConfig executionConfig = new ExecutionConfig();
 	private final TaskInfo taskInfo;
 	private KvStateRegistry kvStateRegistry = new KvStateRegistry();
+	private TaskStateManager taskStateManager;
 
 	public DummyEnvironment(String taskName, int numSubTasks, int subTaskIndex) {
-		this.taskInfo = new TaskInfo(taskName, numSubTasks, subTaskIndex, numSubTasks, 0);
+		this(taskName, numSubTasks, subTaskIndex, numSubTasks);
+	}
+
+	public DummyEnvironment(String taskName, int numSubTasks, int subTaskIndex, int maxParallelism) {
+		this.taskInfo = new TaskInfo(taskName, maxParallelism, subTaskIndex, numSubTasks, 0);
 	}
 
 	public void setKvStateRegistry(KvStateRegistry kvStateRegistry) {
@@ -144,7 +149,7 @@ public class DummyEnvironment implements Environment {
 
 	@Override
 	public TaskStateManager getTaskStateManager() {
-		return null;
+		return taskStateManager;
 	}
 
 	@Override
@@ -193,5 +198,9 @@ public class DummyEnvironment implements Environment {
 	@Override
 	public InputGate[] getAllInputGates() {
 		return null;
+	}
+
+	public void setTaskStateManager(TaskStateManager taskStateManager) {
+		this.taskStateManager = taskStateManager;
 	}
 }
