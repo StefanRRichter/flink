@@ -39,6 +39,7 @@ import org.apache.flink.runtime.jobgraph.OperatorID;
 import org.apache.flink.runtime.operators.testutils.MockInputSplitProvider;
 import org.apache.flink.runtime.state.StateInitializationContext;
 import org.apache.flink.runtime.state.StateSnapshotContext;
+import org.apache.flink.runtime.state.TaskStateManager;
 import org.apache.flink.streaming.api.collector.selector.OutputSelector;
 import org.apache.flink.streaming.api.graph.StreamConfig;
 import org.apache.flink.streaming.api.graph.StreamEdge;
@@ -555,7 +556,8 @@ public class OneInputStreamTaskTest extends TestLogger {
 			testHarness.executionConfig,
 			testHarness.memorySize,
 			new MockInputSplitProvider(),
-			testHarness.bufferSize);
+			testHarness.bufferSize,
+			testHarness.taskStateManager);
 
 		// reset number of restore calls
 		TestingStreamOperator.numberRestoreCalls = 0;
@@ -589,8 +591,6 @@ public class OneInputStreamTaskTest extends TestLogger {
 
 		TaskStateSnapshot stateHandles = env.getCheckpointStateHandles();
 		Assert.assertEquals(numberChainedTasks, stateHandles.getSubtaskStateMappings().size());
-
-		restoredTask.setInitialState(stateHandles);
 
 		TestingStreamOperator.numberRestoreCalls = 0;
 
@@ -686,8 +686,8 @@ public class OneInputStreamTaskTest extends TestLogger {
 		AcknowledgeStreamMockEnvironment(
 			Configuration jobConfig, Configuration taskConfig,
 			ExecutionConfig executionConfig, long memorySize,
-			MockInputSplitProvider inputSplitProvider, int bufferSize) {
-			super(jobConfig, taskConfig, executionConfig, memorySize, inputSplitProvider, bufferSize);
+			MockInputSplitProvider inputSplitProvider, int bufferSize, TaskStateManager taskStateManager) {
+			super(jobConfig, taskConfig, executionConfig, memorySize, inputSplitProvider, bufferSize, taskStateManager);
 		}
 
 		@Override

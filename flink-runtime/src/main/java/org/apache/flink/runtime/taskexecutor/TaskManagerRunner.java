@@ -42,10 +42,10 @@ import org.apache.flink.runtime.util.ExecutorThreadFactory;
 import org.apache.flink.runtime.util.Hardware;
 import org.apache.flink.runtime.util.JvmShutdownSafeguard;
 import org.apache.flink.runtime.util.LeaderRetrievalUtils;
-
 import org.apache.flink.runtime.util.SignalHandler;
 import org.apache.flink.util.ExceptionUtils;
 import org.apache.flink.util.Preconditions;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -276,6 +276,7 @@ public class TaskManagerRunner implements FatalErrorHandler {
 			taskManagerServices.getTaskManagerLocation(),
 			taskManagerServices.getMemoryManager(),
 			taskManagerServices.getIOManager(),
+			taskManagerServices.getTaskStateManager(),
 			taskManagerServices.getNetworkEnvironment(),
 			highAvailabilityServices,
 			heartbeatServices,

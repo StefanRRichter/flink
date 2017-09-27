@@ -793,7 +793,10 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 		/** The state meta data. */
 		private final List<RegisteredKeyedBackendStateMetaInfo.Snapshot<?, ?>> stateMetaInfoSnapshots = new ArrayList<>();
 
+		/** Local filesystem for the RocksDB backup. */
 		private FileSystem backupFileSystem;
+
+		/** Local path for the RocksDB backup. */
 		private Path backupPath;
 
 		// Registry for all opened i/o streams
@@ -852,11 +855,12 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 				return result;
 
 			} finally {
-				if (inputStream != null && closeableRegistry.unregisterCloseable(inputStream)) {
+
+				if (closeableRegistry.unregisterCloseable(inputStream)) {
 					inputStream.close();
 				}
 
-				if (outputStream != null && closeableRegistry.unregisterCloseable(outputStream)) {
+				if (closeableRegistry.unregisterCloseable(outputStream)) {
 					outputStream.close();
 				}
 			}
@@ -1056,7 +1060,13 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 
 	@Override
 	public void notifyCheckpointComplete(long completedCheckpointId) {
+
+		if (!enableIncrementalCheckpointing) {
+			return;
+		}
+
 		synchronized (materializedSstFiles) {
+
 			if (completedCheckpointId < lastCompletedCheckpointId) {
 				return;
 			}
@@ -1168,8 +1178,7 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 				restoreKVStateMetaData();
 				restoreKVStateData();
 			} finally {
-				if (currentStateHandleInStream != null
-					&& rocksDBKeyedStateBackend.cancelStreamRegistry.unregisterCloseable(currentStateHandleInStream)) {
+				if (rocksDBKeyedStateBackend.cancelStreamRegistry.unregisterCloseable(currentStateHandleInStream)) {
 					IOUtils.closeQuietly(currentStateHandleInStream);
 				}
 			}
@@ -1333,7 +1342,7 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 
 				return serializationProxy.getStateMetaInfoSnapshots();
 			} finally {
-				if (inputStream != null && stateBackend.cancelStreamRegistry.unregisterCloseable(inputStream)) {
+				if (stateBackend.cancelStreamRegistry.unregisterCloseable(inputStream)) {
 					inputStream.close();
 				}
 			}
@@ -1365,11 +1374,11 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 					outputStream.write(buffer, 0, numBytes);
 				}
 			} finally {
-				if (inputStream != null && stateBackend.cancelStreamRegistry.unregisterCloseable(inputStream)) {
+				if (stateBackend.cancelStreamRegistry.unregisterCloseable(inputStream)) {
 					inputStream.close();
 				}
 
-				if (outputStream != null && stateBackend.cancelStreamRegistry.unregisterCloseable(outputStream)) {
+				if (stateBackend.cancelStreamRegistry.unregisterCloseable(outputStream)) {
 					outputStream.close();
 				}
 			}

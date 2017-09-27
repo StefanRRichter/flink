@@ -22,12 +22,14 @@ import org.apache.flink.api.common.ExecutionConfig;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.api.common.typeutils.TypeSerializer;
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.runtime.checkpoint.TaskStateSnapshot;
 import org.apache.flink.runtime.event.AbstractEvent;
 import org.apache.flink.runtime.io.network.partition.consumer.StreamTestSingleInputGate;
 import org.apache.flink.runtime.jobgraph.OperatorID;
 import org.apache.flink.runtime.jobgraph.tasks.AbstractInvokable;
 import org.apache.flink.runtime.memory.MemoryManager;
 import org.apache.flink.runtime.operators.testutils.MockInputSplitProvider;
+import org.apache.flink.runtime.state.TaskStateManagerTestMock;
 import org.apache.flink.streaming.api.TimeCharacteristic;
 import org.apache.flink.streaming.api.collector.selector.OutputSelector;
 import org.apache.flink.streaming.api.graph.StreamConfig;
@@ -76,6 +78,8 @@ public class StreamTaskTestHarness<OUT> {
 	public Configuration taskConfig;
 	protected StreamConfig streamConfig;
 
+	protected TaskStateManagerTestMock taskStateManager;
+
 	private AbstractInvokable task;
 
 	private TypeSerializer<OUT> outputSerializer;
@@ -107,6 +111,8 @@ public class StreamTaskTestHarness<OUT> {
 
 		outputSerializer = outputType.createSerializer(executionConfig);
 		outputStreamRecordSerializer = new StreamElementSerializer<OUT>(outputSerializer);
+
+		this.taskStateManager = new TaskStateManagerTestMock();
 	}
 
 	public ProcessingTimeService getProcessingTimeService() {
@@ -120,6 +126,16 @@ public class StreamTaskTestHarness<OUT> {
 	 * This must be overwritten for OneInputStreamTask or TwoInputStreamTask test harnesses.
 	 */
 	protected void initializeInputs() throws IOException, InterruptedException {}
+
+	public TaskStateManagerTestMock getTaskStateManager() {
+		return taskStateManager;
+	}
+
+	public void setTaskStateSnapshot(long checkpointId, TaskStateSnapshot taskStateSnapshot) {
+		taskStateManager.setReportedCheckpointId(checkpointId);
+		taskStateManager.setTaskStateSnapshotsByCheckpointId(
+			Collections.singletonMap(checkpointId, taskStateSnapshot));
+	}
 
 	@SuppressWarnings("unchecked")
 	private void initializeOutput() {
@@ -161,7 +177,13 @@ public class StreamTaskTestHarness<OUT> {
 
 	public StreamMockEnvironment createEnvironment() {
 		return new StreamMockEnvironment(
-				jobConfig, taskConfig, executionConfig, memorySize, new MockInputSplitProvider(), bufferSize);
+			jobConfig,
+			taskConfig,
+			executionConfig,
+			memorySize,
+			new MockInputSplitProvider(),
+			bufferSize,
+			taskStateManager);
 	}
 
 	/**

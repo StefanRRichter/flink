@@ -69,6 +69,7 @@ import org.apache.flink.runtime.resourcemanager.ResourceManagerGateway;
 import org.apache.flink.runtime.resourcemanager.ResourceManagerId;
 import org.apache.flink.runtime.rpc.RpcService;
 import org.apache.flink.runtime.rpc.TestingRpcService;
+import org.apache.flink.runtime.state.TaskExecutorLocalStateStoresManager;
 import org.apache.flink.runtime.taskexecutor.exceptions.SlotAllocationException;
 import org.apache.flink.runtime.taskexecutor.slot.SlotOffer;
 import org.apache.flink.runtime.taskexecutor.slot.TaskSlotTable;
@@ -196,23 +197,25 @@ public class TaskExecutorTest extends TestLogger {
 		when(jobMasterGateway.getAddress()).thenReturn(jobMasterAddress);
 		when(jobMasterGateway.getHostname()).thenReturn("localhost");
 
-		final TaskExecutor taskManager = new TaskExecutor(
-			rpc,
-			tmConfig,
-			taskManagerLocation,
-			mock(MemoryManager.class),
-			mock(IOManager.class),
-			mock(NetworkEnvironment.class),
-			haServices,
-			heartbeatServices,
-			mock(MetricRegistry.class),
-			mock(TaskManagerMetricGroup.class),
-			mock(BroadcastVariableManager.class),
-			mock(FileCache.class),
-			taskSlotTable,
-			new JobManagerTable(),
-			jobLeaderService,
-			testingFatalErrorHandler);
+
+			final TaskExecutor taskManager = new TaskExecutor(
+				rpc,
+				tmConfig,
+				taskManagerLocation,
+				mock(MemoryManager.class),
+				mock(IOManager.class),
+				mock(TaskExecutorLocalStateStoresManager.class),
+				mock(NetworkEnvironment.class),
+				haServices,
+				heartbeatServices,
+				mock(MetricRegistry.class),
+				mock(TaskManagerMetricGroup.class),
+				mock(BroadcastVariableManager.class),
+				mock(FileCache.class),
+				taskSlotTable,
+				new JobManagerTable(),
+				jobLeaderService,
+				testingFatalErrorHandler);
 
 		try {
 			taskManager.start();
@@ -302,23 +305,25 @@ public class TaskExecutorTest extends TestLogger {
 				}
 		);
 
-		final TaskExecutor taskManager = new TaskExecutor(
-			rpc,
-			taskManagerConfiguration,
-			taskManagerLocation,
-			mock(MemoryManager.class),
-			mock(IOManager.class),
-			mock(NetworkEnvironment.class),
-			haServices,
-			heartbeatServices,
-			mock(MetricRegistry.class),
-			mock(TaskManagerMetricGroup.class),
-			mock(BroadcastVariableManager.class),
-			mock(FileCache.class),
-			taskSlotTable,
-			mock(JobManagerTable.class),
-			mock(JobLeaderService.class),
-			testingFatalErrorHandler);
+
+			final TaskExecutor taskManager = new TaskExecutor(
+				rpc,
+				taskManagerConfiguration,
+				taskManagerLocation,
+				mock(MemoryManager.class),
+				mock(IOManager.class),
+				mock(TaskExecutorLocalStateStoresManager.class),
+				mock(NetworkEnvironment.class),
+				haServices,
+				heartbeatServices,
+				mock(MetricRegistry.class),
+				mock(TaskManagerMetricGroup.class),
+				mock(BroadcastVariableManager.class),
+				mock(FileCache.class),
+				taskSlotTable,
+				mock(JobManagerTable.class),
+				mock(JobLeaderService.class),
+				testingFatalErrorHandler);
 
 		try {
 			taskManager.start();
@@ -420,23 +425,25 @@ public class TaskExecutorTest extends TestLogger {
 			}
 		);
 
-		final TaskExecutor taskManager = new TaskExecutor(
-			rpc,
-			taskManagerConfiguration,
-			taskManagerLocation,
-			mock(MemoryManager.class),
-			mock(IOManager.class),
-			mock(NetworkEnvironment.class),
-			haServices,
-			heartbeatServices,
-			mock(MetricRegistry.class),
-			mock(TaskManagerMetricGroup.class),
-			mock(BroadcastVariableManager.class),
-			mock(FileCache.class),
-			taskSlotTable,
-			mock(JobManagerTable.class),
-			mock(JobLeaderService.class),
-			testingFatalErrorHandler);
+
+			final TaskExecutor taskManager = new TaskExecutor(
+				rpc,
+				taskManagerConfiguration,
+				taskManagerLocation,
+				mock(MemoryManager.class),
+				mock(IOManager.class),
+				mock(TaskExecutorLocalStateStoresManager.class),
+				mock(NetworkEnvironment.class),
+				haServices,
+				heartbeatServices,
+				mock(MetricRegistry.class),
+				mock(TaskManagerMetricGroup.class),
+				mock(BroadcastVariableManager.class),
+				mock(FileCache.class),
+				taskSlotTable,
+				mock(JobManagerTable.class),
+				mock(JobLeaderService.class),
+				testingFatalErrorHandler);
 
 		try {
 			taskManager.start();
@@ -513,23 +520,24 @@ public class TaskExecutorTest extends TestLogger {
 
 		final TestingFatalErrorHandler testingFatalErrorHandler = new TestingFatalErrorHandler();
 
-		TaskExecutor taskManager = new TaskExecutor(
-			rpc,
-			taskManagerServicesConfiguration,
-			taskManagerLocation,
-			mock(MemoryManager.class),
-			mock(IOManager.class),
-			mock(NetworkEnvironment.class),
-			haServices,
-			mock(HeartbeatServices.class, RETURNS_MOCKS),
-			mock(MetricRegistry.class),
-			mock(TaskManagerMetricGroup.class),
-			mock(BroadcastVariableManager.class),
-			mock(FileCache.class),
-			taskSlotTable,
-			mock(JobManagerTable.class),
-			mock(JobLeaderService.class),
-			testingFatalErrorHandler);
+			TaskExecutor taskManager = new TaskExecutor(
+				rpc,
+				taskManagerServicesConfiguration,
+				taskManagerLocation,
+				mock(MemoryManager.class),
+				mock(IOManager.class),
+				mock(TaskExecutorLocalStateStoresManager.class),
+				mock(NetworkEnvironment.class),
+				haServices,
+				mock(HeartbeatServices.class, RETURNS_MOCKS),
+				mock(MetricRegistry.class),
+				mock(TaskManagerMetricGroup.class),
+				mock(BroadcastVariableManager.class),
+				mock(FileCache.class),
+				taskSlotTable,
+				mock(JobManagerTable.class),
+				mock(JobLeaderService.class),
+				testingFatalErrorHandler);
 
 		try {
 			taskManager.start();
@@ -596,23 +604,24 @@ public class TaskExecutorTest extends TestLogger {
 
 		final TestingFatalErrorHandler testingFatalErrorHandler = new TestingFatalErrorHandler();
 
-		TaskExecutor taskManager = new TaskExecutor(
-			rpc,
-			taskManagerServicesConfiguration,
-			taskManagerLocation,
-			mock(MemoryManager.class),
-			mock(IOManager.class),
-			mock(NetworkEnvironment.class),
-			haServices,
-			mock(HeartbeatServices.class, RETURNS_MOCKS),
-			mock(MetricRegistry.class),
-			mock(TaskManagerMetricGroup.class),
-			mock(BroadcastVariableManager.class),
-			mock(FileCache.class),
-			taskSlotTable,
-			mock(JobManagerTable.class),
-			mock(JobLeaderService.class),
-			testingFatalErrorHandler);
+			TaskExecutor taskManager = new TaskExecutor(
+				rpc,
+				taskManagerServicesConfiguration,
+				taskManagerLocation,
+				mock(MemoryManager.class),
+				mock(IOManager.class),
+				mock(TaskExecutorLocalStateStoresManager.class),
+				mock(NetworkEnvironment.class),
+				haServices,
+				mock(HeartbeatServices.class, RETURNS_MOCKS),
+				mock(MetricRegistry.class),
+				mock(TaskManagerMetricGroup.class),
+				mock(BroadcastVariableManager.class),
+				mock(FileCache.class),
+				taskSlotTable,
+				mock(JobManagerTable.class),
+				mock(JobLeaderService.class),
+				testingFatalErrorHandler);
 
 		try {
 			taskManager.start();
@@ -734,23 +743,23 @@ public class TaskExecutorTest extends TestLogger {
 
 		final TestingFatalErrorHandler testingFatalErrorHandler = new TestingFatalErrorHandler();
 
-		TaskExecutor taskManager = new TaskExecutor(
-			rpc,
-			taskManagerConfiguration,
-			mock(TaskManagerLocation.class),
-			mock(MemoryManager.class),
-			mock(IOManager.class),
-			networkEnvironment,
-			haServices,
-			mock(HeartbeatServices.class, RETURNS_MOCKS),
-			mock(MetricRegistry.class),
-			taskManagerMetricGroup,
-			mock(BroadcastVariableManager.class),
-			mock(FileCache.class),
-			taskSlotTable,
-			jobManagerTable,
-			mock(JobLeaderService.class),
-			testingFatalErrorHandler);
+			TaskExecutor taskManager = new TaskExecutor(
+				rpc,
+				taskManagerConfiguration,
+				mock(TaskManagerLocation.class),
+				mock(MemoryManager.class),
+				mock(IOManager.class),
+				mock(TaskExecutorLocalStateStoresManager.class),networkEnvironment,
+				haServices,
+				mock(HeartbeatServices.class, RETURNS_MOCKS),
+				mock(MetricRegistry.class),
+				taskManagerMetricGroup,
+				mock(BroadcastVariableManager.class),
+				mock(FileCache.class),
+				taskSlotTable,
+				jobManagerTable,
+				mock(JobLeaderService.class),
+				testingFatalErrorHandler);
 
 		try {
 			taskManager.start();
@@ -850,23 +859,25 @@ public class TaskExecutorTest extends TestLogger {
 		final SlotID slotId = new SlotID(resourceId, 0);
 		final SlotOffer slotOffer = new SlotOffer(allocationId, 0, ResourceProfile.UNKNOWN);
 
-		TaskExecutor taskManager = new TaskExecutor(
-			rpc,
-			taskManagerConfiguration,
-			taskManagerLocation,
-			mock(MemoryManager.class),
-			mock(IOManager.class),
-			mock(NetworkEnvironment.class),
-			haServices,
-			mock(HeartbeatServices.class, RETURNS_MOCKS),
-			mock(MetricRegistry.class),
-			mock(TaskManagerMetricGroup.class),
-			mock(BroadcastVariableManager.class),
-			mock(FileCache.class),
-			taskSlotTable,
-			jobManagerTable,
-			jobLeaderService,
-			testingFatalErrorHandler);
+
+			TaskExecutor taskManager = new TaskExecutor(
+				rpc,
+				taskManagerConfiguration,
+				taskManagerLocation,
+				mock(MemoryManager.class),
+				mock(IOManager.class),
+				mock(TaskExecutorLocalStateStoresManager.class),
+				mock(NetworkEnvironment.class),
+				haServices,
+				mock(HeartbeatServices.class, RETURNS_MOCKS),
+				mock(MetricRegistry.class),
+				mock(TaskManagerMetricGroup.class),
+				mock(BroadcastVariableManager.class),
+				mock(FileCache.class),
+				taskSlotTable,
+				jobManagerTable,
+				jobLeaderService,
+				testingFatalErrorHandler);
 
 		try {
 			taskManager.start();
@@ -968,23 +979,25 @@ public class TaskExecutorTest extends TestLogger {
 		rpc.registerGateway(resourceManagerAddress, resourceManagerGateway);
 		rpc.registerGateway(jobManagerAddress, jobMasterGateway);
 
-		TaskExecutor taskManager = new TaskExecutor(
-			rpc,
-			taskManagerConfiguration,
-			taskManagerLocation,
-			mock(MemoryManager.class),
-			mock(IOManager.class),
-			mock(NetworkEnvironment.class),
-			haServices,
-			mock(HeartbeatServices.class, RETURNS_MOCKS),
-			mock(MetricRegistry.class),
-			mock(TaskManagerMetricGroup.class),
-			mock(BroadcastVariableManager.class),
-			mock(FileCache.class),
-			taskSlotTable,
-			jobManagerTable,
-			jobLeaderService,
-			testingFatalErrorHandler);
+
+			TaskExecutor taskManager = new TaskExecutor(
+				rpc,
+				taskManagerConfiguration,
+				taskManagerLocation,
+				mock(MemoryManager.class),
+				mock(IOManager.class),
+				mock(TaskExecutorLocalStateStoresManager.class),
+				mock(NetworkEnvironment.class),
+				haServices,
+				mock(HeartbeatServices.class, RETURNS_MOCKS),
+				mock(MetricRegistry.class),
+				mock(TaskManagerMetricGroup.class),
+				mock(BroadcastVariableManager.class),
+				mock(FileCache.class),
+				taskSlotTable,
+				jobManagerTable,
+				jobLeaderService,
+				testingFatalErrorHandler);
 
 		try {
 			taskManager.start();
@@ -1054,23 +1067,24 @@ public class TaskExecutorTest extends TestLogger {
 			when(rmGateway1.registerTaskExecutor(anyString(), eq(resourceID), any(SlotReport.class), any(Time.class))).thenReturn(
 			CompletableFuture.completedFuture(new TaskExecutorRegistrationSuccess(new InstanceID(), ResourceID.generate(), 1000L)));
 
-		TaskExecutor taskManager = new TaskExecutor(
-			rpc,
-			taskManagerServicesConfiguration,
-			taskManagerLocation,
-			mock(MemoryManager.class),
-			mock(IOManager.class),
-			mock(NetworkEnvironment.class),
-			haServices,
-			mock(HeartbeatServices.class, RETURNS_MOCKS),
-			mock(MetricRegistry.class),
-			mock(TaskManagerMetricGroup.class),
-			mock(BroadcastVariableManager.class),
-			mock(FileCache.class),
-			taskSlotTable,
-			mock(JobManagerTable.class),
-			mock(JobLeaderService.class),
-			testingFatalErrorHandler);
+			TaskExecutor taskManager = new TaskExecutor(
+				rpc,
+				taskManagerServicesConfiguration,
+				taskManagerLocation,
+				mock(MemoryManager.class),
+				mock(IOManager.class),
+				mock(TaskExecutorLocalStateStoresManager.class),
+				mock(NetworkEnvironment.class),
+				haServices,
+				mock(HeartbeatServices.class, RETURNS_MOCKS),
+				mock(MetricRegistry.class),
+				mock(TaskManagerMetricGroup.class),
+				mock(BroadcastVariableManager.class),
+				mock(FileCache.class),
+				taskSlotTable,
+				mock(JobManagerTable.class),
+				mock(JobLeaderService.class),
+				testingFatalErrorHandler);
 
 		try {
 			taskManager.start();
@@ -1225,25 +1239,23 @@ public class TaskExecutorTest extends TestLogger {
 
 		final NetworkEnvironment networkMock = mock(NetworkEnvironment.class, Mockito.RETURNS_MOCKS);
 
-		final TaskExecutor taskManager = new TaskExecutor(
-			rpc,
-			taskManagerConfiguration,
-			taskManagerLocation,
-			mock(MemoryManager.class),
-			mock(IOManager.class),
-			networkMock,
-			haServices,
-			mock(HeartbeatServices.class, RETURNS_MOCKS),
-			mock(MetricRegistry.class),
-			taskManagerMetricGroup,
-			mock(BroadcastVariableManager.class),
-			mock(FileCache.class),
-			taskSlotTable,
-			jobManagerTable,
-			jobLeaderService,
-			testingFatalErrorHandler);
-
-		try {
+			final TaskExecutor taskManager = new TaskExecutor(
+				rpc,
+				taskManagerConfiguration,
+				taskManagerLocation,
+				mock(MemoryManager.class),
+				mock(IOManager.class),
+				mock(TaskExecutorLocalStateStoresManager.class),networkMock,
+				haServices,
+				mock(HeartbeatServices.class, RETURNS_MOCKS),
+				mock(MetricRegistry.class),
+				taskManagerMetricGroup,
+				mock(BroadcastVariableManager.class),
+				mock(FileCache.class),
+				taskSlotTable,
+				jobManagerTable,
+				jobLeaderService,
+				testingFatalErrorHandler);try {
 			taskManager.start();
 
 			final TaskExecutorGateway tmGateway = taskManager.getSelfGateway(TaskExecutorGateway.class);
@@ -1353,6 +1365,7 @@ public class TaskExecutorTest extends TestLogger {
 			taskManagerLocation,
 			mock(MemoryManager.class),
 			mock(IOManager.class),
+			mock(TaskExecutorLocalStateStoresManager.class),
 			mock(NetworkEnvironment.class),
 			haServicesMock,
 			heartbeatServicesMock,

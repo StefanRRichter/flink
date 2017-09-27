@@ -55,7 +55,7 @@ public class TaskStateSnapshot implements CompositeStateHandle {
 	}
 
 	public TaskStateSnapshot(int size) {
-		this(new HashMap<OperatorID, OperatorSubtaskState>(size));
+		this(new HashMap<>(size));
 	}
 
 	public TaskStateSnapshot(Map<OperatorID, OperatorSubtaskState> subtaskStatesByOperatorID) {

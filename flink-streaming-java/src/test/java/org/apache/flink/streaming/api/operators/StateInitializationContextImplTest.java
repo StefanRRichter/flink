@@ -18,8 +18,8 @@
 
 package org.apache.flink.streaming.api.operators;
 
+import org.apache.flink.api.common.JobID;
 import org.apache.flink.api.common.state.KeyedStateStore;
-import org.apache.flink.api.common.state.OperatorStateStore;
 import org.apache.flink.core.fs.CloseableRegistry;
 import org.apache.flink.core.fs.FSDataInputStream;
 import org.apache.flink.core.memory.ByteArrayOutputStreamWithPos;
@@ -27,6 +27,12 @@ import org.apache.flink.core.memory.DataInputView;
 import org.apache.flink.core.memory.DataInputViewStreamWrapper;
 import org.apache.flink.core.memory.DataOutputView;
 import org.apache.flink.core.memory.DataOutputViewStreamWrapper;
+import org.apache.flink.runtime.checkpoint.JobManagerTaskRestore;
+import org.apache.flink.runtime.checkpoint.OperatorSubtaskState;
+import org.apache.flink.runtime.checkpoint.TaskStateSnapshot;
+import org.apache.flink.runtime.executiongraph.ExecutionAttemptID;
+import org.apache.flink.runtime.jobgraph.OperatorID;
+import org.apache.flink.runtime.operators.testutils.DummyEnvironment;
 import org.apache.flink.runtime.state.DefaultOperatorStateBackend;
 import org.apache.flink.runtime.state.KeyGroupRange;
 import org.apache.flink.runtime.state.KeyGroupRangeOffsets;
@@ -34,10 +40,17 @@ import org.apache.flink.runtime.state.KeyGroupStatePartitionStreamProvider;
 import org.apache.flink.runtime.state.KeyGroupsStateHandle;
 import org.apache.flink.runtime.state.KeyedStateHandle;
 import org.apache.flink.runtime.state.OperatorStateHandle;
+import org.apache.flink.runtime.state.StateBackend;
 import org.apache.flink.runtime.state.StateInitializationContextImpl;
 import org.apache.flink.runtime.state.StatePartitionStreamProvider;
+import org.apache.flink.runtime.state.TaskLocalStateStore;
+import org.apache.flink.runtime.state.TaskStateManager;
+import org.apache.flink.runtime.state.TaskStateManagerImpl;
 import org.apache.flink.runtime.state.memory.ByteStreamStateHandle;
+import org.apache.flink.runtime.state.memory.MemoryStateBackend;
+import org.apache.flink.runtime.taskmanager.CheckpointResponder;
 import org.apache.flink.runtime.util.LongArrayList;
+import org.apache.flink.streaming.runtime.tasks.ProcessingTimeService;
 import org.apache.flink.util.Preconditions;
 
 import org.junit.Assert;
@@ -47,6 +60,7 @@ import org.junit.Test;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -54,6 +68,7 @@ import java.util.Map;
 import java.util.Set;
 
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 /**
  * Tests for {@link StateInitializationContextImpl}.
@@ -75,7 +90,6 @@ public class StateInitializationContextImplTest {
 		this.writtenOperatorStates = new HashSet<>();
 
 		this.closableRegistry = new CloseableRegistry();
-		OperatorStateStore stateStore = mock(OperatorStateStore.class);
 
 		ByteArrayOutputStreamWithPos out = new ByteArrayOutputStreamWithPos(64);
 
@@ -124,14 +138,56 @@ public class StateInitializationContextImplTest {
 			operatorStateHandles.add(operatorStateHandle);
 		}
 
+		OperatorSubtaskState operatorSubtaskState = new OperatorSubtaskState(
+			Collections.emptyList(),
+			operatorStateHandles,
+			Collections.emptyList(),
+			keyedStateHandles);
+
+		OperatorID operatorID = new OperatorID();
+		TaskStateSnapshot taskStateSnapshot = new TaskStateSnapshot();
+		taskStateSnapshot.putSubtaskStateByOperatorID(operatorID, operatorSubtaskState);
+
+		JobManagerTaskRestore jobManagerTaskRestore = new JobManagerTaskRestore(0L, taskStateSnapshot);
+
+		TaskStateManager manager = new TaskStateManagerImpl(
+			new JobID(),
+			new ExecutionAttemptID(),
+			mock(TaskLocalStateStore.class),
+			jobManagerTaskRestore,
+			mock(CheckpointResponder.class));
+
+		DummyEnvironment environment = new DummyEnvironment(
+			"test",
+			1,
+			0,
+			prev);
+
+		environment.setTaskStateManager(manager);
+
+		StateBackend stateBackend = new MemoryStateBackend(1024);
+		StreamTaskStateManager streamTaskStateManager = new StreamTaskStateManagerImpl(
+			environment,
+			stateBackend,
+			mock(ProcessingTimeService.class));
+
+		AbstractStreamOperator<?> mockOperator = mock(AbstractStreamOperator.class);
+		when(mockOperator.getOperatorID()).thenReturn(operatorID);
+
+		StreamOperatorStateContext stateContext = streamTaskStateManager.streamOperatorStateContext(
+			mockOperator,
+			// notice that this essentially disables the previous test of the keyed stream because it was and is always
+			// consumed by the timer service.
+			null,
+			closableRegistry);
+
 		this.initializationContext =
 				new StateInitializationContextImpl(
-						true,
-						stateStore,
+						stateContext.isRestored(),
+						stateContext.operatorStateBackend(),
 						mock(KeyedStateStore.class),
-						keyedStateHandles,
-						operatorStateHandles,
-						closableRegistry);
+						stateContext.rawKeyedStateInputs(),
+						stateContext.rawOperatorStateInputs());
 	}
 
 	@Test
@@ -213,7 +269,7 @@ public class StateInitializationContextImplTest {
 				Assert.assertNotNull(stateStreamProvider);
 
 				if (count == stopCount) {
-					initializationContext.close();
+					closableRegistry.close();
 					isClosed = true;
 				}
 

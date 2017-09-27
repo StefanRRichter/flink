@@ -226,7 +226,7 @@ public class StateAssignmentOperation {
 					taskState.putSubtaskStateByOperatorID(operatorID, operatorSubtaskState);
 				}
 
-				TaskRestore taskRestore = new TaskRestore(restoreCheckpointId, taskState);
+				JobManagerTaskRestore taskRestore = new JobManagerTaskRestore(restoreCheckpointId, taskState);
 				currentExecutionAttempt.setInitialState(taskRestore);
 			}
 		}
