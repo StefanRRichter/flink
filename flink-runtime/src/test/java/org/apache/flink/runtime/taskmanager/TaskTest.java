@@ -57,7 +57,7 @@ import org.apache.flink.runtime.messages.TaskMessages;
 import org.apache.flink.runtime.metrics.groups.TaskIOMetricGroup;
 import org.apache.flink.runtime.metrics.groups.TaskMetricGroup;
 import org.apache.flink.runtime.query.TaskKvStateRegistry;
-import org.apache.flink.runtime.state.TaskStateManagerTestMock;
+import org.apache.flink.runtime.state.TestTaskStateManager;
 import org.apache.flink.runtime.util.TestingTaskManagerRuntimeInfo;
 import org.apache.flink.util.SerializedValue;
 import org.apache.flink.util.TestLogger;
@@ -1018,7 +1018,7 @@ public class TaskTest extends TestLogger {
 			mock(IOManager.class),
 			networkEnvironment,
 			mock(BroadcastVariableManager.class),
-			new TaskStateManagerTestMock(),
+			new TestTaskStateManager(),
 			taskManagerConnection,
 			inputSplitProvider,
 			checkpointResponder,

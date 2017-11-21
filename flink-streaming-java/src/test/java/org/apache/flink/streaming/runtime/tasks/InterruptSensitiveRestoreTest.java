@@ -61,7 +61,7 @@ import org.apache.flink.runtime.state.KeyedStateHandle;
 import org.apache.flink.runtime.state.OperatorStateHandle;
 import org.apache.flink.runtime.state.StateInitializationContext;
 import org.apache.flink.runtime.state.StreamStateHandle;
-import org.apache.flink.runtime.state.TaskStateManagerTestMock;
+import org.apache.flink.runtime.state.TestTaskStateManager;
 import org.apache.flink.runtime.taskmanager.CheckpointResponder;
 import org.apache.flink.runtime.taskmanager.Task;
 import org.apache.flink.runtime.taskmanager.TaskManagerActions;
@@ -249,7 +249,7 @@ public class InterruptSensitiveRestoreTest {
 		BlobCacheService blobService =
 			new BlobCacheService(mock(PermanentBlobCache.class), mock(TransientBlobCache.class));
 
-		TaskStateManagerTestMock taskStateManager = new TaskStateManagerTestMock();
+		TestTaskStateManager taskStateManager = new TestTaskStateManager();
 		taskStateManager.setReportedCheckpointId(taskRestore.getRestoreCheckpointId());
 		taskStateManager.setTaskStateSnapshotsByCheckpointId(
 			Collections.singletonMap(

@@ -37,29 +37,29 @@ import java.util.Map;
 /**
  * Implementation of {@link TaskStateManager} for tests.
  */
-public class TaskStateManagerTestMock implements TaskStateManager {
+public class TestTaskStateManager implements TaskStateManager {
 
 	private long reportedCheckpointId;
 
 	private JobID jobId;
 	private ExecutionAttemptID executionAttemptID;
 
+	private final Map<Long, TaskStateSnapshot> taskStateSnapshotsByCheckpointId;
 	private CheckpointResponder checkpointResponder;
-	private Map<Long, TaskStateSnapshot> taskStateSnapshotsByCheckpointId;
 	private OneShotLatch waitForReportLatch;
 
-	public TaskStateManagerTestMock() {
+	public TestTaskStateManager() {
 		this(null, null, null);
 	}
 
-	public TaskStateManagerTestMock(
+	public TestTaskStateManager(
 		JobID jobId,
 		ExecutionAttemptID executionAttemptID) {
 
 		this(jobId, executionAttemptID, null);
 	}
 
-	public TaskStateManagerTestMock(
+	public TestTaskStateManager(
 		JobID jobId,
 		ExecutionAttemptID executionAttemptID,
 		CheckpointResponder checkpointResponder) {
@@ -67,6 +67,7 @@ public class TaskStateManagerTestMock implements TaskStateManager {
 		this.executionAttemptID = executionAttemptID;
 		this.checkpointResponder = checkpointResponder;
 		this.taskStateSnapshotsByCheckpointId = new HashMap<>();
+		this.reportedCheckpointId = -1L;
 	}
 
 	@Override
@@ -137,7 +138,8 @@ public class TaskStateManagerTestMock implements TaskStateManager {
 	}
 
 	public void setTaskStateSnapshotsByCheckpointId(Map<Long, TaskStateSnapshot> taskStateSnapshotsByCheckpointId) {
-		this.taskStateSnapshotsByCheckpointId = taskStateSnapshotsByCheckpointId;
+		this.taskStateSnapshotsByCheckpointId.clear();
+		this.taskStateSnapshotsByCheckpointId.putAll(taskStateSnapshotsByCheckpointId);
 	}
 
 	public long getReportedCheckpointId() {

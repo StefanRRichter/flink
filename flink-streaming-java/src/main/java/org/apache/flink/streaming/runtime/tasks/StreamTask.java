@@ -38,6 +38,7 @@ import org.apache.flink.runtime.jobgraph.tasks.StatefulTask;
 import org.apache.flink.runtime.state.AbstractStateBackend;
 import org.apache.flink.runtime.state.CheckpointStreamFactory;
 import org.apache.flink.runtime.state.StateBackend;
+import org.apache.flink.runtime.state.TaskStateManager;
 import org.apache.flink.runtime.taskmanager.DispatcherThreadFactory;
 import org.apache.flink.runtime.util.OperatorSubtaskDescriptionText;
 import org.apache.flink.streaming.api.TimeCharacteristic;
@@ -846,10 +847,12 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 
 					TaskStateSnapshot acknowledgedState = hasState ? taskOperatorSubtaskStates : null;
 
+					TaskStateManager taskStateManager = owner.getEnvironment().getTaskStateManager();
+
 					// we signal stateless tasks by reporting null, so that there are no attempts to assign empty state
 					// to stateless tasks on restore. This enables simple job modifications that only concern
 					// stateless without the need to assign them uids to match their (always empty) states.
-					owner.getEnvironment().getTaskStateManager().reportStateHandles(
+					taskStateManager.reportStateHandles(
 						checkpointMetaData,
 						checkpointMetrics,
 						acknowledgedState);
@@ -866,6 +869,7 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 						checkpointMetaData.getCheckpointId());
 				}
 			} catch (Exception e) {
+				e.printStackTrace();
 				// the state is completed if an exception occurred in the acknowledgeCheckpoint call
 				// in order to clean up, we have to set it to RUNNING again.
 				asyncCheckpointState.compareAndSet(

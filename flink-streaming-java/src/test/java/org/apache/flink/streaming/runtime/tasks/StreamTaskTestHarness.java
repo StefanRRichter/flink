@@ -29,7 +29,7 @@ import org.apache.flink.runtime.jobgraph.OperatorID;
 import org.apache.flink.runtime.jobgraph.tasks.AbstractInvokable;
 import org.apache.flink.runtime.memory.MemoryManager;
 import org.apache.flink.runtime.operators.testutils.MockInputSplitProvider;
-import org.apache.flink.runtime.state.TaskStateManagerTestMock;
+import org.apache.flink.runtime.state.TestTaskStateManager;
 import org.apache.flink.streaming.api.TimeCharacteristic;
 import org.apache.flink.streaming.api.collector.selector.OutputSelector;
 import org.apache.flink.streaming.api.graph.StreamConfig;
@@ -79,7 +79,7 @@ public class StreamTaskTestHarness<OUT> {
 	public Configuration taskConfig;
 	protected StreamConfig streamConfig;
 
-	protected TaskStateManagerTestMock taskStateManager;
+	protected TestTaskStateManager taskStateManager;
 
 	private AbstractInvokable task;
 
@@ -113,7 +113,7 @@ public class StreamTaskTestHarness<OUT> {
 		outputSerializer = outputType.createSerializer(executionConfig);
 		outputStreamRecordSerializer = new StreamElementSerializer<OUT>(outputSerializer);
 
-		this.taskStateManager = new TaskStateManagerTestMock();
+		this.taskStateManager = new TestTaskStateManager();
 	}
 
 	public ProcessingTimeService getProcessingTimeService() {
@@ -128,7 +128,7 @@ public class StreamTaskTestHarness<OUT> {
 	 */
 	protected void initializeInputs() throws IOException, InterruptedException {}
 
-	public TaskStateManagerTestMock getTaskStateManager() {
+	public TestTaskStateManager getTaskStateManager() {
 		return taskStateManager;
 	}
 

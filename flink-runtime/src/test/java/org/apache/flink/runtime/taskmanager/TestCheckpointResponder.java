@@ -30,7 +30,7 @@ import java.util.List;
 /**
  * Mock for interface {@link CheckpointResponder} for unit testing.
  */
-public class CheckpointResponderMock implements CheckpointResponder {
+public class TestCheckpointResponder implements CheckpointResponder {
 
 	private final List<AcknowledgeReport> acknowledgeReports;
 	private final List<DeclineReport> declineReports;
@@ -38,7 +38,7 @@ public class CheckpointResponderMock implements CheckpointResponder {
 	private OneShotLatch acknowledgeLatch;
 	private OneShotLatch declinedLatch;
 
-	public CheckpointResponderMock() {
+	public TestCheckpointResponder() {
 		this.acknowledgeReports = new ArrayList<>();
 		this.declineReports = new ArrayList<>();
 	}
@@ -85,13 +85,35 @@ public class CheckpointResponderMock implements CheckpointResponder {
 		}
 	}
 
-	public static class AcknowledgeReport {
+	public static abstract class AbstractReport {
 
-		public final JobID jobID;
-		public final ExecutionAttemptID executionAttemptID;
-		public final long checkpointId;
-		public final CheckpointMetrics checkpointMetrics;
-		public final TaskStateSnapshot subtaskState;
+		private final JobID jobID;
+		private final ExecutionAttemptID executionAttemptID;
+		private final long checkpointId;
+
+		AbstractReport(JobID jobID, ExecutionAttemptID executionAttemptID, long checkpointId) {
+			this.jobID = jobID;
+			this.executionAttemptID = executionAttemptID;
+			this.checkpointId = checkpointId;
+		}
+
+		public JobID getJobID() {
+			return jobID;
+		}
+
+		public ExecutionAttemptID getExecutionAttemptID() {
+			return executionAttemptID;
+		}
+
+		public long getCheckpointId() {
+			return checkpointId;
+		}
+	}
+
+	public static class AcknowledgeReport extends AbstractReport {
+
+		private final CheckpointMetrics checkpointMetrics;
+		private final TaskStateSnapshot subtaskState;
 
 		public AcknowledgeReport(
 			JobID jobID,
@@ -100,19 +122,22 @@ public class CheckpointResponderMock implements CheckpointResponder {
 			CheckpointMetrics checkpointMetrics,
 			TaskStateSnapshot subtaskState) {
 
-			this.jobID = jobID;
-			this.executionAttemptID = executionAttemptID;
-			this.checkpointId = checkpointId;
+			super(jobID, executionAttemptID, checkpointId);
 			this.checkpointMetrics = checkpointMetrics;
 			this.subtaskState = subtaskState;
 		}
+
+		public CheckpointMetrics getCheckpointMetrics() {
+			return checkpointMetrics;
+		}
+
+		public TaskStateSnapshot getSubtaskState() {
+			return subtaskState;
+		}
 	}
 
-	public static class DeclineReport {
+	public static class DeclineReport extends AbstractReport {
 
-		public final JobID jobID;
-		public final ExecutionAttemptID executionAttemptID;
-		public final long checkpointId;
 		public final Throwable cause;
 
 		public DeclineReport(
@@ -121,10 +146,12 @@ public class CheckpointResponderMock implements CheckpointResponder {
 			long checkpointId,
 			Throwable cause) {
 
-			this.jobID = jobID;
-			this.executionAttemptID = executionAttemptID;
-			this.checkpointId = checkpointId;
+			super(jobID, executionAttemptID, checkpointId);
 			this.cause = cause;
+		}
+
+		public Throwable getCause() {
+			return cause;
 		}
 	}
 

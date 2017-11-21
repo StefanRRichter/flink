@@ -40,7 +40,7 @@ import org.apache.flink.runtime.state.KeyGroupRange;
 import org.apache.flink.runtime.state.KeyedStateHandle;
 import org.apache.flink.runtime.state.OperatorStateHandle;
 import org.apache.flink.runtime.state.StateBackend;
-import org.apache.flink.runtime.state.TaskStateManagerTestMock;
+import org.apache.flink.runtime.state.TestTaskStateManager;
 import org.apache.flink.runtime.state.memory.MemoryStateBackend;
 import org.apache.flink.streaming.api.TimeCharacteristic;
 import org.apache.flink.streaming.api.graph.StreamConfig;
@@ -104,7 +104,7 @@ public class AbstractStreamOperatorTestHarness<OUT> implements AutoCloseable {
 
 	protected final StreamTaskStateManager streamTaskStateManager;
 
-	protected final TaskStateManagerTestMock taskStateManager;
+	protected final TestTaskStateManager taskStateManager;
 
 	final Environment environment;
 
@@ -141,7 +141,7 @@ public class AbstractStreamOperatorTestHarness<OUT> implements AutoCloseable {
 				1024,
 				new Configuration(),
 				new ExecutionConfig(),
-				new TaskStateManagerTestMock(),
+				new TestTaskStateManager(),
 				maxParallelism,
 				parallelism,
 				subtaskIndex));
@@ -172,7 +172,7 @@ public class AbstractStreamOperatorTestHarness<OUT> implements AutoCloseable {
 
 		this.environment = env;
 
-		this.taskStateManager = new TaskStateManagerTestMock(
+		this.taskStateManager = new TestTaskStateManager(
 			env.getJobID(),
 			env.getExecutionId());
 

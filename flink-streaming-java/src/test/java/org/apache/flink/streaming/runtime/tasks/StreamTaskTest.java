@@ -78,7 +78,7 @@ import org.apache.flink.runtime.state.StreamStateHandle;
 import org.apache.flink.runtime.state.TaskLocalStateStore;
 import org.apache.flink.runtime.state.TaskStateManager;
 import org.apache.flink.runtime.state.TaskStateManagerImpl;
-import org.apache.flink.runtime.state.TaskStateManagerTestMock;
+import org.apache.flink.runtime.state.TestTaskStateManager;
 import org.apache.flink.runtime.state.memory.MemoryStateBackend;
 import org.apache.flink.runtime.taskmanager.CheckpointResponder;
 import org.apache.flink.runtime.taskmanager.Task;
@@ -829,7 +829,7 @@ public class StreamTaskTest extends TestLogger {
 			1,
 			taskConfiguration,
 			new ExecutionConfig(),
-			new TaskStateManagerTestMock());
+			new TestTaskStateManager());
 		StreamTask<Void, BlockingCloseStreamOperator> streamTask = new NoOpStreamTask<>(mockEnvironment);
 		final AtomicReference<Throwable> atomicThrowable = new AtomicReference<>(null);
 
@@ -994,7 +994,7 @@ public class StreamTaskTest extends TestLogger {
 			mock(IOManager.class),
 			network,
 			mock(BroadcastVariableManager.class),
-			new TaskStateManagerTestMock(),
+			new TestTaskStateManager(),
 			mock(TaskManagerActions.class),
 			mock(InputSplitProvider.class),
 			mock(CheckpointResponder.class),

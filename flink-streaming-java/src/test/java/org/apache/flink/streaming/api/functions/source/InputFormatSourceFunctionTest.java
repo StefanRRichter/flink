@@ -31,7 +31,7 @@ import org.apache.flink.metrics.groups.UnregisteredMetricsGroup;
 import org.apache.flink.runtime.jobgraph.tasks.InputSplitProvider;
 import org.apache.flink.runtime.memory.MemoryManager;
 import org.apache.flink.runtime.operators.testutils.MockEnvironment;
-import org.apache.flink.runtime.state.TaskStateManagerTestMock;
+import org.apache.flink.runtime.state.TestTaskStateManager;
 import org.apache.flink.streaming.api.operators.AbstractStreamOperator;
 import org.apache.flink.streaming.api.operators.StreamingRuntimeContext;
 import org.apache.flink.streaming.api.watermark.Watermark;
@@ -264,7 +264,7 @@ public class InputFormatSourceFunctionTest {
 					4 * MemoryManager.DEFAULT_PAGE_SIZE,
 					null,
 					16,
-					new TaskStateManagerTestMock()),
+					new TestTaskStateManager()),
 				Collections.<String, Accumulator<?, ?>>emptyMap());
 
 			this.noOfSplits = noOfSplits;

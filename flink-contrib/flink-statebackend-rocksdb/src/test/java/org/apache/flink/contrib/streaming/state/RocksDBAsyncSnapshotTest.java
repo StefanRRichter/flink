@@ -43,7 +43,7 @@ import org.apache.flink.runtime.state.AbstractStateBackend;
 import org.apache.flink.runtime.state.CheckpointStreamFactory;
 import org.apache.flink.runtime.state.KeyGroupRange;
 import org.apache.flink.runtime.state.KeyedStateHandle;
-import org.apache.flink.runtime.state.TaskStateManagerTestMock;
+import org.apache.flink.runtime.state.TestTaskStateManager;
 import org.apache.flink.runtime.state.VoidNamespace;
 import org.apache.flink.runtime.state.VoidNamespaceSerializer;
 import org.apache.flink.runtime.state.memory.MemCheckpointStreamFactory;
@@ -177,7 +177,7 @@ public class RocksDBAsyncSnapshotTest extends TestLogger {
 
 		JobID jobID = new JobID();
 		ExecutionAttemptID executionAttemptID = new ExecutionAttemptID(0L, 0L);
-		TaskStateManagerTestMock taskStateManagerTestMock = new TaskStateManagerTestMock(
+		TestTaskStateManager taskStateManagerTestMock = new TestTaskStateManager(
 			jobID,
 			executionAttemptID,
 			checkpointResponderMock);
@@ -279,7 +279,7 @@ public class RocksDBAsyncSnapshotTest extends TestLogger {
 		streamConfig.setStreamOperator(new AsyncCheckpointOperator());
 		streamConfig.setOperatorID(new OperatorID());
 
-		TaskStateManagerTestMock taskStateManagerTestMock = new TaskStateManagerTestMock();
+		TestTaskStateManager taskStateManagerTestMock = new TestTaskStateManager();
 
 		StreamMockEnvironment mockEnv = new StreamMockEnvironment(
 				testHarness.jobConfig,

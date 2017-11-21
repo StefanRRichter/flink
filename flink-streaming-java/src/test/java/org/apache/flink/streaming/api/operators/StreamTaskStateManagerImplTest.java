@@ -42,7 +42,7 @@ import org.apache.flink.runtime.state.StatePartitionStreamProvider;
 import org.apache.flink.runtime.state.TaskStateManager;
 import org.apache.flink.runtime.state.TaskStateManagerImplTest;
 import org.apache.flink.runtime.state.memory.MemoryStateBackend;
-import org.apache.flink.runtime.taskmanager.CheckpointResponderMock;
+import org.apache.flink.runtime.taskmanager.TestCheckpointResponder;
 import org.apache.flink.streaming.runtime.tasks.ProcessingTimeService;
 import org.apache.flink.streaming.runtime.tasks.TestProcessingTimeService;
 import org.apache.flink.util.CloseableIterable;
@@ -287,7 +287,7 @@ public class StreamTaskStateManagerImplTest {
 
 		JobID jobID = new JobID(42L, 43L);
 		ExecutionAttemptID executionAttemptID = new ExecutionAttemptID(23L, 24L);
-		CheckpointResponderMock checkpointResponderMock = new CheckpointResponderMock();
+		TestCheckpointResponder checkpointResponderMock = new TestCheckpointResponder();
 
 		TaskStateManager taskStateManager = TaskStateManagerImplTest.taskStateManager(
 			jobID,

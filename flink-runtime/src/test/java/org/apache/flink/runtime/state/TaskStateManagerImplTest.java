@@ -27,7 +27,7 @@ import org.apache.flink.runtime.checkpoint.TaskStateSnapshot;
 import org.apache.flink.runtime.executiongraph.ExecutionAttemptID;
 import org.apache.flink.runtime.jobgraph.OperatorID;
 import org.apache.flink.runtime.taskmanager.CheckpointResponder;
-import org.apache.flink.runtime.taskmanager.CheckpointResponderMock;
+import org.apache.flink.runtime.taskmanager.TestCheckpointResponder;
 
 import org.junit.Assert;
 import org.junit.Test;
@@ -41,7 +41,7 @@ public class TaskStateManagerImplTest {
 
 		JobID jobID = new JobID(42L, 43L);
 		ExecutionAttemptID executionAttemptID = new ExecutionAttemptID(23L, 24L);
-		CheckpointResponderMock checkpointResponderMock = new CheckpointResponderMock();
+		TestCheckpointResponder checkpointResponderMock = new TestCheckpointResponder();
 
 		TaskStateManager taskStateManager = taskStateManager(
 			jobID,
@@ -71,20 +71,20 @@ public class TaskStateManagerImplTest {
 
 		taskStateManager.reportStateHandles(checkpointMetaData, checkpointMetrics, taskStateSnapshot);
 
-		CheckpointResponderMock.AcknowledgeReport acknowledgeReport =
+		TestCheckpointResponder.AcknowledgeReport acknowledgeReport =
 			checkpointResponderMock.getAcknowledgeReports().get(0);
 
-		Assert.assertEquals(checkpointMetaData.getCheckpointId(), acknowledgeReport.checkpointId);
-		Assert.assertEquals(checkpointMetrics, acknowledgeReport.checkpointMetrics);
-		Assert.assertEquals(executionAttemptID, acknowledgeReport.executionAttemptID);
-		Assert.assertEquals(jobID, acknowledgeReport.jobID);
-		Assert.assertEquals(taskStateSnapshot, acknowledgeReport.subtaskState);
+		Assert.assertEquals(checkpointMetaData.getCheckpointId(), acknowledgeReport.getCheckpointId());
+		Assert.assertEquals(checkpointMetrics, acknowledgeReport.getCheckpointMetrics());
+		Assert.assertEquals(executionAttemptID, acknowledgeReport.getExecutionAttemptID());
+		Assert.assertEquals(jobID, acknowledgeReport.getJobID());
+		Assert.assertEquals(taskStateSnapshot, acknowledgeReport.getSubtaskState());
 
 		//---------------------------------------- test retrieving -----------------------------------------
 
 		JobManagerTaskRestore taskRestore = new JobManagerTaskRestore(
 			0L,
-			acknowledgeReport.subtaskState);
+			acknowledgeReport.getSubtaskState());
 
 		taskStateManager = taskStateManager(
 			jobID,
