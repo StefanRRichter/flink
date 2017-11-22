@@ -65,6 +65,7 @@ import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
@@ -322,9 +323,16 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 			isRunning = false;
 
 			// stop all timers and threads
-			if (timerService != null) {
+			if (timerService != null && !timerService.isTerminated()) {
 				try {
-					timerService.shutdownService();
+
+					boolean timerShutdownComplete =
+						timerService.shutdownAndAwaitPending(7500, TimeUnit.MILLISECONDS);
+
+					if (!timerShutdownComplete) {
+						LOG.warn("Timer service shutdown exceeded time limit waiting for pending timers. " +
+							"Will continue with shutdown procedure.");
+					}
 				}
 				catch (Throwable t) {
 					// catch and log the exception to not replace the original exception
