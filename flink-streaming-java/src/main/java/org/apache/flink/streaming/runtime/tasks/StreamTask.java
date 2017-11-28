@@ -42,7 +42,7 @@ import org.apache.flink.runtime.taskmanager.DispatcherThreadFactory;
 import org.apache.flink.runtime.util.OperatorSubtaskDescriptionText;
 import org.apache.flink.streaming.api.TimeCharacteristic;
 import org.apache.flink.streaming.api.graph.StreamConfig;
-import org.apache.flink.streaming.api.operators.OperatorSnapshotResult;
+import org.apache.flink.streaming.api.operators.OperatorSnapshotFutures;
 import org.apache.flink.streaming.api.operators.Output;
 import org.apache.flink.streaming.api.operators.StreamOperator;
 import org.apache.flink.streaming.api.operators.StreamTaskStateInitializer;
@@ -801,7 +801,7 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 
 		private final StreamTask<?, ?> owner;
 
-		private final Map<OperatorID, OperatorSnapshotResult> operatorSnapshotsInProgress;
+		private final Map<OperatorID, OperatorSnapshotFutures> operatorSnapshotsInProgress;
 
 		private final CheckpointMetaData checkpointMetaData;
 		private final CheckpointMetrics checkpointMetrics;
@@ -813,7 +813,7 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 
 		AsyncCheckpointRunnable(
 			StreamTask<?, ?> owner,
-			Map<OperatorID, OperatorSnapshotResult> operatorSnapshotsInProgress,
+			Map<OperatorID, OperatorSnapshotFutures> operatorSnapshotsInProgress,
 			CheckpointMetaData checkpointMetaData,
 			CheckpointMetrics checkpointMetrics,
 			long asyncStartNanos) {
@@ -835,10 +835,10 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 				final TaskStateSnapshot taskOperatorSubtaskStates =
 					new TaskStateSnapshot(operatorSnapshotsInProgress.size());
 
-				for (Map.Entry<OperatorID, OperatorSnapshotResult> entry : operatorSnapshotsInProgress.entrySet()) {
+				for (Map.Entry<OperatorID, OperatorSnapshotFutures> entry : operatorSnapshotsInProgress.entrySet()) {
 
 					OperatorID operatorID = entry.getKey();
-					OperatorSnapshotResult snapshotInProgress = entry.getValue();
+					OperatorSnapshotFutures snapshotInProgress = entry.getValue();
 
 					OperatorSubtaskState operatorSubtaskState = new OperatorSubtaskState(
 						FutureUtil.runIfNotDoneAndGet(snapshotInProgress.getOperatorStateManagedFuture()),
@@ -866,7 +866,7 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 					// we signal stateless tasks by reporting null, so that there are no attempts to assign empty state
 					// to stateless tasks on restore. This enables simple job modifications that only concern
 					// stateless without the need to assign them uids to match their (always empty) states.
-					taskStateManager.reportStateHandles(
+					taskStateManager.reportTaskStateSnapshot(
 						checkpointMetaData,
 						checkpointMetrics,
 						acknowledgedState);
@@ -883,7 +883,6 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 						checkpointMetaData.getCheckpointId());
 				}
 			} catch (Exception e) {
-				e.printStackTrace();
 				// the state is completed if an exception occurred in the acknowledgeCheckpoint call
 				// in order to clean up, we have to set it to RUNNING again.
 				asyncCheckpointState.compareAndSet(
@@ -925,7 +924,7 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 				Exception exception = null;
 
 				// clean up ongoing operator snapshot results and non partitioned state handles
-				for (OperatorSnapshotResult operatorSnapshotResult : operatorSnapshotsInProgress.values()) {
+				for (OperatorSnapshotFutures operatorSnapshotResult : operatorSnapshotsInProgress.values()) {
 					if (operatorSnapshotResult != null) {
 						try {
 							operatorSnapshotResult.cancel();
@@ -968,7 +967,7 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 
 		// ------------------------
 
-		private final Map<OperatorID, OperatorSnapshotResult> operatorSnapshotsInProgress;
+		private final Map<OperatorID, OperatorSnapshotFutures> operatorSnapshotsInProgress;
 
 		public CheckpointingOperation(
 				StreamTask<?, ?> owner,
@@ -1021,7 +1020,7 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 				}
 			} catch (Exception ex) {
 				// Cleanup to release resources
-				for (OperatorSnapshotResult operatorSnapshotResult : operatorSnapshotsInProgress.values()) {
+				for (OperatorSnapshotFutures operatorSnapshotResult : operatorSnapshotsInProgress.values()) {
 					if (null != operatorSnapshotResult) {
 						try {
 							operatorSnapshotResult.cancel();
@@ -1047,7 +1046,7 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 		private void checkpointStreamOperator(StreamOperator<?> op) throws Exception {
 			if (null != op) {
 
-				OperatorSnapshotResult snapshotInProgress = op.snapshotState(
+				OperatorSnapshotFutures snapshotInProgress = op.snapshotState(
 						checkpointMetaData.getCheckpointId(),
 						checkpointMetaData.getTimestamp(),
 						checkpointOptions);
