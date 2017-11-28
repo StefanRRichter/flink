@@ -20,6 +20,7 @@ package org.apache.flink.runtime.checkpoint;
 
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.runtime.state.OperatorStateHandle;
+import org.apache.flink.runtime.state.OperatorStreamStateHandle;
 import org.apache.flink.runtime.state.StreamStateHandle;
 import org.apache.flink.util.Preconditions;
 
@@ -84,7 +85,7 @@ public class RoundRobinOperatorStateRepartitioner implements OperatorStateRepart
 			Map<String, List<Tuple2<StreamStateHandle, OperatorStateHandle.StateMetaInfo>>> map = new HashMap<>();
 			nameToStateByMode.put(
 					mode,
-					new HashMap<String, List<Tuple2<StreamStateHandle, OperatorStateHandle.StateMetaInfo>>>());
+				new HashMap<>());
 		}
 
 		for (OperatorStateHandle psh : previousParallelSubtaskStates) {
@@ -127,7 +128,7 @@ public class RoundRobinOperatorStateRepartitioner implements OperatorStateRepart
 
 		// Initialize
 		for (int i = 0; i < parallelism; ++i) {
-			mergeMapList.add(new HashMap<StreamStateHandle, OperatorStateHandle>());
+			mergeMapList.add(new HashMap<>());
 		}
 
 		// Start with the state handles we distribute round robin by splitting by offsets
@@ -175,8 +176,6 @@ public class RoundRobinOperatorStateRepartitioner implements OperatorStateRepart
 				}
 
 				// Now start collection the partitions for the parallel instance into this list
-				List<Tuple2<StreamStateHandle, OperatorStateHandle.StateMetaInfo>> parallelOperatorState =
-						new ArrayList<>();
 
 				while (numberOfPartitionsToAssign > 0) {
 					Tuple2<StreamStateHandle, OperatorStateHandle.StateMetaInfo> handleWithOffsets =
@@ -198,10 +197,6 @@ public class RoundRobinOperatorStateRepartitioner implements OperatorStateRepart
 						++lstIdx;
 					}
 
-					parallelOperatorState.add(new Tuple2<>(
-							handleWithOffsets.f0,
-							new OperatorStateHandle.StateMetaInfo(offs, OperatorStateHandle.Mode.SPLIT_DISTRIBUTE)));
-
 					numberOfPartitionsToAssign -= remaining;
 
 					// As a last step we merge partitions that use the same StreamStateHandle in a single
@@ -209,7 +204,7 @@ public class RoundRobinOperatorStateRepartitioner implements OperatorStateRepart
 					Map<StreamStateHandle, OperatorStateHandle> mergeMap = mergeMapList.get(parallelOpIdx);
 					OperatorStateHandle operatorStateHandle = mergeMap.get(handleWithOffsets.f0);
 					if (operatorStateHandle == null) {
-						operatorStateHandle = new OperatorStateHandle(
+						operatorStateHandle = new OperatorStreamStateHandle(
 								new HashMap<String, OperatorStateHandle.StateMetaInfo>(),
 								handleWithOffsets.f0);
 
@@ -240,7 +235,7 @@ public class RoundRobinOperatorStateRepartitioner implements OperatorStateRepart
 				for (Tuple2<StreamStateHandle, OperatorStateHandle.StateMetaInfo> handleWithMetaInfo : current) {
 					OperatorStateHandle operatorStateHandle = mergeMap.get(handleWithMetaInfo.f0);
 					if (operatorStateHandle == null) {
-						operatorStateHandle = new OperatorStateHandle(
+						operatorStateHandle = new OperatorStreamStateHandle(
 								new HashMap<String, OperatorStateHandle.StateMetaInfo>(),
 								handleWithMetaInfo.f0);
 

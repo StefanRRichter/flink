@@ -28,9 +28,12 @@ import org.apache.flink.runtime.state.AbstractStateBackend;
 import org.apache.flink.runtime.state.CheckpointStreamFactory;
 import org.apache.flink.runtime.state.DefaultOperatorStateBackend;
 import org.apache.flink.runtime.state.KeyGroupRange;
+import org.apache.flink.runtime.state.LocalRecoveryConfigBase;
+import org.apache.flink.runtime.state.LocalRecoveryDirectoryProvider;
 import org.apache.flink.runtime.state.OperatorStateBackend;
 import org.apache.flink.runtime.state.filesystem.FsStateBackend;
 import org.apache.flink.util.AbstractID;
+import org.apache.flink.util.Preconditions;
 
 import org.rocksdb.ColumnFamilyOptions;
 import org.rocksdb.DBOptions;
@@ -112,6 +115,9 @@ public class RocksDBStateBackend extends AbstractStateBackend {
 	/** True if incremental checkpointing is enabled. */
 	private boolean enableIncrementalCheckpointing;
 
+	/** Mode for local recovery (disabled by default). */
+	private LocalRecoveryMode localRecoveryMode;
+
 
 	/**
 	 * Creates a new {@code RocksDBStateBackend} that stores its checkpoint data in the
@@ -190,7 +196,7 @@ public class RocksDBStateBackend extends AbstractStateBackend {
 	 * @param checkpointStreamBackend The backend to store the
 	 */
 	public RocksDBStateBackend(AbstractStateBackend checkpointStreamBackend) {
-		this.checkpointStreamBackend = requireNonNull(checkpointStreamBackend);
+		this(checkpointStreamBackend, false);
 	}
 
 	/**
@@ -207,6 +213,7 @@ public class RocksDBStateBackend extends AbstractStateBackend {
 	public RocksDBStateBackend(AbstractStateBackend checkpointStreamBackend, boolean enableIncrementalCheckpointing) {
 		this.checkpointStreamBackend = requireNonNull(checkpointStreamBackend);
 		this.enableIncrementalCheckpointing = enableIncrementalCheckpointing;
+		this.localRecoveryMode = LocalRecoveryMode.DISABLED;
 	}
 
 	// ------------------------------------------------------------------------
@@ -302,6 +309,12 @@ public class RocksDBStateBackend extends AbstractStateBackend {
 		File instanceBasePath =
 				new File(getNextStoragePath(), "job-" + jobId + "_op-" + operatorIdentifier + "_uuid-" + UUID.randomUUID());
 
+		LocalRecoveryDirectoryProvider subtaskLocalStateBaseDirectory =
+			env.getTaskStateManager().createLocalRecoveryRootDirectoryProvider();
+
+		LocalRecoveryConfig localRecoveryConfig =
+			new LocalRecoveryConfig(localRecoveryMode, subtaskLocalStateBaseDirectory);
+
 		return new RocksDBKeyedStateBackend<>(
 				operatorIdentifier,
 				env.getUserClassLoader(),
@@ -313,7 +326,8 @@ public class RocksDBStateBackend extends AbstractStateBackend {
 				numberOfKeyGroups,
 				keyGroupRange,
 				env.getExecutionConfig(),
-				enableIncrementalCheckpointing);
+				enableIncrementalCheckpointing,
+				localRecoveryConfig);
 	}
 
 	// ------------------------------------------------------------------------
@@ -479,6 +493,20 @@ public class RocksDBStateBackend extends AbstractStateBackend {
 		return opt;
 	}
 
+	/**
+	 * Returns the currently configured local recovery mode.
+	 */
+	public LocalRecoveryMode getLocalRecoveryMode() {
+		return localRecoveryMode;
+	}
+
+	/**
+	 * Sets the local recovery mode.
+	 */
+	public void setLocalRecoveryMode(LocalRecoveryMode localRecoveryMode) {
+		this.localRecoveryMode = Preconditions.checkNotNull(localRecoveryMode);
+	}
+
 	@Override
 	public OperatorStateBackend createOperatorStateBackend(
 		Environment env,
@@ -567,5 +595,47 @@ public class RocksDBStateBackend extends AbstractStateBackend {
 		final Field initField = org.rocksdb.NativeLibraryLoader.class.getDeclaredField("initialized");
 		initField.setAccessible(true);
 		initField.setBoolean(null, false);
+	}
+
+	/**
+	 * This enum represents the different modes for local recovery.
+	 */
+	public enum LocalRecoveryMode {
+		DISABLED, ENABLE_FILE_BASED
+	}
+
+	/**
+	 * This class encapsulates the configuration for local recovery of this backend.
+	 */
+	public static final class LocalRecoveryConfig extends LocalRecoveryConfigBase {
+
+		private static final LocalRecoveryConfig DISABLED_SINGLETON =
+			new LocalRecoveryConfig(LocalRecoveryMode.DISABLED, null);
+
+		private final LocalRecoveryMode localRecoveryMode;
+
+		LocalRecoveryConfig(LocalRecoveryMode localRecoveryMode, LocalRecoveryDirectoryProvider localStateDirectories) {
+			super(localStateDirectories);
+			this.localRecoveryMode = Preconditions.checkNotNull(localRecoveryMode);
+			if (LocalRecoveryMode.ENABLE_FILE_BASED.equals(localRecoveryMode) && localStateDirectories == null) {
+				throw new IllegalStateException("Local state directory must be specified if local recovery mode is " +
+					LocalRecoveryMode.ENABLE_FILE_BASED);
+			}
+		}
+
+		public LocalRecoveryMode getLocalRecoveryMode() {
+			return localRecoveryMode;
+		}
+
+		public static LocalRecoveryConfig disabled() {
+			return DISABLED_SINGLETON;
+		}
+
+		@Override
+		public String toString() {
+			return "LocalRecoveryConfig{" +
+				"localRecoveryMode=" + localRecoveryMode +
+				"} " + super.toString();
+		}
 	}
 }

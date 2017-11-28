@@ -28,6 +28,7 @@ import org.apache.flink.runtime.state.CheckpointStreamFactory;
 import org.apache.flink.runtime.state.DefaultOperatorStateBackend;
 import org.apache.flink.runtime.state.KeyGroupRange;
 import org.apache.flink.runtime.state.OperatorStateBackend;
+import org.apache.flink.runtime.state.filesystem.FsStateBackend;
 import org.apache.flink.runtime.state.heap.HeapKeyedStateBackend;
 
 import java.io.IOException;
@@ -131,12 +132,13 @@ public class MemoryStateBackend extends AbstractStateBackend {
 			TaskKvStateRegistry kvStateRegistry) {
 
 		return new HeapKeyedStateBackend<>(
-				kvStateRegistry,
-				keySerializer,
-				env.getUserClassLoader(),
-				numberOfKeyGroups,
-				keyGroupRange,
-				asynchronousSnapshots,
-				env.getExecutionConfig());
+			kvStateRegistry,
+			keySerializer,
+			env.getUserClassLoader(),
+			numberOfKeyGroups,
+			keyGroupRange,
+			asynchronousSnapshots,
+			env.getExecutionConfig(),
+			FsStateBackend.LocalRecoveryConfig.disabled());
 	}
 }

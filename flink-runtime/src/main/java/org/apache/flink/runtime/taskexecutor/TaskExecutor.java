@@ -66,10 +66,10 @@ import org.apache.flink.runtime.rpc.FatalErrorHandler;
 import org.apache.flink.runtime.rpc.RpcEndpoint;
 import org.apache.flink.runtime.rpc.RpcService;
 import org.apache.flink.runtime.rpc.akka.AkkaRpcServiceUtils;
+import org.apache.flink.runtime.state.TaskExecutorLocalStateStoresManager;
 import org.apache.flink.runtime.state.TaskLocalStateStore;
 import org.apache.flink.runtime.state.TaskStateManager;
 import org.apache.flink.runtime.state.TaskStateManagerImpl;
-import org.apache.flink.runtime.state.TaskExecutorLocalStateStoresManager;
 import org.apache.flink.runtime.taskexecutor.exceptions.CheckpointException;
 import org.apache.flink.runtime.taskexecutor.exceptions.PartitionException;
 import org.apache.flink.runtime.taskexecutor.exceptions.SlotAllocationException;
@@ -288,6 +288,8 @@ public class TaskExecutor extends RpcEndpoint implements TaskExecutorGateway {
 
 		fileCache.shutdown();
 
+		localStateStoresManager.shutdown();
+
 		try {
 			super.postStop();
 		} catch (Throwable e) {
@@ -390,8 +392,9 @@ public class TaskExecutor extends RpcEndpoint implements TaskExecutorGateway {
 			ResultPartitionConsumableNotifier resultPartitionConsumableNotifier = jobManagerConnection.getResultPartitionConsumableNotifier();
 			PartitionProducerStateChecker partitionStateChecker = jobManagerConnection.getPartitionStateChecker();
 
-			final TaskLocalStateStore localStateStore = localStateStoresManager.localStateStoreForTask(
+			final TaskLocalStateStore localStateStore = localStateStoresManager.localStateStoreForSubtask(
 				jobId,
+				tdd.getAllocationId(),
 				taskInformation.getJobVertexId(),
 				tdd.getSubtaskIndex());
 
@@ -682,6 +685,9 @@ public class TaskExecutor extends RpcEndpoint implements TaskExecutorGateway {
 						// just allocated the slot. So let's fail hard in this case!
 						onFatalError(slotNotFoundException);
 					}
+
+					// release local state under the allocation id.
+					localStateStoresManager.releaseLocalStateForAllocationId(allocationId);
 
 					// sanity check
 					if (!taskSlotTable.isSlotFree(slotId.getSlotNumber())) {
@@ -1108,6 +1114,8 @@ public class TaskExecutor extends RpcEndpoint implements TaskExecutorGateway {
 		} catch (SlotNotFoundException e) {
 			log.debug("Could not free slot for allocation id {}.", allocationId, e);
 		}
+
+		localStateStoresManager.releaseLocalStateForAllocationId(allocationId);
 	}
 
 	private void freeSlot(AllocationID allocationId) {

@@ -64,6 +64,7 @@ import org.hamcrest.Matchers;
 import org.junit.Test;
 import org.mockito.Mockito;
 
+import java.io.File;
 import java.net.InetAddress;
 import java.util.Arrays;
 import java.util.Collection;
@@ -138,7 +139,11 @@ public class TaskExecutorITCase extends TestLogger {
 			TestingUtils.infiniteTime(),
 			TestingUtils.infiniteTime());
 
-		final TaskExecutorLocalStateStoresManager taskStateManager = new TaskExecutorLocalStateStoresManager();
+		final File[] taskExecutorLocalStateRootDirs =
+			new File[]{new File(System.getProperty("java.io.tmpdir"), "localRecovery")};
+
+		final TaskExecutorLocalStateStoresManager taskStateManager =
+			new TaskExecutorLocalStateStoresManager(taskExecutorLocalStateRootDirs, rpcService.getExecutor());
 
 		ResourceManager<ResourceID> resourceManager = new StandaloneResourceManager(
 			rpcService,

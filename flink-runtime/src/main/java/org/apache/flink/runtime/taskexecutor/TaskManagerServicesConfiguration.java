@@ -54,6 +54,8 @@ public class TaskManagerServicesConfiguration {
 
 	private final String[] tmpDirPaths;
 
+	private final String[] localRecoveryStateRootDirectories;
+
 	private final int numberOfSlots;
 
 	private final NetworkEnvironmentConfiguration networkConfig;
@@ -78,6 +80,7 @@ public class TaskManagerServicesConfiguration {
 	public TaskManagerServicesConfiguration(
 			InetAddress taskManagerAddress,
 			String[] tmpDirPaths,
+			String[] LocalRecoveryStateRootDirectories,
 			NetworkEnvironmentConfiguration networkConfig,
 			QueryableStateConfiguration queryableStateConfig,
 			int numberOfSlots,
@@ -89,6 +92,7 @@ public class TaskManagerServicesConfiguration {
 
 		this.taskManagerAddress = checkNotNull(taskManagerAddress);
 		this.tmpDirPaths = checkNotNull(tmpDirPaths);
+		this.localRecoveryStateRootDirectories = checkNotNull(LocalRecoveryStateRootDirectories);
 		this.networkConfig = checkNotNull(networkConfig);
 		this.queryableStateConfig = checkNotNull(queryableStateConfig);
 		this.numberOfSlots = checkNotNull(numberOfSlots);
@@ -113,6 +117,10 @@ public class TaskManagerServicesConfiguration {
 
 	public String[] getTmpDirPaths() {
 		return tmpDirPaths;
+	}
+
+	public String[] getLocalRecoveryStateRootDirectories() {
+		return localRecoveryStateRootDirectories;
 	}
 
 	public NetworkEnvironmentConfiguration getNetworkConfig() {
@@ -184,9 +192,15 @@ public class TaskManagerServicesConfiguration {
 			slots = 1;
 		}
 
-		final String[] tmpDirs = configuration.getString(
+		String tmpDirsString = configuration.getString(
 			ConfigConstants.TASK_MANAGER_TMP_DIR_KEY,
-			ConfigConstants.DEFAULT_TASK_MANAGER_TMP_PATH).split(",|" + File.pathSeparator);
+			ConfigConstants.DEFAULT_TASK_MANAGER_TMP_PATH);
+
+		final String[] tmpDirs = tmpDirsString.split(",|" + File.pathSeparator);
+
+		final String[] localStateRootDir = configuration.getString(
+			ConfigConstants.TASK_MANAGER_LOCAL_STATE_ROOT_DIR_KEY,
+			tmpDirsString).split(",|" + File.pathSeparator);
 
 		final NetworkEnvironmentConfiguration networkConfig = parseNetworkEnvironmentConfiguration(
 			configuration,
@@ -227,6 +241,7 @@ public class TaskManagerServicesConfiguration {
 		return new TaskManagerServicesConfiguration(
 			remoteAddress,
 			tmpDirs,
+			localStateRootDir,
 			networkConfig,
 			queryableStateConfig,
 			slots,

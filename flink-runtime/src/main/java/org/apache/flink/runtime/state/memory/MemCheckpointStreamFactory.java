@@ -49,7 +49,7 @@ public class MemCheckpointStreamFactory implements CheckpointStreamFactory {
 
 	@Override
 	public CheckpointStateOutputStream createCheckpointStateOutputStream(
-			long checkpointID, long timestamp) throws Exception
+			long checkpointID, long timestamp) throws IOException
 	{
 		return new MemoryCheckpointOutputStream(maxStateSize);
 	}
@@ -75,7 +75,7 @@ public class MemCheckpointStreamFactory implements CheckpointStreamFactory {
 	 */
 	public static class MemoryCheckpointOutputStream extends CheckpointStateOutputStream {
 
-		private final ByteArrayOutputStreamWithPos os = new ByteArrayOutputStreamWithPos();
+		private final ByteArrayOutputStreamWithPos os;
 
 		private final int maxSize;
 
@@ -85,6 +85,7 @@ public class MemCheckpointStreamFactory implements CheckpointStreamFactory {
 
 		public MemoryCheckpointOutputStream(int maxSize) {
 			this.maxSize = maxSize;
+			this.os = new ByteArrayOutputStreamWithPos(maxSize);
 			this.closed = new AtomicBoolean(false);
 		}
 

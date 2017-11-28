@@ -23,6 +23,7 @@ import org.apache.flink.api.common.state.ListStateDescriptor;
 import org.apache.flink.api.common.state.OperatorStateStore;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.runtime.checkpoint.OperatorSubtaskState;
 import org.apache.flink.runtime.state.StateInitializationContext;
 import org.apache.flink.runtime.state.StateSnapshotContextSynchronousImpl;
 import org.apache.flink.streaming.api.TimeCharacteristic;
@@ -38,7 +39,6 @@ import org.apache.flink.streaming.connectors.kafka.internals.KafkaCommitCallback
 import org.apache.flink.streaming.connectors.kafka.internals.KafkaTopicPartition;
 import org.apache.flink.streaming.connectors.kafka.internals.KafkaTopicsDescriptor;
 import org.apache.flink.streaming.connectors.kafka.testutils.TestPartitionDiscoverer;
-import org.apache.flink.streaming.runtime.tasks.OperatorStateHandles;
 import org.apache.flink.streaming.util.AbstractStreamOperatorTestHarness;
 import org.apache.flink.streaming.util.serialization.KeyedDeserializationSchema;
 import org.apache.flink.util.Preconditions;
@@ -579,13 +579,13 @@ public class FlinkKafkaConsumerBaseTest {
 		assertThat(globalSubscribedPartitions.values(), hasSize(numPartitions));
 		assertThat(mockFetchedPartitionsOnStartup, everyItem(isIn(globalSubscribedPartitions.keySet())));
 
-		OperatorStateHandles[] state = new OperatorStateHandles[initialParallelism];
+		OperatorSubtaskState[] state = new OperatorSubtaskState[initialParallelism];
 
 		for (int i = 0; i < initialParallelism; i++) {
 			state[i] = testHarnesses[i].snapshot(0, 0);
 		}
 
-		OperatorStateHandles mergedState = AbstractStreamOperatorTestHarness.repackageState(state);
+		OperatorSubtaskState mergedState = AbstractStreamOperatorTestHarness.repackageState(state);
 
 		// -----------------------------------------------------------------------------------------
 		// restore

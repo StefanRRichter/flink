@@ -18,6 +18,8 @@
 
 package org.apache.flink.util;
 
+import javax.annotation.Nonnull;
+
 import java.io.Closeable;
 import java.io.IOException;
 import java.util.Collections;
@@ -30,6 +32,9 @@ import java.util.Iterator;
  */
 public interface CloseableIterable<T> extends Iterable<T>, Closeable {
 
+	/**
+	 * Empty iterator.
+	 */
 	class Empty<T> implements CloseableIterable<T> {
 
 		private Empty() {
@@ -40,12 +45,16 @@ public interface CloseableIterable<T> extends Iterable<T>, Closeable {
 
 		}
 
+		@Nonnull
 		@Override
 		public Iterator<T> iterator() {
 			return Collections.emptyIterator();
 		}
 	}
 
+	/**
+	 * Returns an empty iterator.
+	 */
 	static <T> CloseableIterable<T> empty() {
 		return new CloseableIterable.Empty<>();
 	}

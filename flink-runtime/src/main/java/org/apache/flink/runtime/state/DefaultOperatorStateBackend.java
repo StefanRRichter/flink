@@ -34,6 +34,7 @@ import org.apache.flink.core.memory.DataInputViewStreamWrapper;
 import org.apache.flink.core.memory.DataOutputView;
 import org.apache.flink.core.memory.DataOutputViewStreamWrapper;
 import org.apache.flink.runtime.checkpoint.CheckpointOptions;
+import org.apache.flink.runtime.checkpoint.StateObjectCollection;
 import org.apache.flink.runtime.io.async.AbstractAsyncCallableWithResources;
 import org.apache.flink.runtime.io.async.AsyncStoppableTaskWithCallback;
 import org.apache.flink.util.Preconditions;
@@ -46,7 +47,6 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.io.Serializable;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -195,7 +195,7 @@ public class DefaultOperatorStateBackend implements OperatorStateBackend {
 	// -------------------------------------------------------------------------------------------
 
 	@Override
-	public RunnableFuture<OperatorStateHandle> snapshot(
+	public RunnableFuture<SnapshotResult<OperatorStateHandle>> snapshot(
 			final long checkpointId,
 			final long timestamp,
 			final CheckpointStreamFactory streamFactory,
@@ -226,8 +226,8 @@ public class DefaultOperatorStateBackend implements OperatorStateBackend {
 		}
 
 		// implementation of the async IO operation, based on FutureTask
-		final AbstractAsyncCallableWithResources<OperatorStateHandle> ioCallable =
-			new AbstractAsyncCallableWithResources<OperatorStateHandle>() {
+		final AbstractAsyncCallableWithResources<SnapshotResult<OperatorStateHandle>> ioCallable =
+			new AbstractAsyncCallableWithResources<SnapshotResult<OperatorStateHandle>>() {
 
 				CheckpointStreamFactory.CheckpointStateOutputStream out = null;
 
@@ -258,7 +258,7 @@ public class DefaultOperatorStateBackend implements OperatorStateBackend {
 				}
 
 				@Override
-				public OperatorStateHandle performOperation() throws Exception {
+				public SnapshotResult<OperatorStateHandle> performOperation() throws Exception {
 					long asyncStartTime = System.currentTimeMillis();
 
 					CheckpointStreamFactory.CheckpointStateOutputStream localOut = this.out;
@@ -300,7 +300,7 @@ public class DefaultOperatorStateBackend implements OperatorStateBackend {
 						StreamStateHandle stateHandle = out.closeAndGetHandle();
 
 						if (stateHandle != null) {
-							retValue = new OperatorStateHandle(writtenStatesMetaData, stateHandle);
+							retValue = new OperatorStreamStateHandle(writtenStatesMetaData, stateHandle);
 						}
 					}
 
@@ -309,11 +309,12 @@ public class DefaultOperatorStateBackend implements OperatorStateBackend {
 							streamFactory, Thread.currentThread(), (System.currentTimeMillis() - asyncStartTime));
 					}
 
-					return retValue;
+					return new SnapshotResult<>(retValue, null);
 				}
 			};
 
-		AsyncStoppableTaskWithCallback<OperatorStateHandle> task = AsyncStoppableTaskWithCallback.from(ioCallable);
+		AsyncStoppableTaskWithCallback<SnapshotResult<OperatorStateHandle>> task =
+			AsyncStoppableTaskWithCallback.from(ioCallable);
 
 		if (!asynchronousSnapshots) {
 			task.run();
@@ -325,8 +326,7 @@ public class DefaultOperatorStateBackend implements OperatorStateBackend {
 		return task;
 	}
 
-	@Override
-	public void restore(Collection<OperatorStateHandle> restoreSnapshots) throws Exception {
+	public void restore(StateObjectCollection<OperatorStateHandle> restoreSnapshots) throws Exception {
 
 		if (null == restoreSnapshots) {
 			return;

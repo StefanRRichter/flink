@@ -31,6 +31,7 @@ import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.api.java.tuple.Tuple3;
 import org.apache.flink.api.java.typeutils.TypeInfoParser;
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.runtime.checkpoint.OperatorSubtaskState;
 import org.apache.flink.streaming.api.functions.windowing.PassThroughWindowFunction;
 import org.apache.flink.streaming.api.functions.windowing.ProcessWindowFunction;
 import org.apache.flink.streaming.api.functions.windowing.RichWindowFunction;
@@ -60,7 +61,6 @@ import org.apache.flink.streaming.runtime.operators.windowing.functions.Internal
 import org.apache.flink.streaming.runtime.operators.windowing.functions.InternalSingleValueProcessWindowFunction;
 import org.apache.flink.streaming.runtime.operators.windowing.functions.InternalSingleValueWindowFunction;
 import org.apache.flink.streaming.runtime.streamrecord.StreamRecord;
-import org.apache.flink.streaming.runtime.tasks.OperatorStateHandles;
 import org.apache.flink.streaming.util.KeyedOneInputStreamOperatorTestHarness;
 import org.apache.flink.streaming.util.OneInputStreamOperatorTestHarness;
 import org.apache.flink.streaming.util.TestHarnessUtil;
@@ -132,7 +132,7 @@ public class WindowOperatorTest extends TestLogger {
 		TestHarnessUtil.assertOutputEqualsSorted("Output was not correct.", expectedOutput, testHarness.getOutput(), new Tuple2ResultSortComparator());
 
 		// do a snapshot, close and restore again
-		OperatorStateHandles snapshot = testHarness.snapshot(0L, 0L);
+		OperatorSubtaskState snapshot = testHarness.snapshot(0L, 0L);
 		testHarness.close();
 		testHarness.setup();
 		testHarness.initializeState(snapshot);
@@ -261,7 +261,7 @@ public class WindowOperatorTest extends TestLogger {
 		TestHarnessUtil.assertOutputEqualsSorted("Output was not correct.", expectedOutput, testHarness.getOutput(), new Tuple2ResultSortComparator());
 
 		// do a snapshot, close and restore again
-		OperatorStateHandles snapshot = testHarness.snapshot(0L, 0L);
+		OperatorSubtaskState snapshot = testHarness.snapshot(0L, 0L);
 		testHarness.close();
 		testHarness.setup();
 		testHarness.initializeState(snapshot);
@@ -404,7 +404,7 @@ public class WindowOperatorTest extends TestLogger {
 		testHarness.processElement(new StreamRecord<>(new Tuple2<>("key1", 2), 1000));
 
 		// do a snapshot, close and restore again
-		OperatorStateHandles snapshot = testHarness.snapshot(0L, 0L);
+		OperatorSubtaskState snapshot = testHarness.snapshot(0L, 0L);
 		testHarness.close();
 		testHarness.setup();
 		testHarness.initializeState(snapshot);
@@ -477,7 +477,7 @@ public class WindowOperatorTest extends TestLogger {
 		testHarness.processElement(new StreamRecord<>(new Tuple2<>("key1", 2), 1000));
 
 		// do a snapshot, close and restore again
-		OperatorStateHandles snapshot = testHarness.snapshot(0L, 0L);
+		OperatorSubtaskState snapshot = testHarness.snapshot(0L, 0L);
 		testHarness.close();
 		testHarness.setup();
 		testHarness.initializeState(snapshot);
@@ -547,7 +547,7 @@ public class WindowOperatorTest extends TestLogger {
 		testHarness.processElement(new StreamRecord<>(new Tuple2<>("key2", 3), 2500));
 
 		// do a snapshot, close and restore again
-		OperatorStateHandles snapshot = testHarness.snapshot(0L, 0L);
+		OperatorSubtaskState snapshot = testHarness.snapshot(0L, 0L);
 		testHarness.close();
 		testHarness.setup();
 		testHarness.initializeState(snapshot);
@@ -618,7 +618,7 @@ public class WindowOperatorTest extends TestLogger {
 		testHarness.processElement(new StreamRecord<>(new Tuple2<>("key2", 3), 2500));
 
 		// do a snapshot, close and restore again
-		OperatorStateHandles snapshot = testHarness.snapshot(0L, 0L);
+		OperatorSubtaskState snapshot = testHarness.snapshot(0L, 0L);
 		testHarness.close();
 		testHarness.setup();
 		testHarness.initializeState(snapshot);
@@ -697,7 +697,7 @@ public class WindowOperatorTest extends TestLogger {
 		testHarness.processElement(new StreamRecord<>(new Tuple2<>("key1", 2), 1000));
 
 		// do a snapshot, close and restore again
-		OperatorStateHandles snapshot = testHarness.snapshot(0L, 0L);
+		OperatorSubtaskState snapshot = testHarness.snapshot(0L, 0L);
 		testHarness.close();
 		testHarness.setup();
 		testHarness.initializeState(snapshot);
@@ -775,7 +775,7 @@ public class WindowOperatorTest extends TestLogger {
 		expectedOutput.add(new Watermark(3000));
 
 		// do a snapshot, close and restore again
-		OperatorStateHandles snapshot = testHarness.snapshot(0L, 0L);
+		OperatorSubtaskState snapshot = testHarness.snapshot(0L, 0L);
 		testHarness.close();
 		testHarness.setup();
 		testHarness.initializeState(snapshot);
@@ -835,7 +835,7 @@ public class WindowOperatorTest extends TestLogger {
 		testHarness.processElement(new StreamRecord<>(new Tuple2<>("key2", 33), 1000));
 
 		// do a snapshot, close and restore again
-		OperatorStateHandles snapshot = testHarness.snapshot(0L, 0L);
+		OperatorSubtaskState snapshot = testHarness.snapshot(0L, 0L);
 		testHarness.close();
 		testHarness.setup();
 		testHarness.initializeState(snapshot);
@@ -989,7 +989,7 @@ public class WindowOperatorTest extends TestLogger {
 		testHarness.processElement(new StreamRecord<>(new Tuple2<>("key2", 1), 1999));
 
 		// do a snapshot, close and restore again
-		OperatorStateHandles snapshot = testHarness.snapshot(0L, 0L);
+		OperatorSubtaskState snapshot = testHarness.snapshot(0L, 0L);
 
 		testHarness.close();
 

@@ -292,38 +292,7 @@ public abstract class AbstractStreamOperator<OUT>
 	 * @throws Exception An exception in this method causes the operator to fail.
 	 */
 	@Override
-	public void close() throws Exception {
-
-		Exception exception = null;
-
-		StreamTask<?, ?> containingTask = getContainingTask();
-
-		if (containingTask == null) {
-			return; // without a containing task, we have nothing to do here.
-		}
-
-		CloseableRegistry cancelables = containingTask.getCancelables();
-
-		try {
-			if (cancelables.unregisterCloseable(operatorStateBackend)) {
-				operatorStateBackend.close();
-			}
-		} catch (Exception e) {
-			exception = e;
-		}
-
-		try {
-			if (cancelables.unregisterCloseable(keyedStateBackend)) {
-				keyedStateBackend.close();
-			}
-		} catch (Exception e) {
-			exception = ExceptionUtils.firstOrSuppressed(e, exception);
-		}
-
-		if (exception != null) {
-			throw exception;
-		}
-	}
+	public void close() throws Exception {}
 
 	/**
 	 * This method is called at the very end of the operator's life, both in the case of a successful
@@ -337,12 +306,35 @@ public abstract class AbstractStreamOperator<OUT>
 
 		Exception exception = null;
 
+		StreamTask<?, ?> containingTask = getContainingTask();
+		CloseableRegistry taskCloseableRegistry = containingTask != null ?
+			containingTask.getCancelables() :
+			null;
+
+		try {
+			if (taskCloseableRegistry == null ||
+				taskCloseableRegistry.unregisterCloseable(operatorStateBackend)) {
+				operatorStateBackend.close();
+			}
+		} catch (Exception e) {
+			exception = e;
+		}
+
+		try {
+			if (taskCloseableRegistry == null ||
+				taskCloseableRegistry.unregisterCloseable(keyedStateBackend)) {
+				keyedStateBackend.close();
+			}
+		} catch (Exception e) {
+			exception = ExceptionUtils.firstOrSuppressed(e, exception);
+		}
+
 		try {
 			if (operatorStateBackend != null) {
 				operatorStateBackend.dispose();
 			}
 		} catch (Exception e) {
-			exception = e;
+			exception = ExceptionUtils.firstOrSuppressed(e, exception);
 		}
 
 		try {
@@ -359,12 +351,15 @@ public abstract class AbstractStreamOperator<OUT>
 	}
 
 	@Override
-	public final OperatorSnapshotResult snapshotState(long checkpointId, long timestamp, CheckpointOptions checkpointOptions) throws Exception {
+	public final OperatorSnapshotFutures snapshotState(
+		long checkpointId,
+		long timestamp,
+		CheckpointOptions checkpointOptions) throws Exception {
 
 		KeyGroupRange keyGroupRange = null != keyedStateBackend ?
 				keyedStateBackend.getKeyGroupRange() : KeyGroupRange.EMPTY_KEY_GROUP_RANGE;
 
-		OperatorSnapshotResult snapshotInProgress = new OperatorSnapshotResult();
+		OperatorSnapshotFutures snapshotInProgress = new OperatorSnapshotFutures();
 
 		CheckpointStreamFactory factory = getCheckpointStreamFactory(checkpointOptions);
 

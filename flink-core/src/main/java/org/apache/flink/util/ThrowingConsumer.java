@@ -22,16 +22,17 @@ package org.apache.flink.util;
  * This interface is basically Java's {@link java.util.function.Consumer} interface enhanced with the ability to throw
  * an exception.
  *
- * @param <T> type of the consumed elements.
+ * @param <IN> type of the consumed elements.
+ * @param <T> type of {@link Throwable}.
  */
 @FunctionalInterface
-public interface ThrowingConsumer<T> {
+public interface ThrowingConsumer<IN, T extends Throwable> {
 
 	/**
 	 * Performs this operation on the given argument.
 	 *
-	 * @param t the input argument
-	 * @throws Exception on errors during consumption
+	 * @param in the input argument.
+	 * @throws T on errors during consumption.
 	 */
-	void accept(T t) throws Exception;
+	void accept(IN in) throws T;
 }

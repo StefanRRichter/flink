@@ -43,6 +43,7 @@ import org.apache.flink.runtime.state.AbstractStateBackend;
 import org.apache.flink.runtime.state.CheckpointStreamFactory;
 import org.apache.flink.runtime.state.KeyGroupRange;
 import org.apache.flink.runtime.state.KeyedStateHandle;
+import org.apache.flink.runtime.state.SnapshotResult;
 import org.apache.flink.runtime.state.TestTaskStateManager;
 import org.apache.flink.runtime.state.VoidNamespace;
 import org.apache.flink.runtime.state.VoidNamespaceSerializer;
@@ -50,6 +51,7 @@ import org.apache.flink.runtime.state.memory.MemCheckpointStreamFactory;
 import org.apache.flink.runtime.state.memory.MemoryStateBackend;
 import org.apache.flink.runtime.taskmanager.CheckpointResponder;
 import org.apache.flink.runtime.util.BlockerCheckpointStreamFactory;
+import org.apache.flink.runtime.util.BlockingCheckpointOutputStream;
 import org.apache.flink.streaming.api.graph.StreamConfig;
 import org.apache.flink.streaming.api.operators.AbstractStreamOperator;
 import org.apache.flink.streaming.api.operators.OneInputStreamOperator;
@@ -254,15 +256,19 @@ public class RocksDBAsyncSnapshotTest extends TestLogger {
 			int count = 1;
 
 			@Override
-			public MemCheckpointStreamFactory.MemoryCheckpointOutputStream createCheckpointStateOutputStream(
+			public BlockingCheckpointOutputStream createCheckpointStateOutputStream(
 				long checkpointID,
-				long timestamp) throws Exception {
+				long timestamp) throws IOException {
 
 				// we skip the first created stream, because it is used to checkpoint the timer service, which is
 				// currently not asynchronous.
 				if (count > 0) {
 					--count;
-					return new MemCheckpointStreamFactory.MemoryCheckpointOutputStream(maxSize);
+					return new BlockingCheckpointOutputStream(
+						new MemCheckpointStreamFactory.MemoryCheckpointOutputStream(maxSize),
+						null,
+						null,
+						Integer.MAX_VALUE);
 				} else {
 					return super.createCheckpointStateOutputStream(checkpointID, timestamp);
 				}
@@ -376,7 +382,7 @@ public class RocksDBAsyncSnapshotTest extends TestLogger {
 				StringSerializer.INSTANCE,
 				new ValueStateDescriptor<>("foobar", String.class));
 
-			RunnableFuture<KeyedStateHandle> snapshotFuture = keyedStateBackend.snapshot(
+			RunnableFuture<SnapshotResult<KeyedStateHandle>> snapshotFuture = keyedStateBackend.snapshot(
 				checkpointId, timestamp, checkpointStreamFactory, CheckpointOptions.forCheckpoint());
 
 			try {

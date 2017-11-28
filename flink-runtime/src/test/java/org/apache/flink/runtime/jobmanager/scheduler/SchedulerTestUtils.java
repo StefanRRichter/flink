@@ -21,7 +21,6 @@ package org.apache.flink.runtime.jobmanager.scheduler;
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.runtime.clusterframework.types.ResourceID;
 import org.apache.flink.runtime.executiongraph.Execution;
-import org.apache.flink.runtime.executiongraph.ExecutionJobVertex;
 import org.apache.flink.runtime.executiongraph.ExecutionVertex;
 import org.apache.flink.runtime.instance.DummyActorGateway;
 import org.apache.flink.runtime.instance.HardwareDescription;
@@ -91,7 +90,7 @@ public class SchedulerTestUtils {
 		when(vertex.toString()).thenReturn("TEST-VERTEX");
 		when(vertex.getJobVertex()).thenReturn(executionJobVertex);
 		when(vertex.getJobvertexId()).thenReturn(new JobVertexID());
-		
+
 		Execution execution = mock(Execution.class);
 		when(execution.getVertex()).thenReturn(vertex);
 		
@@ -126,6 +125,7 @@ public class SchedulerTestUtils {
 		ExecutionVertex vertex = mock(ExecutionVertex.class);
 
 		when(vertex.getPreferredLocationsBasedOnInputs()).thenReturn(preferredLocationFutures);
+		when(vertex.getPreferredLocations()).thenReturn(preferredLocationFutures);
 		when(vertex.getJobId()).thenReturn(new JobID());
 		when(vertex.toString()).thenReturn("TEST-VERTEX");
 		when(vertex.getJobVertex()).thenReturn(executionJobVertex);
@@ -152,7 +152,7 @@ public class SchedulerTestUtils {
 		when(vertex.toString()).thenReturn("TEST-VERTEX");
 		when(vertex.getTaskNameWithSubtaskIndex()).thenReturn("TEST-VERTEX");
 		when(vertex.getJobVertex()).thenReturn(executionJobVertex);
-		
+
 		Execution execution = mock(Execution.class);
 		when(execution.getVertex()).thenReturn(vertex);
 		

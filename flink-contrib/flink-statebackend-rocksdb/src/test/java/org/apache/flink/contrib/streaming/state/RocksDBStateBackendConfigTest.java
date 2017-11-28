@@ -30,6 +30,7 @@ import org.apache.flink.runtime.query.KvStateRegistry;
 import org.apache.flink.runtime.state.AbstractKeyedStateBackend;
 import org.apache.flink.runtime.state.AbstractStateBackend;
 import org.apache.flink.runtime.state.KeyGroupRange;
+import org.apache.flink.runtime.state.TestTaskStateManager;
 import org.apache.flink.runtime.taskmanager.TaskManagerRuntimeInfo;
 import org.apache.flink.runtime.util.TestingTaskManagerRuntimeInfo;
 
@@ -66,7 +67,6 @@ import static org.mockito.Mockito.when;
  */
 @SuppressWarnings("serial")
 public class RocksDBStateBackendConfigTest {
-
 
 	@Rule
 	public TemporaryFolder tempFolder = new TemporaryFolder();
@@ -382,6 +382,9 @@ public class RocksDBStateBackendConfigTest {
 
 		TaskManagerRuntimeInfo tmInfo = new TestingTaskManagerRuntimeInfo(new Configuration(), tempDirStrings);
 		when(env.getTaskManagerInfo()).thenReturn(tmInfo);
+
+		TestTaskStateManager taskStateManager = new TestTaskStateManager();
+		when(env.getTaskStateManager()).thenReturn(taskStateManager);
 
 		return env;
 	}

@@ -29,8 +29,12 @@ import org.apache.flink.runtime.state.AbstractStateBackend;
 import org.apache.flink.runtime.state.CheckpointStreamFactory;
 import org.apache.flink.runtime.state.DefaultOperatorStateBackend;
 import org.apache.flink.runtime.state.KeyGroupRange;
+import org.apache.flink.runtime.state.LocalRecoveryConfigBase;
+import org.apache.flink.runtime.state.LocalRecoveryDirectoryProvider;
 import org.apache.flink.runtime.state.OperatorStateBackend;
+import org.apache.flink.runtime.state.TaskStateManager;
 import org.apache.flink.runtime.state.heap.HeapKeyedStateBackend;
+import org.apache.flink.util.Preconditions;
 
 import java.io.IOException;
 import java.net.URI;
@@ -66,6 +70,9 @@ public class FsStateBackend extends AbstractStateBackend {
 
 	/** Switch to chose between synchronous and asynchronous snapshots */
 	private final boolean asynchronousSnapshots;
+
+	/** The setting for local recovery (disabled by default). */
+	private LocalRecoveryMode localRecoveryMode;
 
 	/**
 	 * Creates a new state backend that stores its checkpoint data in the file system and location
@@ -243,6 +250,7 @@ public class FsStateBackend extends AbstractStateBackend {
 		this.basePath = validateAndNormalizeUri(checkpointDataUri);
 
 		this.asynchronousSnapshots = asynchronousSnapshots;
+		this.localRecoveryMode = LocalRecoveryMode.DISABLED;
 	}
 
 	/**
@@ -266,6 +274,20 @@ public class FsStateBackend extends AbstractStateBackend {
 	 */
 	public int getMinFileSizeThreshold() {
 		return fileStateThreshold;
+	}
+
+	/**
+	 * Returns the currently configured local recovery mode.
+	 */
+	public LocalRecoveryMode getLocalRecoveryMode() {
+		return localRecoveryMode;
+	}
+
+	/**
+	 * Sets the local recovery mode.
+	 */
+	public void setLocalRecoveryMode(LocalRecoveryMode localRecoveryMode) {
+		this.localRecoveryMode = Preconditions.checkNotNull(localRecoveryMode);
 	}
 
 	// ------------------------------------------------------------------------
@@ -296,14 +318,20 @@ public class FsStateBackend extends AbstractStateBackend {
 			KeyGroupRange keyGroupRange,
 			TaskKvStateRegistry kvStateRegistry) throws IOException {
 
+		TaskStateManager taskStateManager = env.getTaskStateManager();
+		LocalRecoveryConfig localRecoveryConfig = new LocalRecoveryConfig(
+			localRecoveryMode,
+			taskStateManager.createLocalRecoveryRootDirectoryProvider());
+
 		return new HeapKeyedStateBackend<>(
-				kvStateRegistry,
-				keySerializer,
-				env.getUserClassLoader(),
-				numberOfKeyGroups,
-				keyGroupRange,
-				asynchronousSnapshots,
-				env.getExecutionConfig());
+			kvStateRegistry,
+			keySerializer,
+			env.getUserClassLoader(),
+			numberOfKeyGroups,
+			keyGroupRange,
+			asynchronousSnapshots,
+			env.getExecutionConfig(),
+			localRecoveryConfig);
 	}
 
 	@Override
@@ -354,5 +382,48 @@ public class FsStateBackend extends AbstractStateBackend {
 		}
 
 		return new Path(checkpointDataUri);
+	}
+
+	/**
+	 * This enum represents the different modes for local recovery.
+	 */
+	public enum LocalRecoveryMode {
+		//TODO we can implement local state based on heap objects in the future.
+		DISABLED, ENABLE_FILE_BASED /*, ENABLE_HEAP_BASED */
+	}
+
+	/**
+	 * This class encapsulates the configuration for local recovery of this backend.
+	 */
+	public static final class LocalRecoveryConfig extends LocalRecoveryConfigBase {
+
+		private static final LocalRecoveryConfig DISABLED_SINGLETON =
+			new LocalRecoveryConfig(LocalRecoveryMode.DISABLED, null);
+
+		private final LocalRecoveryMode localRecoveryMode;
+
+		LocalRecoveryConfig(LocalRecoveryMode localRecoveryMode, LocalRecoveryDirectoryProvider rotatingDirectoryProvider) {
+			super(rotatingDirectoryProvider);
+			this.localRecoveryMode = Preconditions.checkNotNull(localRecoveryMode);
+			if (LocalRecoveryMode.ENABLE_FILE_BASED.equals(localRecoveryMode) && rotatingDirectoryProvider == null) {
+				throw new IllegalStateException("Local state directory must be specified if local recovery mode is " +
+					LocalRecoveryMode.ENABLE_FILE_BASED);
+			}
+		}
+
+		public LocalRecoveryMode getLocalRecoveryMode() {
+			return localRecoveryMode;
+		}
+
+		public static LocalRecoveryConfig disabled() {
+			return DISABLED_SINGLETON;
+		}
+
+		@Override
+		public String toString() {
+			return "LocalRecoveryConfig{" +
+				"localRecoveryMode=" + localRecoveryMode +
+				"} " + super.toString();
+		}
 	}
 }

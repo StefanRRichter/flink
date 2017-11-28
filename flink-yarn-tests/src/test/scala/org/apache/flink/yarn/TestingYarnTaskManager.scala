@@ -24,6 +24,7 @@ import org.apache.flink.runtime.io.disk.iomanager.IOManager
 import org.apache.flink.runtime.io.network.NetworkEnvironment
 import org.apache.flink.runtime.memory.MemoryManager
 import org.apache.flink.runtime.metrics.groups.TaskManagerMetricGroup
+import org.apache.flink.runtime.state.TaskExecutorLocalStateStoresManager
 import org.apache.flink.runtime.taskexecutor.TaskManagerConfiguration
 import org.apache.flink.runtime.taskmanager.TaskManagerLocation
 import org.apache.flink.runtime.testingUtils.TestingTaskManagerLike
@@ -39,6 +40,7 @@ import org.apache.flink.runtime.testingUtils.TestingTaskManagerLike
   * @param memoryManager MemoryManager which is responsibel for Flink's managed memory allocation
   * @param ioManager IOManager responsible for I/O
   * @param network NetworkEnvironment for this actor
+  * @param taskManagerLocalStateStoresManager Task manager state store manager for this actor
   * @param numberOfSlots Number of slots for this TaskManager
   * @param highAvailabilityServices [[HighAvailabilityServices]] to create a leader retrieval
   *                                service for retrieving the leading JobManager
@@ -50,6 +52,7 @@ class TestingYarnTaskManager(
     memoryManager: MemoryManager,
     ioManager: IOManager,
     network: NetworkEnvironment,
+    taskManagerLocalStateStoresManager: TaskExecutorLocalStateStoresManager,
     numberOfSlots: Int,
     highAvailabilityServices: HighAvailabilityServices,
     taskManagerMetricGroup : TaskManagerMetricGroup)
@@ -60,6 +63,7 @@ class TestingYarnTaskManager(
     memoryManager,
     ioManager,
     network,
+    taskManagerLocalStateStoresManager,
     numberOfSlots,
     highAvailabilityServices,
     taskManagerMetricGroup)

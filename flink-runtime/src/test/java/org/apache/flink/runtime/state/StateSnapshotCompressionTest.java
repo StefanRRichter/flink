@@ -22,7 +22,9 @@ import org.apache.flink.api.common.ExecutionConfig;
 import org.apache.flink.api.common.state.ValueStateDescriptor;
 import org.apache.flink.api.common.typeutils.base.StringSerializer;
 import org.apache.flink.runtime.checkpoint.CheckpointOptions;
+import org.apache.flink.runtime.checkpoint.StateObjectCollection;
 import org.apache.flink.runtime.query.TaskKvStateRegistry;
+import org.apache.flink.runtime.state.filesystem.FsStateBackend;
 import org.apache.flink.runtime.state.heap.HeapKeyedStateBackend;
 import org.apache.flink.runtime.state.internal.InternalValueState;
 import org.apache.flink.runtime.state.memory.MemCheckpointStreamFactory;
@@ -32,7 +34,6 @@ import org.apache.commons.io.IOUtils;
 import org.junit.Assert;
 import org.junit.Test;
 
-import java.util.Collections;
 import java.util.concurrent.RunnableFuture;
 
 import static org.mockito.Mockito.mock;
@@ -52,7 +53,8 @@ public class StateSnapshotCompressionTest extends TestLogger {
 			16,
 			new KeyGroupRange(0, 15),
 			true,
-			executionConfig);
+			executionConfig,
+			FsStateBackend.LocalRecoveryConfig.disabled());
 
 		try {
 			Assert.assertTrue(
@@ -73,7 +75,8 @@ public class StateSnapshotCompressionTest extends TestLogger {
 			16,
 			new KeyGroupRange(0, 15),
 			true,
-			executionConfig);
+			executionConfig,
+			FsStateBackend.LocalRecoveryConfig.disabled());
 
 		try {
 			Assert.assertTrue(
@@ -112,7 +115,8 @@ public class StateSnapshotCompressionTest extends TestLogger {
 			16,
 			new KeyGroupRange(0, 15),
 			true,
-			executionConfig);
+			executionConfig,
+			FsStateBackend.LocalRecoveryConfig.disabled());
 
 		try {
 
@@ -134,10 +138,11 @@ public class StateSnapshotCompressionTest extends TestLogger {
 			state.setCurrentNamespace(VoidNamespace.INSTANCE);
 			state.update("45");
 			CheckpointStreamFactory streamFactory = new MemCheckpointStreamFactory(4 * 1024 * 1024);
-			RunnableFuture<KeyedStateHandle> snapshot =
+			RunnableFuture<SnapshotResult<KeyedStateHandle>> snapshot =
 				stateBackend.snapshot(0L, 0L, streamFactory, CheckpointOptions.forCheckpoint());
 			snapshot.run();
-			stateHandle = snapshot.get();
+			SnapshotResult<KeyedStateHandle> snapshotResult = snapshot.get();
+			stateHandle = snapshotResult != null ? snapshotResult.getJobManagerOwnedSnapshot() : null;
 
 		} finally {
 			IOUtils.closeQuietly(stateBackend);
@@ -153,10 +158,11 @@ public class StateSnapshotCompressionTest extends TestLogger {
 			16,
 			new KeyGroupRange(0, 15),
 			true,
-			executionConfig);
+			executionConfig,
+			FsStateBackend.LocalRecoveryConfig.disabled());
 		try {
 
-			stateBackend.restore(Collections.singletonList(stateHandle));
+			stateBackend.restore(StateObjectCollection.singleton(stateHandle));
 
 			InternalValueState<VoidNamespace, String> state = stateBackend.createValueState(
 				new VoidNamespaceSerializer(),

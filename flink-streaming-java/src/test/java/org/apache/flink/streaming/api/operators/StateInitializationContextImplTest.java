@@ -30,6 +30,7 @@ import org.apache.flink.core.memory.DataOutputView;
 import org.apache.flink.core.memory.DataOutputViewStreamWrapper;
 import org.apache.flink.runtime.checkpoint.JobManagerTaskRestore;
 import org.apache.flink.runtime.checkpoint.OperatorSubtaskState;
+import org.apache.flink.runtime.checkpoint.StateObjectCollection;
 import org.apache.flink.runtime.checkpoint.TaskStateSnapshot;
 import org.apache.flink.runtime.executiongraph.ExecutionAttemptID;
 import org.apache.flink.runtime.jobgraph.OperatorID;
@@ -42,10 +43,11 @@ import org.apache.flink.runtime.state.KeyGroupStatePartitionStreamProvider;
 import org.apache.flink.runtime.state.KeyGroupsStateHandle;
 import org.apache.flink.runtime.state.KeyedStateHandle;
 import org.apache.flink.runtime.state.OperatorStateHandle;
+import org.apache.flink.runtime.state.OperatorStreamStateHandle;
 import org.apache.flink.runtime.state.StateBackend;
 import org.apache.flink.runtime.state.StateInitializationContextImpl;
 import org.apache.flink.runtime.state.StatePartitionStreamProvider;
-import org.apache.flink.runtime.state.TaskLocalStateStore;
+import org.apache.flink.runtime.state.TaskLocalStateStoreImpl;
 import org.apache.flink.runtime.state.TaskStateManager;
 import org.apache.flink.runtime.state.TaskStateManagerImpl;
 import org.apache.flink.runtime.state.memory.ByteStreamStateHandle;
@@ -62,7 +64,6 @@ import org.junit.Test;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -136,15 +137,15 @@ public class StateInitializationContextImplTest {
 					DefaultOperatorStateBackend.DEFAULT_OPERATOR_STATE_NAME,
 					new OperatorStateHandle.StateMetaInfo(offsets.toArray(), OperatorStateHandle.Mode.SPLIT_DISTRIBUTE));
 			OperatorStateHandle operatorStateHandle =
-					new OperatorStateHandle(offsetsMap, new ByteStateHandleCloseChecking("os-" + i, out.toByteArray()));
+					new OperatorStreamStateHandle(offsetsMap, new ByteStateHandleCloseChecking("os-" + i, out.toByteArray()));
 			operatorStateHandles.add(operatorStateHandle);
 		}
 
 		OperatorSubtaskState operatorSubtaskState = new OperatorSubtaskState(
-			Collections.emptyList(),
-			operatorStateHandles,
-			Collections.emptyList(),
-			keyedStateHandles);
+			StateObjectCollection.empty(),
+			new StateObjectCollection<>(operatorStateHandles),
+			StateObjectCollection.empty(),
+			new StateObjectCollection<>(keyedStateHandles));
 
 		OperatorID operatorID = new OperatorID();
 		TaskStateSnapshot taskStateSnapshot = new TaskStateSnapshot();
@@ -155,7 +156,7 @@ public class StateInitializationContextImplTest {
 		TaskStateManager manager = new TaskStateManagerImpl(
 			new JobID(),
 			new ExecutionAttemptID(),
-			mock(TaskLocalStateStore.class),
+			mock(TaskLocalStateStoreImpl.class),
 			jobManagerTaskRestore,
 			mock(CheckpointResponder.class));
 

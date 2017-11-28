@@ -23,6 +23,7 @@ import org.apache.flink.runtime.checkpoint.CheckpointIDCounter;
 import org.apache.flink.runtime.checkpoint.MasterState;
 import org.apache.flink.runtime.checkpoint.OperatorState;
 import org.apache.flink.runtime.checkpoint.TaskState;
+import org.apache.flink.util.Disposable;
 
 import java.util.Collection;
 
@@ -37,7 +38,7 @@ import java.util.Collection;
  * <p>Savepoints are serialized via a {@link SavepointSerializer} and stored
  * via a {@link SavepointStore}.
  */
-public interface Savepoint extends Versioned {
+public interface Savepoint extends Disposable, Versioned {
 
 	/**
 	 * Returns the checkpoint ID of the savepoint.
@@ -74,10 +75,5 @@ public interface Savepoint extends Versioned {
 	 * @return Snapshotted operator states
 	 */
 	Collection<OperatorState> getOperatorStates();
-
-	/**
-	 * Disposes the savepoint.
-	 */
-	void dispose() throws Exception;
 
 }
