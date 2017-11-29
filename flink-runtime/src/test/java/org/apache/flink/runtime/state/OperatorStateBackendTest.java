@@ -32,12 +32,14 @@ import org.apache.flink.core.memory.DataInputViewStreamWrapper;
 import org.apache.flink.core.memory.DataOutputView;
 import org.apache.flink.core.testutils.OneShotLatch;
 import org.apache.flink.runtime.checkpoint.CheckpointOptions;
+import org.apache.flink.runtime.checkpoint.StateObjectCollection;
 import org.apache.flink.runtime.execution.Environment;
 import org.apache.flink.runtime.state.DefaultOperatorStateBackend.PartitionableListState;
 import org.apache.flink.runtime.state.memory.MemoryStateBackend;
 import org.apache.flink.runtime.util.BlockerCheckpointStreamFactory;
 import org.apache.flink.util.FutureUtil;
 import org.apache.flink.util.Preconditions;
+
 import org.junit.Assert;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -48,7 +50,6 @@ import org.powermock.modules.junit4.PowerMockRunner;
 import java.io.File;
 import java.io.IOException;
 import java.io.Serializable;
-import java.util.Collections;
 import java.util.Iterator;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.ExecutionException;
@@ -399,7 +400,7 @@ public class OperatorStateBackendTest {
 					createMockEnvironment(),
 					"testOperator");
 
-			operatorStateBackend.restore(Collections.singletonList(stateHandle));
+			operatorStateBackend.restore(StateObjectCollection.singleton(stateHandle));
 
 			assertEquals(3, operatorStateBackend.getRegisteredStateNames().size());
 
@@ -512,7 +513,7 @@ public class OperatorStateBackendTest {
 					createMockEnvironment(),
 					"testOperator");
 
-			operatorStateBackend.restore(Collections.singletonList(stateHandle));
+			operatorStateBackend.restore(StateObjectCollection.singleton(stateHandle));
 
 			assertEquals(3, operatorStateBackend.getRegisteredStateNames().size());
 
@@ -685,7 +686,7 @@ public class OperatorStateBackendTest {
 			doThrow(new IOException()).when(mockProxy).read(any(DataInputViewStreamWrapper.class));
 			PowerMockito.whenNew(TypeSerializerSerializationUtil.TypeSerializerSerializationProxy.class).withAnyArguments().thenReturn(mockProxy);
 
-			operatorStateBackend.restore(Collections.singletonList(stateHandle));
+			operatorStateBackend.restore(StateObjectCollection.singleton(stateHandle));
 
 			fail("The operator state restore should have failed if the previous state serializer could not be loaded.");
 		} catch (IOException expected) {

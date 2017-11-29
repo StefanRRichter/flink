@@ -53,6 +53,7 @@ import org.apache.flink.queryablestate.KvStateID;
 import org.apache.flink.queryablestate.client.state.serialization.KvStateSerializer;
 import org.apache.flink.runtime.checkpoint.CheckpointOptions;
 import org.apache.flink.runtime.checkpoint.StateAssignmentOperation;
+import org.apache.flink.runtime.checkpoint.StateObjectCollection;
 import org.apache.flink.runtime.execution.Environment;
 import org.apache.flink.runtime.operators.testutils.DummyEnvironment;
 import org.apache.flink.runtime.query.KvStateRegistry;
@@ -194,7 +195,7 @@ public abstract class StateBackendTestBase<B extends AbstractStateBackend> exten
 			keyGroupRange,
 			env.getTaskKvStateRegistry());
 
-		backend.restore(state);
+		backend.restore(new StateObjectCollection<>(state));
 
 		return backend;
 	}
