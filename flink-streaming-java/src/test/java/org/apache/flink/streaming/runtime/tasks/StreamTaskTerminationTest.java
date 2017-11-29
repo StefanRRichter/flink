@@ -57,6 +57,7 @@ import org.apache.flink.runtime.state.CheckpointStreamFactory;
 import org.apache.flink.runtime.state.KeyGroupRange;
 import org.apache.flink.runtime.state.OperatorStateBackend;
 import org.apache.flink.runtime.state.OperatorStateHandle;
+import org.apache.flink.runtime.state.SnapshotResult;
 import org.apache.flink.runtime.state.StateBackend;
 import org.apache.flink.runtime.state.StreamStateHandle;
 import org.apache.flink.runtime.state.TestTaskStateManager;
@@ -293,10 +294,10 @@ public class StreamTaskTerminationTest extends TestLogger {
 		}
 	}
 
-	static class BlockingCallable implements Callable<OperatorStateHandle> {
+	static class BlockingCallable implements Callable<SnapshotResult<OperatorStateHandle>> {
 
 		@Override
-		public OperatorStateHandle call() throws Exception {
+		public SnapshotResult<OperatorStateHandle> call() throws Exception {
 			// notify that we have started the asynchronous checkpointed operation
 			CHECKPOINTING_LATCH.trigger();
 			// wait until we have reached the StreamTask#cleanup --> This will already cancel this FutureTask

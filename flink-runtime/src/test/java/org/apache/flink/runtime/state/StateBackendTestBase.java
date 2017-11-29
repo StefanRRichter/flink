@@ -69,7 +69,6 @@ import org.apache.flink.runtime.state.internal.InternalValueState;
 import org.apache.flink.runtime.util.BlockerCheckpointStreamFactory;
 import org.apache.flink.shaded.guava18.com.google.common.base.Joiner;
 import org.apache.flink.types.IntValue;
-import org.apache.flink.util.FutureUtil;
 import org.apache.flink.util.IOUtils;
 import org.apache.flink.util.StateMigrationException;
 import org.apache.flink.util.TestLogger;
@@ -887,7 +886,7 @@ public abstract class StateBackendTestBase<B extends AbstractStateBackend> exten
 		assertEquals("1", getSerializedValue(kvState, 1, keySerializer, VoidNamespace.INSTANCE, namespaceSerializer, valueSerializer));
 
 		// draw a snapshot
-		KeyedStateHandle snapshot1 = FutureUtil.runIfNotDoneAndGet(backend.snapshot(682375462378L, 2, streamFactory, CheckpointOptions.forCheckpoint()));
+		KeyedStateHandle snapshot1 = runSnapshot(backend.snapshot(682375462378L, 2, streamFactory, CheckpointOptions.forCheckpoint()));
 
 		// make some more modifications
 		backend.setCurrentKey(1);
@@ -898,7 +897,7 @@ public abstract class StateBackendTestBase<B extends AbstractStateBackend> exten
 		state.update("u3");
 
 		// draw another snapshot
-		KeyedStateHandle snapshot2 = FutureUtil.runIfNotDoneAndGet(backend.snapshot(682375462379L, 4, streamFactory, CheckpointOptions.forCheckpoint()));
+		KeyedStateHandle snapshot2 = runSnapshot(backend.snapshot(682375462379L, 4, streamFactory, CheckpointOptions.forCheckpoint()));
 
 		// validate the original state
 		backend.setCurrentKey(1);
@@ -1097,7 +1096,8 @@ public abstract class StateBackendTestBase<B extends AbstractStateBackend> exten
 		assertEquals(13, (int) state2.value());
 
 		// draw a snapshot
-		KeyedStateHandle snapshot1 = FutureUtil.runIfNotDoneAndGet(backend.snapshot(682375462378L, 2, streamFactory, CheckpointOptions.forCheckpoint()));
+		KeyedStateHandle snapshot1 =
+			runSnapshot(backend.snapshot(682375462378L, 2, streamFactory, CheckpointOptions.forCheckpoint()));
 
 		backend.dispose();
 		backend = restoreKeyedBackend(
@@ -1169,7 +1169,7 @@ public abstract class StateBackendTestBase<B extends AbstractStateBackend> exten
 		assertEquals(42L, (long) state.value());
 
 		// draw a snapshot
-		KeyedStateHandle snapshot1 = FutureUtil.runIfNotDoneAndGet(backend.snapshot(682375462378L, 2, streamFactory, CheckpointOptions.forCheckpoint()));
+		KeyedStateHandle snapshot1 = runSnapshot(backend.snapshot(682375462378L, 2, streamFactory, CheckpointOptions.forCheckpoint()));
 
 		backend.dispose();
 		backend = restoreKeyedBackend(IntSerializer.INSTANCE, snapshot1);
@@ -1750,7 +1750,7 @@ public abstract class StateBackendTestBase<B extends AbstractStateBackend> exten
 
 		final AggregatingStateDescriptor<Long, MutableLong, Long> stateDescr =
 			new AggregatingStateDescriptor<>("my-state", new MutableAggregatingAddingFunction(), MutableLong.class);
-		
+
 		AbstractKeyedStateBackend<String> keyedBackend = createKeyedBackend(StringSerializer.INSTANCE);
 
 		try {
@@ -2543,7 +2543,7 @@ public abstract class StateBackendTestBase<B extends AbstractStateBackend> exten
 		state.update("ShouldBeInSecondHalf");
 
 
-		KeyedStateHandle snapshot = FutureUtil.runIfNotDoneAndGet(backend.snapshot(0, 0, streamFactory, CheckpointOptions.forCheckpoint()));
+		KeyedStateHandle snapshot = runSnapshot(backend.snapshot(0, 0, streamFactory, CheckpointOptions.forCheckpoint()));
 
 		List<KeyedStateHandle> firstHalfKeyGroupStates = StateAssignmentOperation.getKeyedStateHandles(
 				Collections.singletonList(snapshot),
@@ -2610,7 +2610,7 @@ public abstract class StateBackendTestBase<B extends AbstractStateBackend> exten
 		state.update("2");
 
 		// draw a snapshot
-		KeyedStateHandle snapshot1 = FutureUtil.runIfNotDoneAndGet(backend.snapshot(682375462378L, 2, streamFactory, CheckpointOptions.forCheckpoint()));
+		KeyedStateHandle snapshot1 = runSnapshot(backend.snapshot(682375462378L, 2, streamFactory, CheckpointOptions.forCheckpoint()));
 
 		backend.dispose();
 
@@ -2641,7 +2641,7 @@ public abstract class StateBackendTestBase<B extends AbstractStateBackend> exten
 			state.update("2");
 
 			// draw a snapshot
-			KeyedStateHandle snapshot1 = FutureUtil.runIfNotDoneAndGet(backend.snapshot(682375462378L, 2, streamFactory, CheckpointOptions.forCheckpoint()));
+			KeyedStateHandle snapshot1 = runSnapshot(backend.snapshot(682375462378L, 2, streamFactory, CheckpointOptions.forCheckpoint()));
 
 			backend.dispose();
 			// restore the first snapshot and validate it
@@ -2684,7 +2684,7 @@ public abstract class StateBackendTestBase<B extends AbstractStateBackend> exten
 			state.add("2");
 
 			// draw a snapshot
-			KeyedStateHandle snapshot1 = FutureUtil.runIfNotDoneAndGet(backend.snapshot(682375462378L, 2, streamFactory, CheckpointOptions.forCheckpoint()));
+			KeyedStateHandle snapshot1 = runSnapshot(backend.snapshot(682375462378L, 2, streamFactory, CheckpointOptions.forCheckpoint()));
 
 			backend.dispose();
 			// restore the first snapshot and validate it
@@ -2729,7 +2729,7 @@ public abstract class StateBackendTestBase<B extends AbstractStateBackend> exten
 			state.add("2");
 
 			// draw a snapshot
-			KeyedStateHandle snapshot1 = FutureUtil.runIfNotDoneAndGet(backend.snapshot(682375462378L, 2, streamFactory, CheckpointOptions.forCheckpoint()));
+			KeyedStateHandle snapshot1 = runSnapshot(backend.snapshot(682375462378L, 2, streamFactory, CheckpointOptions.forCheckpoint()));
 
 			backend.dispose();
 			// restore the first snapshot and validate it
@@ -2772,7 +2772,7 @@ public abstract class StateBackendTestBase<B extends AbstractStateBackend> exten
 			state.put("2", "Second");
 
 			// draw a snapshot
-			KeyedStateHandle snapshot1 = FutureUtil.runIfNotDoneAndGet(backend.snapshot(682375462378L, 2, streamFactory, CheckpointOptions.forCheckpoint()));
+			KeyedStateHandle snapshot1 = runSnapshot(backend.snapshot(682375462378L, 2, streamFactory, CheckpointOptions.forCheckpoint()));
 
 			backend.dispose();
 			// restore the first snapshot and validate it
@@ -3031,7 +3031,7 @@ public abstract class StateBackendTestBase<B extends AbstractStateBackend> exten
 				eq(env.getJobID()), eq(env.getJobVertexId()), eq(expectedKeyGroupRange), eq("banana"), any(KvStateID.class));
 
 
-		KeyedStateHandle snapshot = FutureUtil.runIfNotDoneAndGet(backend.snapshot(682375462379L, 4, streamFactory, CheckpointOptions.forCheckpoint()));
+		KeyedStateHandle snapshot = runSnapshot(backend.snapshot(682375462379L, 4, streamFactory, CheckpointOptions.forCheckpoint()));
 
 		backend.dispose();
 
@@ -3063,7 +3063,7 @@ public abstract class StateBackendTestBase<B extends AbstractStateBackend> exten
 
 			// draw a snapshot
 			KeyedStateHandle snapshot =
-					FutureUtil.runIfNotDoneAndGet(backend.snapshot(682375462379L, 1, streamFactory, CheckpointOptions.forCheckpoint()));
+				runSnapshot(backend.snapshot(682375462379L, 1, streamFactory, CheckpointOptions.forCheckpoint()));
 			assertNull(snapshot);
 			backend.dispose();
 
@@ -3151,7 +3151,7 @@ public abstract class StateBackendTestBase<B extends AbstractStateBackend> exten
 				valueState.update(i);
 			}
 
-			RunnableFuture<KeyedStateHandle> snapshot1 =
+			RunnableFuture<SnapshotResult<KeyedStateHandle>> snapshot1 =
 				backend.snapshot(0L, 0L, streamFactory, CheckpointOptions.forCheckpoint());
 
 			Thread runner1 = new Thread(snapshot1, "snapshot-1-runner");
@@ -3169,7 +3169,7 @@ public abstract class StateBackendTestBase<B extends AbstractStateBackend> exten
 			streamFactory.setWaiterLatch(null);
 			streamFactory.setBlockerLatch(null);
 
-			RunnableFuture<KeyedStateHandle> snapshot2 =
+			RunnableFuture<SnapshotResult<KeyedStateHandle>> snapshot2 =
 				backend.snapshot(1L, 1L, streamFactory, CheckpointOptions.forCheckpoint());
 
 			Thread runner2 = new Thread(snapshot2,"snapshot-2-runner");
@@ -3208,7 +3208,7 @@ public abstract class StateBackendTestBase<B extends AbstractStateBackend> exten
 				valueState.update(i);
 			}
 
-			RunnableFuture<KeyedStateHandle> snapshot =
+			RunnableFuture<SnapshotResult<KeyedStateHandle>> snapshot =
 					backend.snapshot(0L, 0L, streamFactory, CheckpointOptions.forCheckpoint());
 			Thread runner = new Thread(snapshot);
 			runner.start();
@@ -3221,7 +3221,8 @@ public abstract class StateBackendTestBase<B extends AbstractStateBackend> exten
 			}
 
 			runner.join();
-			stateHandle = snapshot.get();
+			SnapshotResult<KeyedStateHandle> snapshotResult = snapshot.get();
+			stateHandle = snapshotResult != null ? snapshotResult.getJobManagerOwnedSnapshot() : null;
 
 			// test isolation
 			for (int i = 0; i < 20; ++i) {
@@ -3292,7 +3293,7 @@ public abstract class StateBackendTestBase<B extends AbstractStateBackend> exten
 				valueState.update(i);
 			}
 
-			RunnableFuture<KeyedStateHandle> snapshot =
+			RunnableFuture<SnapshotResult<KeyedStateHandle>> snapshot =
 					backend.snapshot(0L, 0L, streamFactory, CheckpointOptions.forCheckpoint());
 
 			Thread runner = new Thread(snapshot);
@@ -3404,12 +3405,16 @@ public abstract class StateBackendTestBase<B extends AbstractStateBackend> exten
 		}
 	}
 
-	protected KeyedStateHandle runSnapshot(RunnableFuture<KeyedStateHandle> snapshotRunnableFuture) throws Exception {
+	protected KeyedStateHandle runSnapshot(
+		RunnableFuture<SnapshotResult<KeyedStateHandle>> snapshotRunnableFuture) throws Exception {
+
 		if(!snapshotRunnableFuture.isDone()) {
 			Thread runner = new Thread(snapshotRunnableFuture);
 			runner.start();
 		}
-		return snapshotRunnableFuture.get();
+
+		SnapshotResult<KeyedStateHandle> snapshotResult = snapshotRunnableFuture.get();
+		return snapshotResult != null ? snapshotResult.getJobManagerOwnedSnapshot() : null;
 	}
 
 	public static class TestPojo implements Serializable {

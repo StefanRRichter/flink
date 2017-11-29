@@ -195,7 +195,7 @@ public class DefaultOperatorStateBackend implements OperatorStateBackend {
 	// -------------------------------------------------------------------------------------------
 
 	@Override
-	public RunnableFuture<OperatorStateHandle> snapshot(
+	public RunnableFuture<SnapshotResult<OperatorStateHandle>> snapshot(
 			final long checkpointId,
 			final long timestamp,
 			final CheckpointStreamFactory streamFactory,
@@ -226,8 +226,8 @@ public class DefaultOperatorStateBackend implements OperatorStateBackend {
 		}
 
 		// implementation of the async IO operation, based on FutureTask
-		final AbstractAsyncCallableWithResources<OperatorStateHandle> ioCallable =
-			new AbstractAsyncCallableWithResources<OperatorStateHandle>() {
+		final AbstractAsyncCallableWithResources<SnapshotResult<OperatorStateHandle>> ioCallable =
+			new AbstractAsyncCallableWithResources<SnapshotResult<OperatorStateHandle>>() {
 
 				CheckpointStreamFactory.CheckpointStateOutputStream out = null;
 
@@ -258,7 +258,7 @@ public class DefaultOperatorStateBackend implements OperatorStateBackend {
 				}
 
 				@Override
-				public OperatorStateHandle performOperation() throws Exception {
+				public SnapshotResult<OperatorStateHandle> performOperation() throws Exception {
 					long asyncStartTime = System.currentTimeMillis();
 
 					CheckpointStreamFactory.CheckpointStateOutputStream localOut = this.out;
@@ -309,11 +309,12 @@ public class DefaultOperatorStateBackend implements OperatorStateBackend {
 							streamFactory, Thread.currentThread(), (System.currentTimeMillis() - asyncStartTime));
 					}
 
-					return retValue;
+					return new SnapshotResult<>(retValue, null);
 				}
 			};
 
-		AsyncStoppableTaskWithCallback<OperatorStateHandle> task = AsyncStoppableTaskWithCallback.from(ioCallable);
+		AsyncStoppableTaskWithCallback<SnapshotResult<OperatorStateHandle>> task =
+			AsyncStoppableTaskWithCallback.from(ioCallable);
 
 		if (!asynchronousSnapshots) {
 			task.run();

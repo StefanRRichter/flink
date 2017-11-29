@@ -87,7 +87,7 @@ public class MemoryStateBackendTest extends StateBackendTestBase<MemoryStateBack
 	@Override
 	@Test
 	public void testReducingStateRestoreWithWrongSerializers() {}
-	
+
 	@Override
 	@Test
 	public void testMapStateRestoreWithWrongSerializers() {}
@@ -218,9 +218,11 @@ public class MemoryStateBackendTest extends StateBackendTestBase<MemoryStateBack
 		listState3.add(20);
 
 		CheckpointStreamFactory streamFactory = abstractStateBackend.createStreamFactory(new JobID(), "testOperator");
-		RunnableFuture<OperatorStateHandle> runnableFuture =
+		RunnableFuture<SnapshotResult<OperatorStateHandle>> runnableFuture =
 			operatorStateBackend.snapshot(1, 1, streamFactory, CheckpointOptions.forCheckpoint());
-		OperatorStateHandle stateHandle = FutureUtil.runIfNotDoneAndGet(runnableFuture);
+
+		SnapshotResult<OperatorStateHandle> snapshotResult = FutureUtil.runIfNotDoneAndGet(runnableFuture);
+		OperatorStateHandle stateHandle = snapshotResult != null ? snapshotResult.getJobManagerOwnedSnapshot() : null;
 
 		try {
 

@@ -43,6 +43,7 @@ import org.apache.flink.runtime.state.AbstractStateBackend;
 import org.apache.flink.runtime.state.CheckpointStreamFactory;
 import org.apache.flink.runtime.state.KeyGroupRange;
 import org.apache.flink.runtime.state.KeyedStateHandle;
+import org.apache.flink.runtime.state.SnapshotResult;
 import org.apache.flink.runtime.state.TestTaskStateManager;
 import org.apache.flink.runtime.state.VoidNamespace;
 import org.apache.flink.runtime.state.VoidNamespaceSerializer;
@@ -387,7 +388,7 @@ public class RocksDBAsyncSnapshotTest extends TestLogger {
 				StringSerializer.INSTANCE,
 				new ValueStateDescriptor<>("foobar", String.class));
 
-			RunnableFuture<KeyedStateHandle> snapshotFuture = keyedStateBackend.snapshot(
+			RunnableFuture<SnapshotResult<KeyedStateHandle>> snapshotFuture = keyedStateBackend.snapshot(
 				checkpointId, timestamp, checkpointStreamFactory, CheckpointOptions.forCheckpoint());
 
 			try {
