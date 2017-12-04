@@ -18,6 +18,7 @@
 package org.apache.flink.streaming.runtime.tasks;
 
 import org.apache.flink.annotation.Internal;
+import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.TaskInfo;
 import org.apache.flink.api.common.accumulators.Accumulator;
 import org.apache.flink.core.fs.CloseableRegistry;
@@ -796,7 +797,11 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 
 	// ------------------------------------------------------------------------
 
-	private static final class AsyncCheckpointRunnable implements Runnable, Closeable {
+	/**
+	 * This runnable executes the asynchronous parts of all involved backend snapshots for the subtask.
+	 */
+	@VisibleForTesting
+	protected static final class AsyncCheckpointRunnable implements Runnable, Closeable {
 
 		private final StreamTask<?, ?> owner;
 
