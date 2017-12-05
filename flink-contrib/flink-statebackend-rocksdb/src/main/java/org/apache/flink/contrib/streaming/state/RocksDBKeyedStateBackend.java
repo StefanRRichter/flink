@@ -206,6 +206,9 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 	/** Unique ID of this backend. */
 	private UUID backendUID;
 
+	/** The configuration of local recovery. */
+	private final RocksDBStateBackend.LocalRecoveryConfig localRecoveryConfig;
+
 	public RocksDBKeyedStateBackend(
 		String operatorIdentifier,
 		ClassLoader userCodeClassLoader,
@@ -217,7 +220,8 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 		int numberOfKeyGroups,
 		KeyGroupRange keyGroupRange,
 		ExecutionConfig executionConfig,
-		boolean enableIncrementalCheckpointing
+		boolean enableIncrementalCheckpointing,
+		RocksDBStateBackend.LocalRecoveryConfig localRecoveryConfig
 	) throws IOException {
 
 		super(kvStateRegistry, keySerializer, userCodeClassLoader, numberOfKeyGroups, keyGroupRange, executionConfig);
@@ -236,22 +240,33 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 		this.instanceBasePath = Preconditions.checkNotNull(instanceBasePath);
 		this.instanceRocksDBPath = new File(instanceBasePath, "db");
 
-		if (instanceBasePath.exists()) {
+		checkAndCreateDirectory(instanceBasePath, "RocksDB data");
+
+		if (instanceRocksDBPath.exists()) {
 			// Clear the base directory when the backend is created
 			// in case something crashed and the backend never reached dispose()
 			cleanInstanceBasePath();
 		}
 
-		if (!instanceBasePath.mkdirs()) {
-			throw new IOException("Could not create RocksDB data directory.");
-		}
-
+		this.localRecoveryConfig = Preconditions.checkNotNull(localRecoveryConfig);
 		this.keyGroupPrefixBytes = getNumberOfKeyGroups() > (Byte.MAX_VALUE + 1) ? 2 : 1;
 		this.kvStateInformation = new HashMap<>();
 		this.restoredKvStateMetaInfos = new HashMap<>();
 		this.materializedSstFiles = new TreeMap<>();
 		this.backendUID = UUID.randomUUID();
 		LOG.debug("Setting initial keyed backend uid for operator {} to {}.", this.operatorIdentifier, this.backendUID);
+	}
+
+	private static void checkAndCreateDirectory(File directory, String description) throws IOException {
+		if (directory.exists()) {
+			if (!directory.isDirectory()) {
+				throw new IOException("Not a directory: " + directory);
+			}
+		} else {
+			if (!directory.mkdirs()) {
+				throw new IOException("Could not create " + description + " directory.");
+			}
+		}
 	}
 
 	@Override
@@ -267,6 +282,11 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 		Iterable<K> iterable = () -> new RocksIteratorWrapper<>(iterator, state, keySerializer, keyGroupPrefixBytes);
 		Stream<K> targetStream = StreamSupport.stream(iterable.spliterator(), false);
 		return targetStream.onClose(iterator::close);
+	}
+
+	@VisibleForTesting
+	public RocksDBStateBackend.LocalRecoveryConfig getLocalRecoveryConfig() {
+		return localRecoveryConfig;
 	}
 
 	/**

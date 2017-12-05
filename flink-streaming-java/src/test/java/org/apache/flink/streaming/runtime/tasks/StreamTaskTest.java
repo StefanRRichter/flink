@@ -844,6 +844,12 @@ public class StreamTaskTest extends TestLogger {
 	//  Test Utilities
 	// ------------------------------------------------------------------------
 
+	/**
+	 * Operator that does nothing.
+	 *
+	 * @param <T>
+	 * @param <OP>
+	 */
 	public static class NoOpStreamTask<T, OP extends StreamOperator<T>> extends StreamTask<T, OP> {
 
 		public NoOpStreamTask(Environment environment) {

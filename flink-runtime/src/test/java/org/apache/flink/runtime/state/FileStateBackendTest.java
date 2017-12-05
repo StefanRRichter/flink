@@ -18,13 +18,19 @@
 
 package org.apache.flink.runtime.state;
 
-import org.apache.commons.io.FileUtils;
 import org.apache.flink.api.common.JobID;
+import org.apache.flink.api.common.typeutils.base.IntSerializer;
 import org.apache.flink.core.fs.Path;
 import org.apache.flink.core.testutils.CommonTestUtils;
+import org.apache.flink.runtime.operators.testutils.DummyEnvironment;
 import org.apache.flink.runtime.state.filesystem.FileStateHandle;
 import org.apache.flink.runtime.state.filesystem.FsStateBackend;
+import org.apache.flink.runtime.state.heap.HeapKeyedStateBackend;
 import org.apache.flink.runtime.state.memory.ByteStreamStateHandle;
+
+import org.apache.commons.io.FileUtils;
+import org.apache.commons.io.IOUtils;
+import org.junit.Assert;
 import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
@@ -158,6 +164,45 @@ public class FileStateBackendTest extends StateBackendTestBase<FsStateBackend> {
 		catch (Exception e) {
 			e.printStackTrace();
 			fail(e.getMessage());
+		}
+	}
+
+	@Test
+	public void testLocalRecoveryConfigurationForwarding() throws Exception {
+
+		FsStateBackend stateBackend = getStateBackend();
+			Assert.assertEquals(FsStateBackend.LocalRecoveryMode.DISABLED, stateBackend.getLocalRecoveryMode());
+			stateBackend.setLocalRecoveryMode(FsStateBackend.LocalRecoveryMode.ENABLE_FILE_BASED);
+			Assert.assertEquals(FsStateBackend.LocalRecoveryMode.ENABLE_FILE_BASED, stateBackend.getLocalRecoveryMode());
+
+			DummyEnvironment environment = new DummyEnvironment();
+			File tmpDir = tempFolder.newFolder();
+			TestTaskStateManager taskStateManager = new TestTaskStateManager();
+			taskStateManager.setSubtaskLocalStateBaseDirectory(tmpDir);
+			environment.setTaskStateManager(taskStateManager);
+
+		HeapKeyedStateBackend<Integer> keyedBackend =
+			(HeapKeyedStateBackend<Integer>) stateBackend.createKeyedStateBackend(
+				environment,
+				new JobID(),
+				"test",
+				IntSerializer.INSTANCE,
+				1,
+				new KeyGroupRange(0, 0),
+				null);
+
+		try {
+			FsStateBackend.LocalRecoveryConfig localRecoveryConfig = keyedBackend.getLocalRecoveryConfig();
+			Assert.assertEquals(
+				FsStateBackend.LocalRecoveryMode.ENABLE_FILE_BASED,
+				localRecoveryConfig.getLocalRecoveryMode());
+
+			Assert.assertEquals(
+				tmpDir,
+				localRecoveryConfig.getLocalStateDirectory());
+		} finally {
+			IOUtils.closeQuietly(keyedBackend);
+			keyedBackend.dispose();
 		}
 	}
 
