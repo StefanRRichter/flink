@@ -33,6 +33,8 @@ import org.apache.flink.runtime.state.CheckpointStreamFactory;
 import org.apache.flink.runtime.state.ConfigurableStateBackend;
 import org.apache.flink.runtime.state.DefaultOperatorStateBackend;
 import org.apache.flink.runtime.state.KeyGroupRange;
+import org.apache.flink.runtime.state.LocalRecoveryConfigBase;
+import org.apache.flink.runtime.state.LocalRecoveryDirectoryProvider;
 import org.apache.flink.runtime.state.OperatorStateBackend;
 import org.apache.flink.runtime.state.StateBackend;
 import org.apache.flink.runtime.state.StreamStateHandle;
@@ -52,7 +54,6 @@ import javax.annotation.Nullable;
 
 import java.io.File;
 import java.io.IOException;
-import java.io.Serializable;
 import java.lang.reflect.Field;
 import java.net.URI;
 import java.util.ArrayList;
@@ -418,7 +419,8 @@ public class RocksDBStateBackend extends AbstractStateBackend implements Configu
 		File instanceBasePath =
 				new File(getNextStoragePath(), "job-" + jobId + "_op-" + operatorIdentifier + "_uuid-" + UUID.randomUUID());
 
-		File subtaskLocalStateBaseDirectory = env.getTaskStateManager().getSubtaskLocalStateBaseDirectory();
+		LocalRecoveryDirectoryProvider subtaskLocalStateBaseDirectory =
+			env.getTaskStateManager().createLocalRecoveryRootDirectoryProvider();
 
 		LocalRecoveryConfig localRecoveryConfig =
 			new LocalRecoveryConfig(localRecoveryMode, subtaskLocalStateBaseDirectory);
@@ -725,19 +727,17 @@ public class RocksDBStateBackend extends AbstractStateBackend implements Configu
 	/**
 	 * This class encapsulates the configuration for local recovery of this backend.
 	 */
-	public static final class LocalRecoveryConfig implements Serializable {
+	public static final class LocalRecoveryConfig extends LocalRecoveryConfigBase {
 
-		private static final long serialVersionUID = 1L;
 		private static final LocalRecoveryConfig DISABLED_SINGLETON =
 			new LocalRecoveryConfig(LocalRecoveryMode.DISABLED, null);
 
 		private final LocalRecoveryMode localRecoveryMode;
-		private final File localStateDirectory;
 
-		LocalRecoveryConfig(LocalRecoveryMode localRecoveryMode, File localStateDirectory) {
+		LocalRecoveryConfig(LocalRecoveryMode localRecoveryMode, LocalRecoveryDirectoryProvider localStateDirectories) {
+			super(localStateDirectories);
 			this.localRecoveryMode = Preconditions.checkNotNull(localRecoveryMode);
-			this.localStateDirectory = localStateDirectory;
-			if (LocalRecoveryMode.ENABLE_FILE_BASED.equals(localRecoveryMode) && localStateDirectory == null) {
+			if (LocalRecoveryMode.ENABLE_FILE_BASED.equals(localRecoveryMode) && localStateDirectories == null) {
 				throw new IllegalStateException("Local state directory must be specified if local recovery mode is " +
 					LocalRecoveryMode.ENABLE_FILE_BASED);
 			}
@@ -745,10 +745,6 @@ public class RocksDBStateBackend extends AbstractStateBackend implements Configu
 
 		public LocalRecoveryMode getLocalRecoveryMode() {
 			return localRecoveryMode;
-		}
-
-		public File getLocalStateDirectory() {
-			return localStateDirectory;
 		}
 
 		public static LocalRecoveryConfig disabled() {
@@ -759,8 +755,7 @@ public class RocksDBStateBackend extends AbstractStateBackend implements Configu
 		public String toString() {
 			return "LocalRecoveryConfig{" +
 				"localRecoveryMode=" + localRecoveryMode +
-				", localStateDirectory=" + localStateDirectory +
-				'}';
+				"} " + super.toString();
 		}
 	}
 }

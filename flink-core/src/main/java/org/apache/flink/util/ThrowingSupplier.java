@@ -16,26 +16,23 @@
  * limitations under the License.
  */
 
-package org.apache.flink.util.function;
-
-import org.apache.flink.annotation.Public;
+package org.apache.flink.util;
 
 /**
- * This interface is basically Java's {@link java.util.function.Consumer} interface enhanced with the ability to throw
+ * This interface is basically Java's {@link java.util.function.Supplier} interface enhanced with the ability to throw
  * an exception.
  *
- * @param <IN> type of the consumed elements.
- * @param <T> type of {@link Throwable}.
+ * @param <OUT> type of the supplied result.
+ * @param <T>   type of {@link Throwable}.
  */
-@Public
 @FunctionalInterface
-public interface ThrowingConsumer<IN, T extends Throwable> {
+public interface ThrowingSupplier<OUT, T extends Throwable> {
 
 	/**
-	 * Performs this operation on the given argument.
+	 * Gets a result.
 	 *
-	 * @param in the input argument.
-	 * @throws T on errors during consumption.
+	 * @return a result.
+	 * @throws T on errors.
 	 */
-	void accept(IN in) throws T;
+	OUT get() throws T, Exception;
 }

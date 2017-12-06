@@ -27,9 +27,9 @@ import org.apache.flink.runtime.state.filesystem.FileStateHandle;
 import org.apache.flink.runtime.state.filesystem.FsStateBackend;
 import org.apache.flink.runtime.state.heap.HeapKeyedStateBackend;
 import org.apache.flink.runtime.state.memory.ByteStreamStateHandle;
+import org.apache.flink.util.IOUtils;
 
 import org.apache.commons.io.FileUtils;
-import org.apache.commons.io.IOUtils;
 import org.junit.Assert;
 import org.junit.Ignore;
 import org.junit.Rule;
@@ -171,15 +171,22 @@ public class FileStateBackendTest extends StateBackendTestBase<FsStateBackend> {
 	public void testLocalRecoveryConfigurationForwarding() throws Exception {
 
 		FsStateBackend stateBackend = getStateBackend();
-			Assert.assertEquals(FsStateBackend.LocalRecoveryMode.DISABLED, stateBackend.getLocalRecoveryMode());
-			stateBackend.setLocalRecoveryMode(FsStateBackend.LocalRecoveryMode.ENABLE_FILE_BASED);
-			Assert.assertEquals(FsStateBackend.LocalRecoveryMode.ENABLE_FILE_BASED, stateBackend.getLocalRecoveryMode());
+		Assert.assertEquals(FsStateBackend.LocalRecoveryMode.DISABLED, stateBackend.getLocalRecoveryMode());
+		stateBackend.setLocalRecoveryMode(FsStateBackend.LocalRecoveryMode.ENABLE_FILE_BASED);
+		Assert.assertEquals(FsStateBackend.LocalRecoveryMode.ENABLE_FILE_BASED, stateBackend.getLocalRecoveryMode());
 
-			DummyEnvironment environment = new DummyEnvironment();
-			File tmpDir = tempFolder.newFolder();
-			TestTaskStateManager taskStateManager = new TestTaskStateManager();
-			taskStateManager.setSubtaskLocalStateBaseDirectory(tmpDir);
-			environment.setTaskStateManager(taskStateManager);
+		DummyEnvironment environment = new DummyEnvironment();
+
+		File[] rootDirs = new File[]{tempFolder.newFolder(), tempFolder.newFolder(), tempFolder.newFolder()};
+		String specificPath = "test";
+
+
+		LocalRecoveryDirectoryProvider localRecoveryDirectoryProvider =
+			new LocalRecoveryDirectoryProvider(rootDirs, specificPath);
+
+		TestTaskStateManager taskStateManager = new TestTaskStateManager();
+		taskStateManager.setLocalRecoveryDirectoryProvider(localRecoveryDirectoryProvider);
+		environment.setTaskStateManager(taskStateManager);
 
 		HeapKeyedStateBackend<Integer> keyedBackend =
 			(HeapKeyedStateBackend<Integer>) stateBackend.createKeyedStateBackend(
@@ -197,9 +204,13 @@ public class FileStateBackendTest extends StateBackendTestBase<FsStateBackend> {
 				FsStateBackend.LocalRecoveryMode.ENABLE_FILE_BASED,
 				localRecoveryConfig.getLocalRecoveryMode());
 
-			Assert.assertEquals(
-				tmpDir,
-				localRecoveryConfig.getLocalStateDirectory());
+			LocalRecoveryDirectoryProvider localStateDirectories = localRecoveryConfig.getLocalStateDirectories();
+			Assert.assertEquals(specificPath, localStateDirectories.getSubtaskSpecificPath());
+			for (int i = 0; i < 10; ++i) {
+				Assert.assertEquals(
+					localStateDirectories.nextRootDirectory(),
+					rootDirs[i % rootDirs.length]);
+			}
 		} finally {
 			IOUtils.closeQuietly(keyedBackend);
 			keyedBackend.dispose();

@@ -16,26 +16,22 @@
  * limitations under the License.
  */
 
-package org.apache.flink.util.function;
-
-import org.apache.flink.annotation.Public;
+package org.apache.flink.runtime.state;
 
 /**
- * This interface is basically Java's {@link java.util.function.Consumer} interface enhanced with the ability to throw
- * an exception.
- *
- * @param <IN> type of the consumed elements.
- * @param <T> type of {@link Throwable}.
+ * Base class for backend-specific configurations for task-local state recovery. This gives access to the root
+ * directories into which all file-based snapshots can be written.
  */
-@Public
-@FunctionalInterface
-public interface ThrowingConsumer<IN, T extends Throwable> {
+public class LocalRecoveryConfigBase {
 
-	/**
-	 * Performs this operation on the given argument.
-	 *
-	 * @param in the input argument.
-	 * @throws T on errors during consumption.
-	 */
-	void accept(IN in) throws T;
+	/** Encapsulates the root directories and the subtask-specific path. */
+	private final LocalRecoveryDirectoryProvider localStateDirectories;
+
+	protected LocalRecoveryConfigBase(LocalRecoveryDirectoryProvider rotatingDirectoryProvider) {
+		this.localStateDirectories = rotatingDirectoryProvider;
+	}
+
+	public LocalRecoveryDirectoryProvider getLocalStateDirectories() {
+		return localStateDirectories;
+	}
 }
