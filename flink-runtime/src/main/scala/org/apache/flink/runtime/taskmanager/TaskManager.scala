@@ -120,15 +120,16 @@ import scala.language.postfixOps
  *      requires a clean JVM.
  */
 class TaskManager(
-    protected val config: TaskManagerConfiguration,
-    protected val resourceID: ResourceID,
-    protected val location: TaskManagerLocation,
-    protected val memoryManager: MemoryManager,
-    protected val ioManager: IOManager,
-    protected val network: NetworkEnvironment,
-    protected val numberOfSlots: Int,
-    protected val highAvailabilityServices: HighAvailabilityServices,
-    protected val taskManagerMetricGroup: TaskManagerMetricGroup)
+                   protected val config: TaskManagerConfiguration,
+                   protected val resourceID: ResourceID,
+                   protected val location: TaskManagerLocation,
+                   protected val memoryManager: MemoryManager,
+                   protected val ioManager: IOManager,
+                   protected val network: NetworkEnvironment,
+                   protected val taskManagerLocalStateStoresManager: TaskExecutorLocalStateStoresManager,
+                   protected val numberOfSlots: Int,
+                   protected val highAvailabilityServices: HighAvailabilityServices,
+                   protected val taskManagerMetricGroup: TaskManagerMetricGroup)
   extends FlinkActor
   with LeaderSessionMessageFilter // Mixin order is important: We want to filter after logging
   with LogMessages // Mixin order is important: first we want to support message logging
@@ -250,6 +251,12 @@ class TaskManager(
       network.shutdown()
     } catch {
       case t: Exception => log.error("Network environment did not shutdown properly.", t)
+    }
+
+    try {
+      taskManagerLocalStateStoresManager.releaseAll()
+    } catch {
+      case t: Exception => log.error("Task state manager did not shutdown properly.", t)
     }
 
     try {
@@ -474,7 +481,7 @@ class TaskManager(
             log.debug(s"Cannot find task to stop for execution ${executionID})")
             sender ! decorateMessage(Acknowledge.get())
           }
- 
+
         // cancels a task
         case CancelTask(executionID) =>
           val task = runningTasks.get(executionID)
@@ -973,7 +980,7 @@ class TaskManager(
         log.error(message, e)
         throw new RuntimeException(message, e)
     }
-    
+
     // watch job manager to detect when it dies
     context.watch(jobManager)
 
@@ -1052,7 +1059,7 @@ class TaskManager(
     if (network.getKvStateRegistry != null) {
       network.getKvStateRegistry.unregisterListener()
     }
-    
+
     // failsafe shutdown of the metrics registry
     try {
       taskManagerMetricGroup.close()
@@ -1177,22 +1184,15 @@ class TaskManager(
           config.getTimeout().getSize(),
           config.getTimeout().getUnit()))
 
-      //TODO: make configurable, this is just the future fallback case,
-      // integrate with ConfigConstants.TASK_MANAGER_LOCAL_STATE_ROOT_DIR_KEY
-      // TODO: wire this so that the manager survives the end of the task
-      //TODO create "localState" sub-directories!!!
-      val taskExecutorLocalStateStoresManager =
-        new TaskExecutorLocalStateStoresManager(ioManager.getSpillingDirectories)
-
-      val localStateStore = taskExecutorLocalStateStoresManager.localStateStoreForTask(
+      val taskLocalStateStore = taskManagerLocalStateStoresManager.localStateStoreForTask(
         jobInformation.getJobId,
         taskInformation.getJobVertexId,
         tdd.getSubtaskIndex)
 
-      val slotStateManager = new TaskStateManagerImpl(
+      val taskLocalStateManager = new TaskStateManagerImpl(
         jobInformation.getJobId,
         tdd.getExecutionAttemptId,
-        localStateStore,
+        taskLocalStateStore,
         tdd.getTaskRestore,
         checkpointResponder)
 
@@ -1210,7 +1210,7 @@ class TaskManager(
         ioManager,
         network,
         bcVarManager,
-        slotStateManager,
+        taskLocalStateManager,
         taskManagerConnection,
         inputSplitProvider,
         checkpointResponder,
@@ -2038,6 +2038,7 @@ object TaskManager {
       taskManagerServices.getMemoryManager(),
       taskManagerServices.getIOManager(),
       taskManagerServices.getNetworkEnvironment(),
+      taskManagerServices.getTaskManagerStateStore(),
       highAvailabilityServices,
       taskManagerMetricGroup)
 
@@ -2055,6 +2056,7 @@ object TaskManager {
     memoryManager: MemoryManager,
     ioManager: IOManager,
     networkEnvironment: NetworkEnvironment,
+    taskStateManager: TaskExecutorLocalStateStoresManager,
     highAvailabilityServices: HighAvailabilityServices,
     taskManagerMetricGroup: TaskManagerMetricGroup
   ): Props = {
@@ -2066,6 +2068,7 @@ object TaskManager {
       memoryManager,
       ioManager,
       networkEnvironment,
+      taskStateManager,
       taskManagerConfig.getNumberSlots(),
       highAvailabilityServices,
       taskManagerMetricGroup)
