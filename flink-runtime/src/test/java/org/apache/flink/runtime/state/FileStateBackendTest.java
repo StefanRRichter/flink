@@ -22,6 +22,8 @@ import org.apache.flink.api.common.JobID;
 import org.apache.flink.api.common.typeutils.base.IntSerializer;
 import org.apache.flink.core.fs.Path;
 import org.apache.flink.core.testutils.CommonTestUtils;
+import org.apache.flink.runtime.clusterframework.types.AllocationID;
+import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.runtime.operators.testutils.DummyEnvironment;
 import org.apache.flink.runtime.state.filesystem.FileStateHandle;
 import org.apache.flink.runtime.state.filesystem.FsStateBackend;
@@ -178,11 +180,14 @@ public class FileStateBackendTest extends StateBackendTestBase<FsStateBackend> {
 		DummyEnvironment environment = new DummyEnvironment();
 
 		File[] rootDirs = new File[]{tempFolder.newFolder(), tempFolder.newFolder(), tempFolder.newFolder()};
-		String specificPath = "test";
 
+		JobID jobID = new JobID();
+		AllocationID allocationID = new AllocationID();
+		JobVertexID jobVertexID = new JobVertexID();
+		int subtaskIndex = 0;
 
 		LocalRecoveryDirectoryProvider localRecoveryDirectoryProvider =
-			new LocalRecoveryDirectoryProvider(rootDirs, specificPath);
+			new LocalRecoveryDirectoryProvider(rootDirs, jobID, allocationID, jobVertexID, subtaskIndex);
 
 		TestTaskStateManager taskStateManager = new TestTaskStateManager();
 		taskStateManager.setLocalRecoveryDirectoryProvider(localRecoveryDirectoryProvider);
@@ -205,10 +210,9 @@ public class FileStateBackendTest extends StateBackendTestBase<FsStateBackend> {
 				localRecoveryConfig.getLocalRecoveryMode());
 
 			LocalRecoveryDirectoryProvider localStateDirectories = localRecoveryConfig.getLocalStateDirectories();
-			Assert.assertEquals(specificPath, localStateDirectories.getSubtaskSpecificPath());
 			for (int i = 0; i < 10; ++i) {
 				Assert.assertEquals(
-					localStateDirectories.nextRootDirectory(),
+					localStateDirectories.rootDirectory(i),
 					rootDirs[i % rootDirs.length]);
 			}
 		} finally {
