@@ -34,11 +34,11 @@ public interface CheckpointStreamFactory {
 	 *
 	 * @return An output stream that writes state for the given checkpoint.
 	 *
-	 * @throws Exception Exceptions may occur while creating the stream and should be forwarded.
+	 * @throws IOException Exceptions may occur while creating the stream and should be forwarded.
 	 */
 	CheckpointStateOutputStream createCheckpointStateOutputStream(
 			long checkpointID,
-			long timestamp) throws Exception;
+			long timestamp) throws IOException;
 
 	/**
 	 * A dedicated output stream that produces a {@link StreamStateHandle} when closed.

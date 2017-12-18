@@ -140,7 +140,7 @@ public interface CheckpointStreamWithResultProvider extends Closeable {
 			@Nonnegative long checkpointId,
 			@Nonnegative long timestamp,
 			@Nonnull CheckpointStreamFactory primaryStreamFactory,
-			@Nullable LocalRecoveryDirectoryProvider secondaryStreamDirProvider) throws Exception {
+			@Nullable LocalRecoveryDirectoryProvider secondaryStreamDirProvider) throws IOException {
 
 			CheckpointStreamFactory.CheckpointStateOutputStream primaryOut =
 				primaryStreamFactory.createCheckpointStateOutputStream(checkpointId, timestamp);

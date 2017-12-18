@@ -106,7 +106,10 @@ public class FsCheckpointStreamFactory implements CheckpointStreamFactory {
 	}
 
 	@Override
-	public FsCheckpointStateOutputStream createCheckpointStateOutputStream(long checkpointID, long timestamp) throws Exception {
+	public FsCheckpointStateOutputStream createCheckpointStateOutputStream(
+		long checkpointID,
+		long timestamp) throws IOException {
+
 		checkFileSystemInitialized();
 
 		Path checkpointDir = createCheckpointDirPath(checkpointDirectory, checkpointID);

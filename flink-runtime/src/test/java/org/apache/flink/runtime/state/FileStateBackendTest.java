@@ -187,7 +187,7 @@ public class FileStateBackendTest extends StateBackendTestBase<FsStateBackend> {
 		int subtaskIndex = 0;
 
 		LocalRecoveryDirectoryProvider localRecoveryDirectoryProvider =
-			new LocalRecoveryDirectoryProvider(rootDirs, jobID, allocationID, jobVertexID, subtaskIndex);
+			new LocalRecoveryDirectoryProviderImpl(rootDirs, jobID, allocationID, jobVertexID, subtaskIndex);
 
 		TestTaskStateManager taskStateManager = new TestTaskStateManager();
 		taskStateManager.setLocalRecoveryDirectoryProvider(localRecoveryDirectoryProvider);

@@ -34,15 +34,18 @@ import org.apache.flink.runtime.query.TaskKvStateRegistry;
 import org.apache.flink.runtime.state.AbstractKeyedStateBackend;
 import org.apache.flink.runtime.state.CheckpointStorage;
 import org.apache.flink.runtime.state.CheckpointStreamFactory;
+import org.apache.flink.runtime.state.OperatorStateHandle;
 import org.apache.flink.runtime.state.KeyGroupRange;
 import org.apache.flink.runtime.state.KeyGroupStatePartitionStreamProvider;
 import org.apache.flink.runtime.state.OperatorStateBackend;
-import org.apache.flink.runtime.state.OperatorStateHandle;
+import org.apache.flink.runtime.state.OperatorStreamStateHandle;
 import org.apache.flink.runtime.state.StateBackend;
 import org.apache.flink.runtime.state.StatePartitionStreamProvider;
 import org.apache.flink.runtime.state.StreamStateHandle;
+import org.apache.flink.runtime.state.TaskLocalStateStore;
 import org.apache.flink.runtime.state.TaskStateManager;
 import org.apache.flink.runtime.state.TaskStateManagerImplTest;
+import org.apache.flink.runtime.state.TestTaskLocalStateStore;
 import org.apache.flink.runtime.state.memory.MemoryStateBackend;
 import org.apache.flink.runtime.taskmanager.TestCheckpointResponder;
 import org.apache.flink.streaming.runtime.tasks.ProcessingTimeService;
@@ -133,13 +136,8 @@ public class StreamTaskStateInitializerImplTest {
 			keyedStateInputs,
 			operatorStateInputs);
 
-		for (KeyGroupStatePartitionStreamProvider keyedStateInput : keyedStateInputs) {
-			Assert.fail();
-		}
-
-		for (StatePartitionStreamProvider operatorStateInput : operatorStateInputs) {
-			Assert.fail();
-		}
+		Assert.assertFalse(keyedStateInputs.iterator().hasNext());
+		Assert.assertFalse(operatorStateInputs.iterator().hasNext());
 	}
 
 	@SuppressWarnings("unchecked")
@@ -193,14 +191,14 @@ public class StreamTaskStateInitializerImplTest {
 		Random random = new Random(0x42);
 
 		OperatorSubtaskState operatorSubtaskState = new OperatorSubtaskState(
-			new OperatorStateHandle(
+			new OperatorStreamStateHandle(
 				Collections.singletonMap(
 					"a",
 					new OperatorStateHandle.StateMetaInfo(
 						new long[]{0, 10},
 						OperatorStateHandle.Mode.SPLIT_DISTRIBUTE)),
 				CheckpointTestUtils.createDummyStreamStateHandle(random)),
-			new OperatorStateHandle(
+			new OperatorStreamStateHandle(
 				Collections.singletonMap(
 					"_default_",
 					new OperatorStateHandle.StateMetaInfo(
@@ -303,11 +301,14 @@ public class StreamTaskStateInitializerImplTest {
 		ExecutionAttemptID executionAttemptID = new ExecutionAttemptID(23L, 24L);
 		TestCheckpointResponder checkpointResponderMock = new TestCheckpointResponder();
 
+		TaskLocalStateStore taskLocalStateStore = new TestTaskLocalStateStore();
+
 		TaskStateManager taskStateManager = TaskStateManagerImplTest.taskStateManager(
 			jobID,
 			executionAttemptID,
 			checkpointResponderMock,
-			jobManagerTaskRestore);
+			jobManagerTaskRestore,
+			taskLocalStateStore);
 
 		DummyEnvironment dummyEnvironment = new DummyEnvironment("test-task", 1, 0);
 		dummyEnvironment.setTaskStateManager(taskStateManager);
