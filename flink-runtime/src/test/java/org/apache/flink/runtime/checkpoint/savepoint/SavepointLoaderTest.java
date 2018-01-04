@@ -26,7 +26,7 @@ import org.apache.flink.runtime.checkpoint.OperatorSubtaskState;
 import org.apache.flink.runtime.executiongraph.ExecutionJobVertex;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.runtime.jobgraph.OperatorID;
-import org.apache.flink.runtime.state.OperatorStateHandle;
+import org.apache.flink.runtime.state.OperatorStreamStateHandle;
 import org.apache.flink.runtime.state.memory.ByteStreamStateHandle;
 
 import org.junit.Rule;
@@ -64,7 +64,7 @@ public class SavepointLoaderTest {
 		OperatorID operatorID = OperatorID.fromJobVertexID(jobVertexID);
 
 		OperatorSubtaskState subtaskState = new OperatorSubtaskState(
-			new OperatorStateHandle(Collections.emptyMap(), new ByteStreamStateHandle("testHandler", new byte[0])),
+			new OperatorStreamStateHandle(Collections.emptyMap(), new ByteStreamStateHandle("testHandler", new byte[0])),
 			null,
 			null,
 			null);
