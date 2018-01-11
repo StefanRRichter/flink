@@ -218,104 +218,106 @@ public class RocksDBAsyncSnapshotTest extends TestLogger {
 	 */
 	@Test
 	public void testCancelFullyAsyncCheckpoints() throws Exception {
-		final OneInputStreamTaskTestHarness<String, String> testHarness = new OneInputStreamTaskTestHarness<>(
+		for (int i = 0; i < 300; ++i) {
+			final OneInputStreamTaskTestHarness<String, String> testHarness = new OneInputStreamTaskTestHarness<>(
 				OneInputStreamTask::new,
 				BasicTypeInfo.STRING_TYPE_INFO, BasicTypeInfo.STRING_TYPE_INFO);
 
-		testHarness.setupOutputForSingletonOperatorChain();
+			testHarness.setupOutputForSingletonOperatorChain();
 
-		testHarness.configureForKeyedStream(new KeySelector<String, String>() {
-			@Override
-			public String getKey(String value) throws Exception {
-				return value;
-			}
-		}, BasicTypeInfo.STRING_TYPE_INFO);
-
-		StreamConfig streamConfig = testHarness.getStreamConfig();
-
-		File dbDir = temporaryFolder.newFolder();
-
-		BlockingStreamMemoryStateBackend memoryStateBackend = new BlockingStreamMemoryStateBackend();
-
-		BlockerCheckpointStreamFactory blockerCheckpointStreamFactory =
-			new BlockerCheckpointStreamFactory(4 * 1024 * 1024) {
-
-			int count = 1;
-
-			@Override
-			public MemCheckpointStreamFactory.MemoryCheckpointOutputStream createCheckpointStateOutputStream(
-				long checkpointID,
-				long timestamp) throws Exception {
-
-				// we skip the first created stream, because it is used to checkpoint the timer service, which is
-				// currently not asynchronous.
-				if (count > 0) {
-					--count;
-					return new MemCheckpointStreamFactory.MemoryCheckpointOutputStream(maxSize);
-				} else {
-					return super.createCheckpointStateOutputStream(checkpointID, timestamp);
+			testHarness.configureForKeyedStream(new KeySelector<String, String>() {
+				@Override
+				public String getKey(String value) throws Exception {
+					return value;
 				}
-			}
-		};
+			}, BasicTypeInfo.STRING_TYPE_INFO);
 
-		BlockingStreamMemoryStateBackend.blockerCheckpointStreamFactory = blockerCheckpointStreamFactory;
+			StreamConfig streamConfig = testHarness.getStreamConfig();
 
-		RocksDBStateBackend backend = new RocksDBStateBackend(memoryStateBackend);
-		backend.setDbStoragePath(dbDir.getAbsolutePath());
+			File dbDir = temporaryFolder.newFolder();
 
-		streamConfig.setStateBackend(backend);
+			BlockingStreamMemoryStateBackend memoryStateBackend = new BlockingStreamMemoryStateBackend();
 
-		streamConfig.setStreamOperator(new AsyncCheckpointOperator());
-		streamConfig.setOperatorID(new OperatorID());
+			BlockerCheckpointStreamFactory blockerCheckpointStreamFactory =
+				new BlockerCheckpointStreamFactory(4 * 1024 * 1024) {
 
-		StreamMockEnvironment mockEnv = new StreamMockEnvironment(
+					int count = 1;
+
+					@Override
+					public MemCheckpointStreamFactory.MemoryCheckpointOutputStream createCheckpointStateOutputStream(
+						long checkpointID,
+						long timestamp) throws Exception {
+
+						// we skip the first created stream, because it is used to checkpoint the timer service, which is
+						// currently not asynchronous.
+						if (count > 0) {
+							--count;
+							return new MemCheckpointStreamFactory.MemoryCheckpointOutputStream(maxSize);
+						} else {
+							return super.createCheckpointStateOutputStream(checkpointID, timestamp);
+						}
+					}
+				};
+
+			BlockingStreamMemoryStateBackend.blockerCheckpointStreamFactory = blockerCheckpointStreamFactory;
+
+			RocksDBStateBackend backend = new RocksDBStateBackend(memoryStateBackend);
+			backend.setDbStoragePath(dbDir.getAbsolutePath());
+
+			streamConfig.setStateBackend(backend);
+
+			streamConfig.setStreamOperator(new AsyncCheckpointOperator());
+			streamConfig.setOperatorID(new OperatorID());
+
+			StreamMockEnvironment mockEnv = new StreamMockEnvironment(
 				testHarness.jobConfig,
 				testHarness.taskConfig,
 				testHarness.memorySize,
 				new MockInputSplitProvider(),
 				testHarness.bufferSize);
 
-		blockerCheckpointStreamFactory.setBlockerLatch(new OneShotLatch());
-		blockerCheckpointStreamFactory.setWaiterLatch(new OneShotLatch());
+			blockerCheckpointStreamFactory.setBlockerLatch(new OneShotLatch());
+			blockerCheckpointStreamFactory.setWaiterLatch(new OneShotLatch());
 
-		testHarness.invoke(mockEnv);
+			testHarness.invoke(mockEnv);
 
-		final OneInputStreamTask<String, String> task = testHarness.getTask();
+			final OneInputStreamTask<String, String> task = testHarness.getTask();
 
-		// wait for the task to be running
-		for (Field field: StreamTask.class.getDeclaredFields()) {
-			if (field.getName().equals("isRunning")) {
-				field.setAccessible(true);
-				while (!field.getBoolean(task)) {
-					Thread.sleep(10);
+			// wait for the task to be running
+			for (Field field : StreamTask.class.getDeclaredFields()) {
+				if (field.getName().equals("isRunning")) {
+					field.setAccessible(true);
+					while (!field.getBoolean(task)) {
+						Thread.sleep(10);
+					}
 				}
 			}
-		}
 
-		task.triggerCheckpoint(
-			new CheckpointMetaData(42, 17),
-			CheckpointOptions.forCheckpoint());
+			task.triggerCheckpoint(
+				new CheckpointMetaData(42, 17),
+				CheckpointOptions.forCheckpoint());
 
-		testHarness.processElement(new StreamRecord<>("Wohoo", 0));
-		blockerCheckpointStreamFactory.getWaiterLatch().await();
-		task.cancel();
-		blockerCheckpointStreamFactory.getBlockerLatch().trigger();
-		testHarness.endInput();
-		Assert.assertTrue(blockerCheckpointStreamFactory.getLastCreatedStream().isClosed());
+			testHarness.processElement(new StreamRecord<>("Wohoo", 0));
+			blockerCheckpointStreamFactory.getWaiterLatch().await();
+			task.cancel();
+			blockerCheckpointStreamFactory.getBlockerLatch().trigger();
+			testHarness.endInput();
+			Assert.assertTrue(blockerCheckpointStreamFactory.getLastCreatedStream().isClosed());
 
-		try {
-			ExecutorService threadPool = task.getAsyncOperationsThreadPool();
-			threadPool.shutdown();
-			Assert.assertTrue(threadPool.awaitTermination(60_000, TimeUnit.MILLISECONDS));
-			testHarness.waitForTaskCompletion();
+			try {
+				ExecutorService threadPool = task.getAsyncOperationsThreadPool();
+				threadPool.shutdown();
+				Assert.assertTrue(threadPool.awaitTermination(60_000, TimeUnit.MILLISECONDS));
+				testHarness.waitForTaskCompletion();
 
-			fail("Operation completed. Cancel failed.");
-		} catch (Exception expected) {
+				fail("Operation completed. Cancel failed.");
+			} catch (Exception expected) {
 
-			Throwable cause = expected.getCause();
+				Throwable cause = expected.getCause();
 
-			if (!(cause instanceof CancelTaskException)) {
-				fail("Unexpected exception: " + expected);
+				if (!(cause instanceof CancelTaskException)) {
+					fail("Unexpected exception: " + expected);
+				}
 			}
 		}
 	}
