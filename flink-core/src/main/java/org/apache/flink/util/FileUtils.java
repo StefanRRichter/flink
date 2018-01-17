@@ -26,7 +26,6 @@ import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.nio.file.Files;
-import java.nio.file.NoSuchFileException;
 import java.nio.file.StandardOpenOption;
 import java.util.Random;
 
@@ -111,16 +110,9 @@ public final class FileUtils {
 		if (file.isDirectory()) {
 			// file exists and is directory
 			deleteDirectory(file);
+		} else {
+			Files.deleteIfExists(file.toPath());
 		}
-		else if (file.exists()) {
-			try {
-				Files.delete(file.toPath());
-			}
-			catch (NoSuchFileException e) {
-				// if the file is already gone (concurrently), we don't mind
-			}
-		}
-		// else: already deleted
 	}
 
 	/**
@@ -152,13 +144,7 @@ public final class FileUtils {
 
 			// delete the directory. this fails if the directory is not empty, meaning
 			// if new files got concurrently created. we want to fail then.
-			try {
-				Files.delete(directory.toPath());
-			}
-			catch (NoSuchFileException ignored) {
-				// if someone else deleted this concurrently, we don't mind
-				// the result is the same for us, after all
-			}
+			Files.deleteIfExists(directory.toPath());
 		}
 		else if (directory.exists()) {
 			// exists but is file, not directory
