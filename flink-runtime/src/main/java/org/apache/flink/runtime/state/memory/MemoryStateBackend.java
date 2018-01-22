@@ -33,8 +33,8 @@ import org.apache.flink.runtime.state.ConfigurableStateBackend;
 import org.apache.flink.runtime.state.DefaultOperatorStateBackend;
 import org.apache.flink.runtime.state.KeyGroupRange;
 import org.apache.flink.runtime.state.OperatorStateBackend;
+import org.apache.flink.runtime.state.TaskStateManager;
 import org.apache.flink.runtime.state.filesystem.AbstractFileStateBackend;
-import org.apache.flink.runtime.state.filesystem.FsStateBackend;
 import org.apache.flink.runtime.state.heap.HeapKeyedStateBackend;
 import org.apache.flink.util.TernaryBoolean;
 
@@ -316,12 +316,15 @@ public class MemoryStateBackend extends AbstractFileStateBackend implements Conf
 
 	@Override
 	public <K> AbstractKeyedStateBackend<K> createKeyedStateBackend(
-			Environment env, JobID jobID,
+			Environment env,
+			JobID jobID,
 			String operatorIdentifier,
 			TypeSerializer<K> keySerializer,
 			int numberOfKeyGroups,
 			KeyGroupRange keyGroupRange,
 			TaskKvStateRegistry kvStateRegistry) {
+
+		TaskStateManager taskStateManager = env.getTaskStateManager();
 
 		return new HeapKeyedStateBackend<>(
 				kvStateRegistry,
@@ -331,7 +334,7 @@ public class MemoryStateBackend extends AbstractFileStateBackend implements Conf
 				keyGroupRange,
 				isUsingAsynchronousSnapshots(),
 				env.getExecutionConfig(),
-			    FsStateBackend.LocalRecoveryConfig.disabled());
+				taskStateManager.createLocalRecoveryConfig());
 	}
 
 	// ------------------------------------------------------------------------

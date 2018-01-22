@@ -31,7 +31,6 @@ import org.apache.flink.runtime.state.heap.HeapKeyedStateBackend;
 import org.apache.flink.runtime.state.memory.ByteStreamStateHandle;
 import org.apache.flink.util.IOUtils;
 
-import org.apache.commons.io.FileUtils;
 import org.junit.Assert;
 import org.junit.Ignore;
 import org.junit.Rule;
@@ -171,12 +170,7 @@ public class FileStateBackendTest extends StateBackendTestBase<FsStateBackend> {
 
 	@Test
 	public void testLocalRecoveryConfigurationForwarding() throws Exception {
-
 		FsStateBackend stateBackend = getStateBackend();
-		Assert.assertEquals(FsStateBackend.LocalRecoveryMode.DISABLED, stateBackend.getLocalRecoveryMode());
-		stateBackend.setLocalRecoveryMode(FsStateBackend.LocalRecoveryMode.ENABLE_FILE_BASED);
-		Assert.assertEquals(FsStateBackend.LocalRecoveryMode.ENABLE_FILE_BASED, stateBackend.getLocalRecoveryMode());
-
 		DummyEnvironment environment = new DummyEnvironment();
 
 		File[] rootDirs = new File[]{tempFolder.newFolder(), tempFolder.newFolder(), tempFolder.newFolder()};
@@ -186,11 +180,19 @@ public class FileStateBackendTest extends StateBackendTestBase<FsStateBackend> {
 		JobVertexID jobVertexID = new JobVertexID();
 		int subtaskIndex = 0;
 
-		LocalRecoveryDirectoryProvider localRecoveryDirectoryProvider =
+		final LocalRecoveryConfig.LocalRecoveryMode testRecoveryMode =
+			LocalRecoveryConfig.LocalRecoveryMode.ENABLE_FILE_BASED;
+
+		LocalRecoveryDirectoryProvider directoryProvider =
 			new LocalRecoveryDirectoryProviderImpl(rootDirs, jobID, allocationID, jobVertexID, subtaskIndex);
 
 		TestTaskStateManager taskStateManager = new TestTaskStateManager();
-		taskStateManager.setLocalRecoveryDirectoryProvider(localRecoveryDirectoryProvider);
+
+		LocalRecoveryConfig recoveryConfig = new LocalRecoveryConfig(
+			testRecoveryMode,
+			directoryProvider);
+
+		taskStateManager.setLocalRecoveryConfig(recoveryConfig);
 		environment.setTaskStateManager(taskStateManager);
 
 		HeapKeyedStateBackend<Integer> keyedBackend =
@@ -204,12 +206,12 @@ public class FileStateBackendTest extends StateBackendTestBase<FsStateBackend> {
 				null);
 
 		try {
-			FsStateBackend.LocalRecoveryConfig localRecoveryConfig = keyedBackend.getLocalRecoveryConfig();
+			LocalRecoveryConfig localRecoveryConfig = keyedBackend.getLocalRecoveryConfig();
 			Assert.assertEquals(
-				FsStateBackend.LocalRecoveryMode.ENABLE_FILE_BASED,
+				testRecoveryMode,
 				localRecoveryConfig.getLocalRecoveryMode());
 
-			LocalRecoveryDirectoryProvider localStateDirectories = localRecoveryConfig.getLocalStateDirectories();
+			LocalRecoveryDirectoryProvider localStateDirectories = localRecoveryConfig.getLocalStateDirectoryProvider();
 			for (int i = 0; i < 10; ++i) {
 				Assert.assertEquals(
 					localStateDirectories.rootDirectory(i),
@@ -234,13 +236,6 @@ public class FileStateBackendTest extends StateBackendTestBase<FsStateBackend> {
 		else {
 			throw new IllegalArgumentException("not a local path");
 		}
-	}
-
-	private static void deleteDirectorySilently(File dir) {
-		try {
-			FileUtils.deleteDirectory(dir);
-		}
-		catch (IOException ignored) {}
 	}
 
 	private static boolean isDirectoryEmpty(File directory) {
