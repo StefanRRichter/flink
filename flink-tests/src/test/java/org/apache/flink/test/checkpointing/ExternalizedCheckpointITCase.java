@@ -31,6 +31,7 @@ import org.apache.flink.runtime.checkpoint.CheckpointOptions;
 import org.apache.flink.runtime.jobgraph.JobGraph;
 import org.apache.flink.runtime.jobgraph.SavepointRestoreSettings;
 import org.apache.flink.runtime.state.AbstractStateBackend;
+import org.apache.flink.runtime.state.LocalRecoveryConfig;
 import org.apache.flink.runtime.state.filesystem.FsStateBackend;
 import org.apache.flink.runtime.testingUtils.TestingCluster;
 import org.apache.flink.streaming.api.TimeCharacteristic;
@@ -71,7 +72,8 @@ public class ExternalizedCheckpointITCase extends TestLogger {
 		testExternalizedCheckpoints(
 			checkpointDir,
 			null,
-			createRocksDBStateBackend(checkpointDir, true, false));
+			createRocksDBStateBackend(checkpointDir, true),
+			false);
 	}
 
 	@Test
@@ -80,7 +82,8 @@ public class ExternalizedCheckpointITCase extends TestLogger {
 		testExternalizedCheckpoints(
 			checkpointDir,
 			null,
-			createRocksDBStateBackend(checkpointDir, false, false));
+			createRocksDBStateBackend(checkpointDir, false),
+			false);
 	}
 
 	@Test
@@ -89,7 +92,8 @@ public class ExternalizedCheckpointITCase extends TestLogger {
 		testExternalizedCheckpoints(
 			checkpointDir,
 			null,
-			createRocksDBStateBackend(checkpointDir, true, true));
+			createRocksDBStateBackend(checkpointDir, true),
+			true);
 	}
 
 	@Test
@@ -98,7 +102,8 @@ public class ExternalizedCheckpointITCase extends TestLogger {
 		testExternalizedCheckpoints(
 			checkpointDir,
 			null,
-			createRocksDBStateBackend(checkpointDir, false, true));
+			createRocksDBStateBackend(checkpointDir, false),
+			true);
 	}
 
 	@Test
@@ -107,7 +112,8 @@ public class ExternalizedCheckpointITCase extends TestLogger {
 		testExternalizedCheckpoints(
 			checkpointDir,
 			null,
-			createFsStateBackend(checkpointDir, false));
+			createFsStateBackend(checkpointDir),
+			false);
 	}
 
 	@Test
@@ -116,7 +122,8 @@ public class ExternalizedCheckpointITCase extends TestLogger {
 		testExternalizedCheckpoints(
 			checkpointDir,
 			null,
-			createFsStateBackend(checkpointDir, true));
+			createFsStateBackend(checkpointDir),
+			true);
 	}
 
 	@Test
@@ -128,7 +135,8 @@ public class ExternalizedCheckpointITCase extends TestLogger {
 			testExternalizedCheckpoints(
 				checkpointDir,
 				zkServer.getConnectString(),
-				createRocksDBStateBackend(checkpointDir, true, false));
+				createRocksDBStateBackend(checkpointDir, true),
+				false);
 		} finally {
 			zkServer.stop();
 		}
@@ -143,7 +151,8 @@ public class ExternalizedCheckpointITCase extends TestLogger {
 			testExternalizedCheckpoints(
 				checkpointDir,
 				zkServer.getConnectString(),
-				createRocksDBStateBackend(checkpointDir, false, false));
+				createRocksDBStateBackend(checkpointDir, false),
+				false);
 		} finally {
 			zkServer.stop();
 		}
@@ -158,7 +167,8 @@ public class ExternalizedCheckpointITCase extends TestLogger {
 			testExternalizedCheckpoints(
 				checkpointDir,
 				zkServer.getConnectString(),
-				createRocksDBStateBackend(checkpointDir, true, true));
+				createRocksDBStateBackend(checkpointDir, true),
+				true);
 		} finally {
 			zkServer.stop();
 		}
@@ -173,7 +183,8 @@ public class ExternalizedCheckpointITCase extends TestLogger {
 			testExternalizedCheckpoints(
 				checkpointDir,
 				zkServer.getConnectString(),
-				createRocksDBStateBackend(checkpointDir, false, true));
+				createRocksDBStateBackend(checkpointDir, false),
+				true);
 		} finally {
 			zkServer.stop();
 		}
@@ -188,7 +199,8 @@ public class ExternalizedCheckpointITCase extends TestLogger {
 			testExternalizedCheckpoints(
 				checkpointDir,
 				zkServer.getConnectString(),
-				createFsStateBackend(checkpointDir, false));
+				createFsStateBackend(checkpointDir),
+				false);
 		} finally {
 			zkServer.stop();
 		}
@@ -203,40 +215,29 @@ public class ExternalizedCheckpointITCase extends TestLogger {
 			testExternalizedCheckpoints(
 				checkpointDir,
 				zkServer.getConnectString(),
-				createFsStateBackend(checkpointDir, true));
+				createFsStateBackend(checkpointDir),
+				true);
 		} finally {
 			zkServer.stop();
 		}
 	}
 
-	private FsStateBackend createFsStateBackend(File checkpointDir, boolean localRecovery) throws IOException {
-		FsStateBackend stateBackend = new FsStateBackend(checkpointDir.toURI().toString(), true);
-
-		if (localRecovery) {
-			stateBackend.setLocalRecoveryMode(FsStateBackend.LocalRecoveryMode.ENABLE_FILE_BASED);
-		}
-		return stateBackend;
+	private FsStateBackend createFsStateBackend(File checkpointDir) throws IOException {
+		return new FsStateBackend(checkpointDir.toURI().toString(), true);
 	}
 
 	private RocksDBStateBackend createRocksDBStateBackend(
 		File checkpointDir,
-		boolean incrementalCheckpointing,
-		boolean localRecovery) throws IOException {
+		boolean incrementalCheckpointing) throws IOException {
 
-		RocksDBStateBackend rocksDBStateBackend =
-			new RocksDBStateBackend(checkpointDir.toURI().toString(), incrementalCheckpointing);
-
-		if (localRecovery) {
-			rocksDBStateBackend.setLocalRecoveryMode(RocksDBStateBackend.LocalRecoveryMode.ENABLE_FILE_BASED);
-		}
-
-		return rocksDBStateBackend;
+		return new RocksDBStateBackend(checkpointDir.toURI().toString(), incrementalCheckpointing);
 	}
 
 	private void testExternalizedCheckpoints(
 		File checkpointDir,
 		String zooKeeperQuorum,
-		AbstractStateBackend backend) throws Exception {
+		AbstractStateBackend backend,
+		boolean localRecovery) throws Exception {
 
 		final Configuration config = new Configuration();
 
@@ -248,6 +249,12 @@ public class ExternalizedCheckpointITCase extends TestLogger {
 		config.setString(CheckpointingOptions.CHECKPOINTS_DIRECTORY, checkpointDir.toURI().toString());
 		config.setString(CheckpointingOptions.SAVEPOINT_DIRECTORY, savepointDir.toURI().toString());
 		config.setString(CheckpointingOptions.CHECKPOINTS_DIRECTORY, checkpointDir.toURI().toString());
+
+		if (localRecovery) {
+			config.setString(
+				CheckpointingOptions.LOCAL_RECOVERY,
+				LocalRecoveryConfig.LocalRecoveryMode.ENABLE_FILE_BASED.toString());
+		}
 
 		// ZooKeeper recovery mode?
 		if (zooKeeperQuorum != null) {
