@@ -19,19 +19,12 @@
 package org.apache.flink.runtime.state;
 
 import org.apache.flink.api.common.JobID;
-import org.apache.flink.api.common.typeutils.base.IntSerializer;
 import org.apache.flink.core.fs.Path;
 import org.apache.flink.core.testutils.CommonTestUtils;
-import org.apache.flink.runtime.clusterframework.types.AllocationID;
-import org.apache.flink.runtime.jobgraph.JobVertexID;
-import org.apache.flink.runtime.operators.testutils.DummyEnvironment;
 import org.apache.flink.runtime.state.filesystem.FileStateHandle;
 import org.apache.flink.runtime.state.filesystem.FsStateBackend;
-import org.apache.flink.runtime.state.heap.HeapKeyedStateBackend;
 import org.apache.flink.runtime.state.memory.ByteStreamStateHandle;
-import org.apache.flink.util.IOUtils;
 
-import org.junit.Assert;
 import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
@@ -170,57 +163,57 @@ public class FileStateBackendTest extends StateBackendTestBase<FsStateBackend> {
 
 	@Test
 	public void testLocalRecoveryConfigurationForwarding() throws Exception {
-		FsStateBackend stateBackend = getStateBackend();
-		DummyEnvironment environment = new DummyEnvironment();
-
-		File[] rootDirs = new File[]{tempFolder.newFolder(), tempFolder.newFolder(), tempFolder.newFolder()};
-
-		JobID jobID = new JobID();
-		AllocationID allocationID = new AllocationID();
-		JobVertexID jobVertexID = new JobVertexID();
-		int subtaskIndex = 0;
-
-		final LocalRecoveryConfig.LocalRecoveryMode testRecoveryMode =
-			LocalRecoveryConfig.LocalRecoveryMode.ENABLE_FILE_BASED;
-
-		LocalRecoveryDirectoryProvider directoryProvider =
-			new LocalRecoveryDirectoryProviderImpl(rootDirs, jobID, allocationID, jobVertexID, subtaskIndex);
-
-		TestTaskStateManager taskStateManager = new TestTaskStateManager();
-
-		LocalRecoveryConfig recoveryConfig = new LocalRecoveryConfig(
-			testRecoveryMode,
-			directoryProvider);
-
-		taskStateManager.setLocalRecoveryConfig(recoveryConfig);
-		environment.setTaskStateManager(taskStateManager);
-
-		HeapKeyedStateBackend<Integer> keyedBackend =
-			(HeapKeyedStateBackend<Integer>) stateBackend.createKeyedStateBackend(
-				environment,
-				new JobID(),
-				"test",
-				IntSerializer.INSTANCE,
-				1,
-				new KeyGroupRange(0, 0),
-				null);
-
-		try {
-			LocalRecoveryConfig localRecoveryConfig = keyedBackend.getLocalRecoveryConfig();
-			Assert.assertEquals(
-				testRecoveryMode,
-				localRecoveryConfig.getLocalRecoveryMode());
-
-			LocalRecoveryDirectoryProvider localStateDirectories = localRecoveryConfig.getLocalStateDirectoryProvider();
-			for (int i = 0; i < 10; ++i) {
-				Assert.assertEquals(
-					localStateDirectories.rootDirectory(i),
-					rootDirs[i % rootDirs.length]);
-			}
-		} finally {
-			IOUtils.closeQuietly(keyedBackend);
-			keyedBackend.dispose();
-		}
+//		FsStateBackend stateBackend = getStateBackend();
+//		DummyEnvironment environment = new DummyEnvironment();
+//
+//		File[] rootDirs = new File[]{tempFolder.newFolder(), tempFolder.newFolder(), tempFolder.newFolder()};
+//
+//		JobID jobID = new JobID();
+//		AllocationID allocationID = new AllocationID();
+//		JobVertexID jobVertexID = new JobVertexID();
+//		int subtaskIndex = 0;
+//
+//		final LocalRecoveryConfig.LocalRecoveryMode testRecoveryMode =
+//			LocalRecoveryConfig.LocalRecoveryMode.ENABLE_FILE_BASED;
+//
+//		LocalRecoveryDirectoryProvider directoryProvider =
+//			new LocalRecoveryDirectoryProviderImpl(rootDirs, jobID, allocationID, jobVertexID, subtaskIndex);
+//
+//		TestTaskStateManager taskStateManager = new TestTaskStateManager();
+//
+//		LocalRecoveryConfig recoveryConfig = new LocalRecoveryConfig(
+//			testRecoveryMode,
+//			directoryProvider);
+//
+//		taskStateManager.setLocalRecoveryConfig(recoveryConfig);
+//		environment.setTaskStateManager(taskStateManager);
+//
+//		HeapKeyedStateBackend<Integer> keyedBackend =
+//			(HeapKeyedStateBackend<Integer>) stateBackend.createKeyedStateBackend(
+//				environment,
+//				new JobID(),
+//				"test",
+//				IntSerializer.INSTANCE,
+//				1,
+//				new KeyGroupRange(0, 0),
+//				null);
+//
+//		try {
+//			LocalRecoveryConfig localRecoveryConfig = keyedBackend.getLocalRecoveryConfig();
+//			Assert.assertEquals(
+//				testRecoveryMode,
+//				localRecoveryConfig.getLocalRecoveryMode());
+//
+//			LocalRecoveryDirectoryProvider localStateDirectories = localRecoveryConfig.getLocalStateDirectoryProvider();
+//			for (int i = 0; i < 10; ++i) {
+//				Assert.assertEquals(
+//					localStateDirectories.rootDirectory(i),
+//					rootDirs[i % rootDirs.length]);
+//			}
+//		} finally {
+//			IOUtils.closeQuietly(keyedBackend);
+//			keyedBackend.dispose();
+//		}
 	}
 
 	// ------------------------------------------------------------------------
