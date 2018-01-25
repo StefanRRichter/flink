@@ -28,7 +28,6 @@ import org.apache.flink.runtime.state.internal.InternalListState;
 
 import org.rocksdb.ColumnFamilyHandle;
 import org.rocksdb.RocksDBException;
-import org.rocksdb.WriteOptions;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -55,12 +54,6 @@ public class RocksDBListState<K, N, V>
 	private final TypeSerializer<V> valueSerializer;
 
 	/**
-	 * We disable writes to the write-ahead-log here. We can't have these in the base class
-	 * because JNI segfaults for some reason if they are.
-	 */
-	private final WriteOptions writeOptions;
-
-	/**
 	 * Creates a new {@code RocksDBListState}.
 	 *
 	 * @param namespaceSerializer The serializer for the namespace.
@@ -74,9 +67,6 @@ public class RocksDBListState<K, N, V>
 
 		super(columnFamily, namespaceSerializer, stateDesc, backend);
 		this.valueSerializer = stateDesc.getElementSerializer();
-
-		writeOptions = new WriteOptions();
-		writeOptions.setDisableWAL(true);
 	}
 
 	@Override
