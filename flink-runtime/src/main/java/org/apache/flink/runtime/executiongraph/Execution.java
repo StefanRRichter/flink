@@ -26,6 +26,7 @@ import org.apache.flink.runtime.JobException;
 import org.apache.flink.runtime.accumulators.StringifiedAccumulatorResult;
 import org.apache.flink.runtime.checkpoint.CheckpointOptions;
 import org.apache.flink.runtime.checkpoint.JobManagerTaskRestore;
+import org.apache.flink.runtime.clusterframework.types.AllocationID;
 import org.apache.flink.runtime.clusterframework.types.ResourceID;
 import org.apache.flink.runtime.concurrent.FutureUtils;
 import org.apache.flink.runtime.deployment.InputChannelDeploymentDescriptor;
@@ -154,6 +155,9 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 	@Nullable
 	private volatile JobManagerTaskRestore taskRestore;
 
+	@Nullable
+	private volatile AllocationID assignedAllocationID;
+
 	// ------------------------ Accumulators & Metrics ------------------------
 
 	/** Lock for updating the accumulators atomically.
@@ -233,6 +237,11 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 		return state;
 	}
 
+	@Nullable
+	public AllocationID getAssignedAllocationID() {
+		return assignedAllocationID;
+	}
+
 	/**
 	 * Gets the global modification version of the execution graph when this execution was created.
 	 * 
@@ -270,7 +279,7 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 				if (state == SCHEDULED || state == CREATED) {
 					checkState(!taskManagerLocationFuture.isDone(), "The TaskManagerLocationFuture should not be set if we haven't assigned a resource yet.");
 					taskManagerLocationFuture.complete(logicalSlot.getTaskManagerLocation());
-
+					assignedAllocationID = logicalSlot.getAllocationId();
 					return true;
 				} else {
 					// free assigned resource and return false

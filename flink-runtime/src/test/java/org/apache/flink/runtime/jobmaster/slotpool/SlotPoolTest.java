@@ -22,6 +22,7 @@ import org.apache.flink.api.common.JobID;
 import org.apache.flink.api.common.time.Time;
 import org.apache.flink.runtime.clusterframework.types.AllocationID;
 import org.apache.flink.runtime.clusterframework.types.ResourceProfile;
+import org.apache.flink.runtime.clusterframework.types.SlotProfile;
 import org.apache.flink.runtime.executiongraph.utils.SimpleAckingTaskManagerGateway;
 import org.apache.flink.runtime.instance.SlotSharingGroupId;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
@@ -117,8 +118,7 @@ public class SlotPoolTest extends TestLogger {
 			CompletableFuture<LogicalSlot> future = slotPoolGateway.allocateSlot(
 				requestId,
 				new DummyScheduledUnit(),
-				DEFAULT_TESTING_PROFILE,
-				Collections.emptyList(),
+				SlotProfile.noLocality(DEFAULT_TESTING_PROFILE),
 				true,
 				timeout);
 			assertFalse(future.isDone());
@@ -161,15 +161,13 @@ public class SlotPoolTest extends TestLogger {
 			CompletableFuture<LogicalSlot> future1 = slotPoolGateway.allocateSlot(
 				new SlotRequestId(),
 				new DummyScheduledUnit(),
-				DEFAULT_TESTING_PROFILE,
-				Collections.emptyList(),
+				SlotProfile.noLocality(DEFAULT_TESTING_PROFILE),
 				true,
 				timeout);
 			CompletableFuture<LogicalSlot> future2 = slotPoolGateway.allocateSlot(
 				new SlotRequestId(),
 				new DummyScheduledUnit(),
-				DEFAULT_TESTING_PROFILE,
-				Collections.emptyList(),
+				SlotProfile.noLocality(DEFAULT_TESTING_PROFILE),
 				true,
 				timeout);
 
@@ -226,8 +224,7 @@ public class SlotPoolTest extends TestLogger {
 			CompletableFuture<LogicalSlot> future1 = slotPoolGateway.allocateSlot(
 				new SlotRequestId(),
 				new DummyScheduledUnit(),
-				DEFAULT_TESTING_PROFILE,
-				Collections.emptyList(),
+				SlotProfile.noLocality(DEFAULT_TESTING_PROFILE),
 				true,
 				timeout);
 			assertFalse(future1.isDone());
@@ -250,8 +247,7 @@ public class SlotPoolTest extends TestLogger {
 			CompletableFuture<LogicalSlot> future2 = slotPoolGateway.allocateSlot(
 				new SlotRequestId(),
 				new DummyScheduledUnit(),
-				DEFAULT_TESTING_PROFILE,
-				Collections.emptyList(),
+				SlotProfile.noLocality(DEFAULT_TESTING_PROFILE),
 				true,
 				timeout);
 
@@ -285,8 +281,7 @@ public class SlotPoolTest extends TestLogger {
 			CompletableFuture<LogicalSlot> future = slotPoolGateway.allocateSlot(
 				new SlotRequestId(),
 				new DummyScheduledUnit(),
-				DEFAULT_TESTING_PROFILE,
-				Collections.emptyList(),
+				SlotProfile.noLocality(DEFAULT_TESTING_PROFILE),
 				true,
 				timeout);
 			assertFalse(future.isDone());
@@ -361,8 +356,7 @@ public class SlotPoolTest extends TestLogger {
 			CompletableFuture<LogicalSlot> future1 = slotPoolGateway.allocateSlot(
 				new SlotRequestId(),
 				new DummyScheduledUnit(),
-				DEFAULT_TESTING_PROFILE,
-				Collections.emptyList(),
+				SlotProfile.noLocality(DEFAULT_TESTING_PROFILE),
 				true,
 				timeout);
 
@@ -371,8 +365,7 @@ public class SlotPoolTest extends TestLogger {
 			CompletableFuture<LogicalSlot> future2 = slotPoolGateway.allocateSlot(
 				new SlotRequestId(),
 				new DummyScheduledUnit(),
-				DEFAULT_TESTING_PROFILE,
-				Collections.emptyList(),
+				SlotProfile.noLocality(DEFAULT_TESTING_PROFILE),
 				true,
 				timeout);
 
@@ -431,11 +424,15 @@ public class SlotPoolTest extends TestLogger {
 
 			slotPoolGateway.connectToResourceManager(resourceManagerGateway);
 
+			SlotProfile slotProfile = new SlotProfile(
+				ResourceProfile.UNKNOWN,
+				Collections.emptyList(),
+				Collections.emptyList());
+
 			CompletableFuture<LogicalSlot> slotFuture = slotPoolGateway.allocateSlot(
 				new SlotRequestId(),
 				scheduledUnit,
-				ResourceProfile.UNKNOWN,
-				Collections.emptyList(),
+				slotProfile,
 				true,
 				timeout);
 
@@ -496,8 +493,7 @@ public class SlotPoolTest extends TestLogger {
 			CompletableFuture<LogicalSlot> slotFuture1 = slotPoolGateway.allocateSlot(
 				slotRequestId1,
 				scheduledUnit,
-				ResourceProfile.UNKNOWN,
-				Collections.emptyList(),
+				SlotProfile.noRequirements(),
 				true,
 				timeout);
 
@@ -507,8 +503,7 @@ public class SlotPoolTest extends TestLogger {
 			CompletableFuture<LogicalSlot> slotFuture2 = slotPoolGateway.allocateSlot(
 				slotRequestId2,
 				scheduledUnit,
-				ResourceProfile.UNKNOWN,
-				Collections.emptyList(),
+				SlotProfile.noRequirements(),
 				true,
 				timeout);
 

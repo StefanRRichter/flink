@@ -26,6 +26,7 @@ import org.apache.flink.configuration.JobManagerOptions;
 import org.apache.flink.runtime.JobException;
 import org.apache.flink.runtime.blob.PermanentBlobKey;
 import org.apache.flink.runtime.checkpoint.JobManagerTaskRestore;
+import org.apache.flink.runtime.clusterframework.types.AllocationID;
 import org.apache.flink.runtime.deployment.InputChannelDeploymentDescriptor;
 import org.apache.flink.runtime.deployment.InputGateDeploymentDescriptor;
 import org.apache.flink.runtime.deployment.PartialInputChannelDeploymentDescriptor;
@@ -306,6 +307,18 @@ public class ExecutionVertex implements AccessExecutionVertex, Archiveable<Archi
 			final int size = priorExecutions.size();
 			if (size > 0) {
 				return priorExecutions.get(size - 1).getAssignedResourceLocation();
+			}
+			else {
+				return null;
+			}
+		}
+	}
+
+	public AllocationID getLatestPriorAllocation() {
+		synchronized (priorExecutions) {
+			final int size = priorExecutions.size();
+			if (size > 0) {
+				return priorExecutions.get(size - 1).getAssignedAllocationID();
 			}
 			else {
 				return null;

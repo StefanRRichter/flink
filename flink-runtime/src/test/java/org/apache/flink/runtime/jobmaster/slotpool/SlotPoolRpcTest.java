@@ -23,6 +23,7 @@ import org.apache.flink.api.common.time.Time;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.runtime.akka.AkkaUtils;
 import org.apache.flink.runtime.clusterframework.types.AllocationID;
+import org.apache.flink.runtime.clusterframework.types.SlotProfile;
 import org.apache.flink.runtime.executiongraph.utils.SimpleAckingTaskManagerGateway;
 import org.apache.flink.runtime.instance.SlotSharingGroupId;
 import org.apache.flink.runtime.jobmanager.scheduler.NoResourceAvailableException;
@@ -121,8 +122,7 @@ public class SlotPoolRpcTest extends TestLogger {
 			CompletableFuture<LogicalSlot> future = pool.allocateSlot(
 				new SlotRequestId(),
 				new ScheduledUnit(SchedulerTestUtils.getDummyTask()),
-				DEFAULT_TESTING_PROFILE,
-				Collections.emptyList(),
+				SlotProfile.noLocality(DEFAULT_TESTING_PROFILE),
 				true,
 				TestingUtils.infiniteTime());
 
@@ -157,8 +157,7 @@ public class SlotPoolRpcTest extends TestLogger {
 			CompletableFuture<LogicalSlot> future = slotPoolGateway.allocateSlot(
 				requestId,
 				new ScheduledUnit(SchedulerTestUtils.getDummyTask()),
-				DEFAULT_TESTING_PROFILE,
-				Collections.emptyList(),
+				SlotProfile.noLocality(DEFAULT_TESTING_PROFILE),
 				true,
 				Time.milliseconds(10L));
 
@@ -202,8 +201,7 @@ public class SlotPoolRpcTest extends TestLogger {
 			CompletableFuture<LogicalSlot> future = slotPoolGateway.allocateSlot(
 				requestId,
 				new ScheduledUnit(SchedulerTestUtils.getDummyTask()),
-				DEFAULT_TESTING_PROFILE,
-				Collections.emptyList(),
+				SlotProfile.noLocality(DEFAULT_TESTING_PROFILE),
 				true,
 				Time.milliseconds(10L));
 
@@ -254,8 +252,7 @@ public class SlotPoolRpcTest extends TestLogger {
 			CompletableFuture<LogicalSlot> future = slotPoolGateway.allocateSlot(
 				requestId,
 				new ScheduledUnit(SchedulerTestUtils.getDummyTask()),
-				DEFAULT_TESTING_PROFILE,
-				Collections.emptyList(),
+				SlotProfile.noLocality(DEFAULT_TESTING_PROFILE),
 				true,
 				Time.milliseconds(10L));
 

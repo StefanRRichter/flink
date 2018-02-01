@@ -26,7 +26,9 @@ import org.apache.flink.runtime.clusterframework.types.ResourceID;
 import org.apache.flink.runtime.clusterframework.types.ResourceProfile;
 import org.apache.flink.runtime.clusterframework.types.SlotProfile;
 import org.apache.flink.runtime.concurrent.FutureUtils;
+import org.apache.flink.runtime.executiongraph.Execution;
 import org.apache.flink.runtime.executiongraph.ExecutionGraph;
+import org.apache.flink.runtime.executiongraph.ExecutionVertex;
 import org.apache.flink.runtime.instance.SlotSharingGroupId;
 import org.apache.flink.runtime.jobmanager.scheduler.CoLocationConstraint;
 import org.apache.flink.runtime.jobmanager.scheduler.Locality;
@@ -497,7 +499,7 @@ public class SlotPool extends RpcEndpoint implements SlotPoolGateway, AllocatedS
 		// check first whether we have a resolved root slot which we can use
 		SlotSharingManager.MultiTaskSlotLocality multiTaskSlotLocality = slotSharingManager.getResolvedRootSlot(
 			groupId,
-			slotProfile.getPreferredLocations());
+			slotProfile.matcher());
 
 		if (multiTaskSlotLocality != null && multiTaskSlotLocality.getLocality() == Locality.LOCAL) {
 			return multiTaskSlotLocality;
@@ -1327,63 +1329,75 @@ public class SlotPool extends RpcEndpoint implements SlotPoolGateway, AllocatedS
 		 * Poll a slot which matches the required resource profile. The polling tries to satisfy the
 		 * location preferences, by TaskManager and by host.
 		 *
-		 * @param request TODO
+		 * @param slotProfile TODO
 		 *
 		 * @return Slot which matches the resource profile, null if we can't find a match
 		 */
-		SlotAndLocality poll(SlotProfile request) {
+		SlotAndLocality poll(SlotProfile slotProfile) {
 			// fast path if no slots are available
 			if (availableSlots.isEmpty()) {
 				return null;
 			}
 
-			Collection<TaskManagerLocation> locationPreferences = request.getPreferredLocations();
-			ResourceProfile resourceProfile = request.getResourceProfile();
-			boolean hasLocationPreference = !locationPreferences.isEmpty();
+			SlotProfile.ProfileToSlotContextMatcher matcher = slotProfile.matcher();
 
-			if (hasLocationPreference) {
-
-				// first search by TaskManager
-				for (TaskManagerLocation location : locationPreferences) {
-
-					final Set<AllocatedSlot> onTaskManager = availableSlotsByTaskManager.get(location.getResourceID());
-					if (onTaskManager != null) {
-						for (AllocatedSlot candidate : onTaskManager) {
-							if (candidate.getResourceProfile().isMatching(resourceProfile)) {
-								remove(candidate.getAllocationId());
-								return new SlotAndLocality(candidate, Locality.LOCAL);
-							}
-						}
-					}
-				}
-
-				// now, search by host
-				for (TaskManagerLocation location : locationPreferences) {
-					final Set<AllocatedSlot> onHost = availableSlotsByHost.get(location.getFQDNHostname());
-					if (onHost != null) {
-						for (AllocatedSlot candidate : onHost) {
-							if (candidate.getResourceProfile().isMatching(resourceProfile)) {
-								remove(candidate.getAllocationId());
-								return new SlotAndLocality(candidate, Locality.HOST_LOCAL);
-							}
-						}
-					}
-				}
-			}
-
-			// take any slot
-			for (SlotAndTimestamp candidate : availableSlots.values()) {
-				final AllocatedSlot slot = candidate.slot();
-
-				if (slot.getResourceProfile().isMatching(resourceProfile)) {
+			return matcher.findMatchWithLocality(
+				availableSlots.values().stream(),
+				SlotAndTimestamp::slot,
+				(slot) -> slot.slot().getResourceProfile().isMatching(slotProfile.getResourceProfile()),
+				((slotAndTimestamp, locality) -> {
+					AllocatedSlot slot = slotAndTimestamp.slot();
 					remove(slot.getAllocationId());
-					return new SlotAndLocality(
-							slot, hasLocationPreference ? Locality.NON_LOCAL : Locality.UNCONSTRAINED);
-				}
-			}
-
-			// nothing available that matches
-			return null;
+					return new SlotAndLocality(slot, locality);
+				}));
+//
+//			Collection<TaskManagerLocation> locationPreferences = slotProfile.getPreferredLocations();
+//			ResourceProfile resourceProfile = slotProfile.getResourceProfile();
+//			boolean hasLocationPreference = !locationPreferences.isEmpty();
+//
+//			if (hasLocationPreference) {
+//
+//				// first search by TaskManager
+//				for (TaskManagerLocation location : locationPreferences) {
+//
+//					final Set<AllocatedSlot> onTaskManager = availableSlotsByTaskManager.get(location.getResourceID());
+//					if (onTaskManager != null) {
+//						for (AllocatedSlot candidate : onTaskManager) {
+//							if (candidate.getResourceProfile().isMatching(resourceProfile)) {
+//								remove(candidate.getAllocationId());
+//								return new SlotAndLocality(candidate, Locality.LOCAL);
+//							}
+//						}
+//					}
+//				}
+//
+//				// now, search by host
+//				for (TaskManagerLocation location : locationPreferences) {
+//					final Set<AllocatedSlot> onHost = availableSlotsByHost.get(location.getFQDNHostname());
+//					if (onHost != null) {
+//						for (AllocatedSlot candidate : onHost) {
+//							if (candidate.getResourceProfile().isMatching(resourceProfile)) {
+//								remove(candidate.getAllocationId());
+//								return new SlotAndLocality(candidate, Locality.HOST_LOCAL);
+//							}
+//						}
+//					}
+//				}
+//			}
+//
+//			// take any slot
+//			for (SlotAndTimestamp candidate : availableSlots.values()) {
+//				final AllocatedSlot slot = candidate.slot();
+//
+//				if (slot.getResourceProfile().isMatching(resourceProfile)) {
+//					remove(slot.getAllocationId());
+//					return new SlotAndLocality(
+//							slot, hasLocationPreference ? Locality.NON_LOCAL : Locality.UNCONSTRAINED);
+//				}
+//			}
+//
+//			// nothing available that matches
+//			return null;
 		}
 
 		/**
@@ -1502,11 +1516,27 @@ public class SlotPool extends RpcEndpoint implements SlotPoolGateway, AllocatedS
 				Collection<TaskManagerLocation> preferredLocations) {
 
 			final SlotRequestId requestId = new SlotRequestId();
+			Collection<AllocationID> previousAllocationIDs = Collections.emptyList();
+
+			//TODO !!!!!!!!
+			Execution execution = task.getTaskToExecute();
+			if (execution != null) {
+				ExecutionVertex executionVertex = execution.getVertex();
+				AllocationID lastAllocation = executionVertex.getLatestPriorAllocation();
+				if (lastAllocation != null) {
+					previousAllocationIDs = Collections.singletonList(lastAllocation);
+				}
+			}
+
+			SlotProfile slotProfile = new SlotProfile(
+				ResourceProfile.UNKNOWN,
+				preferredLocations,
+				previousAllocationIDs);
+
 			CompletableFuture<LogicalSlot> slotFuture = gateway.allocateSlot(
 				requestId,
 				task,
-				ResourceProfile.UNKNOWN,
-				preferredLocations,
+				slotProfile,
 				allowQueued,
 				timeout);
 

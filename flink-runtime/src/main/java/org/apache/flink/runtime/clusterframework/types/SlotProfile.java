@@ -18,6 +18,7 @@
 
 package org.apache.flink.runtime.clusterframework.types;
 
+import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.runtime.jobmanager.scheduler.Locality;
 import org.apache.flink.runtime.jobmaster.SlotContext;
 import org.apache.flink.runtime.taskmanager.TaskManagerLocation;
@@ -25,6 +26,7 @@ import org.apache.flink.runtime.taskmanager.TaskManagerLocation;
 import javax.annotation.Nonnull;
 
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.function.BiFunction;
@@ -33,6 +35,8 @@ import java.util.function.Predicate;
 import java.util.stream.Stream;
 
 public class SlotProfile {
+
+	private static final SlotProfile NO_REQUIREMENTS = noLocality(ResourceProfile.UNKNOWN);
 
 	@Nonnull
 	private final ResourceProfile resourceProfile;
@@ -85,7 +89,8 @@ public class SlotProfile {
 
 		private final HashSet<AllocationID> priorAllocations;
 
-		PreviousAllocationProfileToSlotContextMatcher(Collection<AllocationID> priorAllocations) {
+		@VisibleForTesting
+		public PreviousAllocationProfileToSlotContextMatcher(Collection<AllocationID> priorAllocations) {
 			this.priorAllocations = new HashSet<>(priorAllocations);
 		}
 
@@ -111,7 +116,8 @@ public class SlotProfile {
 		HashSet<ResourceID> preferredResourceIDs;
 		HashSet<String> preferredFQHostNames;
 
-		LocalityAwareRequirementsToSlotMatcher(Collection<TaskManagerLocation> locationPreferences) {
+		@VisibleForTesting
+		public LocalityAwareRequirementsToSlotMatcher(Collection<TaskManagerLocation> locationPreferences) {
 
 			this.preferredResourceIDs = new HashSet<>(locationPreferences.size());
 			this.preferredFQHostNames = new HashSet<>(locationPreferences.size());
@@ -173,5 +179,13 @@ public class SlotProfile {
 				return null;
 			}
 		}
+	}
+
+	public static SlotProfile noRequirements() {
+		return NO_REQUIREMENTS;
+	}
+
+	public static SlotProfile noLocality(ResourceProfile resourceProfile) {
+		return new SlotProfile(resourceProfile, Collections.emptyList(), Collections.emptyList());
 	}
 }

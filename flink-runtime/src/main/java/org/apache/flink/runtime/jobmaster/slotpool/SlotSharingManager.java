@@ -19,6 +19,7 @@
 package org.apache.flink.runtime.jobmaster.slotpool;
 
 import org.apache.flink.annotation.VisibleForTesting;
+import org.apache.flink.runtime.clusterframework.types.SlotProfile;
 import org.apache.flink.runtime.instance.SlotSharingGroupId;
 import org.apache.flink.runtime.jobmanager.scheduler.Locality;
 import org.apache.flink.runtime.jobmaster.LogicalSlot;
@@ -175,23 +176,27 @@ public class SlotSharingManager {
 	 * preferred locations is checked.
 	 *
 	 * @param groupId which the returned slot must not contain
-	 * @param locationPreferences specifying which locations are preferred
+	 * @param matcher TODO
 	 * @return the resolved root slot and its locality wrt to the specified location preferences
 	 * 		or null if there was no root slot which did not contain the given groupId
 	 */
 	@Nullable
-	MultiTaskSlotLocality getResolvedRootSlot(AbstractID groupId, Collection<TaskManagerLocation> locationPreferences) {
-		Preconditions.checkNotNull(locationPreferences);
+	MultiTaskSlotLocality getResolvedRootSlot(AbstractID groupId, SlotProfile.ProfileToSlotContextMatcher matcher) {
+		return matcher.findMatchWithLocality(
+			resolvedRootSlots.values().stream().flatMap(Collection::stream),
+			multiTaskSlot -> multiTaskSlot.getSlotContextFuture().join(),
+			multiTaskSlot -> !multiTaskSlot.contains(groupId),
+			MultiTaskSlotLocality::of);
 
-		final MultiTaskSlotLocality multiTaskSlotLocality;
-
-		if (locationPreferences.isEmpty()) {
-			multiTaskSlotLocality = getResolvedRootSlotWithoutLocationPreferences(groupId);
-		} else {
-			multiTaskSlotLocality = getResolvedRootSlotWithLocationPreferences(groupId, locationPreferences);
-		}
-
-		return multiTaskSlotLocality;
+//		final MultiTaskSlotLocality multiTaskSlotLocality;
+//
+//		if (locationPreferences.isEmpty()) {
+//			multiTaskSlotLocality = getResolvedRootSlotWithoutLocationPreferences(groupId);
+//		} else {
+//			multiTaskSlotLocality = getResolvedRootSlotWithLocationPreferences(groupId, locationPreferences);
+//		}
+//
+//		return multiTaskSlotLocality;
 	}
 
 	/**

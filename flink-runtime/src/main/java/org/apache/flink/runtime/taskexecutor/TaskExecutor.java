@@ -398,6 +398,8 @@ public class TaskExecutor extends RpcEndpoint implements TaskExecutorGateway {
 				taskInformation.getJobVertexId(),
 				tdd.getSubtaskIndex());
 
+			System.out.println(taskInformation.getTaskName()+" - "+tdd.getSubtaskIndex()+" -> "+System.identityHashCode(localStateStore));
+
 			final JobManagerTaskRestore taskRestore = tdd.getTaskRestore();
 
 			final TaskStateManager taskStateManager = new TaskStateManagerImpl(
