@@ -51,6 +51,7 @@ import org.apache.flink.runtime.executiongraph.failover.RestartAllStrategy;
 import org.apache.flink.runtime.executiongraph.restart.ExecutionGraphRestartCallback;
 import org.apache.flink.runtime.executiongraph.restart.RestartCallback;
 import org.apache.flink.runtime.executiongraph.restart.RestartStrategy;
+import org.apache.flink.runtime.jobmaster.slotpool.SlotProvider;
 import org.apache.flink.runtime.io.network.partition.ResultPartitionID;
 import org.apache.flink.runtime.jobgraph.IntermediateDataSetID;
 import org.apache.flink.runtime.jobgraph.JobStatus;
@@ -61,7 +62,6 @@ import org.apache.flink.runtime.jobgraph.tasks.CheckpointCoordinatorConfiguratio
 import org.apache.flink.runtime.jobmanager.scheduler.CoLocationGroup;
 import org.apache.flink.runtime.jobmanager.scheduler.LocationPreferenceConstraint;
 import org.apache.flink.runtime.jobmanager.scheduler.NoResourceAvailableException;
-import org.apache.flink.runtime.jobmaster.slotpool.SlotProvider;
 import org.apache.flink.runtime.query.KvStateLocationRegistry;
 import org.apache.flink.runtime.state.SharedStateRegistry;
 import org.apache.flink.runtime.state.StateBackend;
@@ -854,16 +854,6 @@ public class ExecutionGraph implements AccessExecutionGraph, Archiveable<Archive
 	}
 
 	private void scheduleLazy(SlotProvider slotProvider) {
-
-		System.out.println("---------");
-		for (ExecutionJobVertex executionJobVertex : verticesInCreationOrder) {
-			for (ExecutionVertex executionVertex : executionJobVertex.getTaskVertices()) {
-				System.out.println(
-					executionVertex.getJobvertexId() + " / " + executionVertex.getParallelSubtaskIndex() +
-						" -> " + executionVertex.getLatestPriorLocation());
-			}
-		}
-
 		// simply take the vertices without inputs.
 		for (ExecutionJobVertex ejv : verticesInCreationOrder) {
 			if (ejv.getJobVertex().isInputVertex()) {
@@ -894,18 +884,8 @@ public class ExecutionGraph implements AccessExecutionGraph, Archiveable<Archive
 		// collecting all the slots may resize and fail in that operation without slots getting lost
 		final ArrayList<CompletableFuture<Execution>> allAllocationFutures = new ArrayList<>(getNumberOfExecutionJobVertices());
 
-		Iterable<ExecutionJobVertex> verticesTopologically = getVerticesTopologically();
-		System.out.println("---------");
-		for (ExecutionJobVertex executionJobVertex : verticesTopologically) {
-			for (ExecutionVertex executionVertex : executionJobVertex.getTaskVertices()) {
-				System.out.println(
-					executionVertex.getJobvertexId() + " / " + executionVertex.getParallelSubtaskIndex() +
-						" -> " + executionVertex.getLatestPriorLocation());
-			}
-		}
-
 		// allocate the slots (obtain all their futures
-		for (ExecutionJobVertex ejv : verticesTopologically) {
+		for (ExecutionJobVertex ejv : getVerticesTopologically()) {
 			// these calls are not blocking, they only return futures
 			Collection<CompletableFuture<Execution>> allocationFutures = ejv.allocateResourcesForAll(
 				slotProvider,

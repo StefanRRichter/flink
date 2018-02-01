@@ -826,9 +826,9 @@ public class SlotPool extends RpcEndpoint implements SlotPoolGateway, AllocatedS
 	@Nullable
 	private SlotAndLocality pollAndAllocateSlot(
 		SlotRequestId slotRequestId,
-		SlotRequirementsMatcher slotRequirementsMatcher) {
-
-		SlotAndLocality slotFromPool = availableSlots.poll(slotRequirementsMatcher);
+		ResourceProfile resourceProfile,
+		Collection<TaskManagerLocation> locationPreferences) {
+		SlotAndLocality slotFromPool = availableSlots.poll(resourceProfile, locationPreferences);
 
 		if (slotFromPool != null) {
 			allocatedSlots.add(slotRequestId, slotFromPool.getSlot());
@@ -1343,27 +1343,63 @@ public class SlotPool extends RpcEndpoint implements SlotPoolGateway, AllocatedS
 		 * Poll a slot which matches the required resource profile. The polling tries to satisfy the
 		 * location preferences, by TaskManager and by host.
 		 *
-		 * @param slotRequirementsMatcher TODO
+		 * @param resourceProfile      The required resource profile.
+		 * @param locationPreferences  The location preferences, in order to be checked.
 		 *
 		 * @return Slot which matches the resource profile, null if we can't find a match
 		 */
-		SlotAndLocality poll(SlotRequirementsMatcher slotRequirementsMatcher) {
-
+		SlotAndLocality poll(ResourceProfile resourceProfile, Collection<TaskManagerLocation> locationPreferences) {
 			// fast path if no slots are available
 			if (availableSlots.isEmpty()) {
 				return null;
 			}
 
-			SlotAndLocality slotAndLocality = slotRequirementsMatcher.findMatch(
-				availableSlotsByTaskManager,
-				availableSlotsByHost,
-				availableSlots);
+			boolean hadLocationPreference = false;
 
-			if (slotAndLocality != null) {
-				remove(slotAndLocality.getSlot().getAllocationId());
+			if (locationPreferences != null && !locationPreferences.isEmpty()) {
+
+				// first search by TaskManager
+				for (TaskManagerLocation location : locationPreferences) {
+					hadLocationPreference = true;
+
+					final Set<AllocatedSlot> onTaskManager = availableSlotsByTaskManager.get(location.getResourceID());
+					if (onTaskManager != null) {
+						for (AllocatedSlot candidate : onTaskManager) {
+							if (candidate.getResourceProfile().isMatching(resourceProfile)) {
+								remove(candidate.getAllocationId());
+								return new SlotAndLocality(candidate, Locality.LOCAL);
+							}
+						}
+					}
+				}
+
+				// now, search by host
+				for (TaskManagerLocation location : locationPreferences) {
+					final Set<AllocatedSlot> onHost = availableSlotsByHost.get(location.getFQDNHostname());
+					if (onHost != null) {
+						for (AllocatedSlot candidate : onHost) {
+							if (candidate.getResourceProfile().isMatching(resourceProfile)) {
+								remove(candidate.getAllocationId());
+								return new SlotAndLocality(candidate, Locality.HOST_LOCAL);
+							}
+						}
+					}
+				}
 			}
 
-			return slotAndLocality;
+			// take any slot
+			for (SlotAndTimestamp candidate : availableSlots.values()) {
+				final AllocatedSlot slot = candidate.slot();
+
+				if (slot.getResourceProfile().isMatching(resourceProfile)) {
+					remove(slot.getAllocationId());
+					return new SlotAndLocality(
+							slot, hadLocationPreference ? Locality.NON_LOCAL : Locality.UNCONSTRAINED);
+				}
+			}
+
+			// nothing available that matches
+			return null;
 		}
 
 		/**
@@ -1566,114 +1602,6 @@ public class SlotPool extends RpcEndpoint implements SlotPoolGateway, AllocatedS
 		@Override
 		public String toString() {
 			return slot + " @ " + timestamp;
-		}
-	}
-
-	private abstract static class SlotRequirementsMatcher {
-
-		ResourceProfile resourceProfile;
-
-		public abstract SlotAndLocality findMatch(
-			Map<ResourceID, Set<AllocatedSlot>> availableSlotsByTaskManager,
-			Map<String, Set<AllocatedSlot>> availableSlotsByHost,
-			Map<AllocationID, SlotAndTimestamp> availableSlotsByAllocationID);
-	}
-
-	private static class ASlotRequirementsMatcher extends SlotRequirementsMatcher {
-
-		Collection<AllocationID> priorAllocations;
-
-		@Override
-		public SlotAndLocality findMatch(
-			Map<ResourceID, Set<AllocatedSlot>> availableSlotsByTaskManager,
-			Map<String, Set<AllocatedSlot>> availableSlotsByHost,
-			Map<AllocationID, SlotAndTimestamp> availableSlotsByAllocationID) {
-
-			for (AllocationID priorAllocation : priorAllocations) {
-				final SlotAndTimestamp onTaskManager = availableSlotsByAllocationID.get(priorAllocation);
-				onTaskManager.slot().
-				if (onTaskManager != null) {
-					AllocatedSlot slot = onTaskManager.slot();
-
-					if (slot.getResourceProfile().isMatching(resourceProfile)) {
-						return new SlotAndLocality(slot, Locality.LOCAL);
-					}
-				}
-			}
-
-			return null;
-		}
-	}
-
-	private static class BSlotRequirementsMatcher extends SlotRequirementsMatcher {
-
-		Collection<TaskManagerLocation> locationPreferences;
-
-		@Override
-		public SlotAndLocality findMatch(
-			Map<ResourceID, Set<AllocatedSlot>> availableSlotsByTaskManager,
-			Map<String, Set<AllocatedSlot>> availableSlotsByHost,
-			Map<AllocationID, SlotAndTimestamp> availableSlotsByAllocationID) {
-
-			final boolean hasLocationPreference = (locationPreferences != null && !locationPreferences.isEmpty());
-
-			if (hasLocationPreference) {
-				// first search by TaskManager
-				for (TaskManagerLocation location : locationPreferences) {
-
-					AllocatedSlot allocatedSlot = findAllocatedSlot(
-						availableSlotsByTaskManager,
-						location.getResourceID(),
-						resourceProfile);
-
-					if (allocatedSlot != null) {
-						return new SlotAndLocality(allocatedSlot, Locality.LOCAL);
-					}
-				}
-
-				// now, search by host
-				for (TaskManagerLocation location : locationPreferences) {
-
-					AllocatedSlot allocatedSlot = findAllocatedSlot(
-						availableSlotsByHost,
-						location.getFQDNHostname(),
-						resourceProfile);
-
-					if (allocatedSlot != null) {
-						return new SlotAndLocality(allocatedSlot, Locality.HOST_LOCAL);
-					}
-				}
-			}
-
-			// take any slot
-			for (SlotAndTimestamp candidate : availableSlotsByAllocationID.values()) {
-				final AllocatedSlot slot = candidate.slot();
-
-				if (slot.getResourceProfile().isMatching(resourceProfile)) {
-					return new SlotAndLocality(
-						slot, hasLocationPreference ? Locality.NON_LOCAL : Locality.UNCONSTRAINED);
-				}
-			}
-
-			// nothing available that matches
-			return null;
-		}
-
-		private  <K> AllocatedSlot findAllocatedSlot(
-			Map<K, Set<AllocatedSlot>> allocatedSlotsMap,
-			K searchKey,
-			ResourceProfile resourceProfile) {
-
-			final Set<AllocatedSlot> onTaskManager = allocatedSlotsMap.get(searchKey);
-			if (onTaskManager != null) {
-				for (AllocatedSlot candidate : onTaskManager) {
-					if (candidate.getResourceProfile().isMatching(resourceProfile)) {
-						return candidate;
-					}
-				}
-			}
-
-			return null;
 		}
 	}
 }
