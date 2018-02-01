@@ -33,7 +33,8 @@ import org.apache.flink.contrib.streaming.state.RocksDBStateBackend;
 import org.apache.flink.core.fs.Path;
 import org.apache.flink.runtime.highavailability.HighAvailabilityServices;
 import org.apache.flink.runtime.highavailability.HighAvailabilityServicesUtils;
-import org.apache.flink.runtime.minicluster.LocalFlinkMiniCluster;
+import org.apache.flink.runtime.minicluster.MiniCluster;
+import org.apache.flink.runtime.minicluster.MiniClusterConfiguration;
 import org.apache.flink.runtime.state.AbstractStateBackend;
 import org.apache.flink.runtime.state.CheckpointListener;
 import org.apache.flink.runtime.state.filesystem.FsStateBackend;
@@ -47,6 +48,7 @@ import org.apache.flink.streaming.api.watermark.Watermark;
 import org.apache.flink.streaming.api.windowing.time.Time;
 import org.apache.flink.streaming.api.windowing.windows.TimeWindow;
 import org.apache.flink.streaming.util.TestStreamEnvironment;
+import org.apache.flink.test.util.MiniClusterResource;
 import org.apache.flink.test.util.SuccessException;
 import org.apache.flink.util.Collector;
 import org.apache.flink.util.TestLogger;
@@ -54,6 +56,7 @@ import org.apache.flink.util.TestLogger;
 import org.apache.curator.test.TestingServer;
 import org.junit.After;
 import org.junit.Before;
+import org.junit.ClassRule;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
@@ -90,11 +93,18 @@ public abstract class AbstractEventTimeWindowCheckpointingITCase extends TestLog
 	private static final int MAX_MEM_STATE_SIZE = 10 * 1024 * 1024;
 	private static final int PARALLELISM = 4;
 
-	private static LocalFlinkMiniCluster cluster;
+	private static MiniCluster cluster;
 
 	private static TestStreamEnvironment env;
 
 	private static TestingServer zkServer;
+
+	@ClassRule
+	public static MiniClusterResource miniClusterResource = new MiniClusterResource(
+		new MiniClusterResource.MiniClusterResourceConfiguration(
+			new Configuration(),
+			1,
+			PARALLELISM));
 
 	@Rule
 	public TemporaryFolder tempFolder = new TemporaryFolder();
@@ -140,7 +150,12 @@ public abstract class AbstractEventTimeWindowCheckpointingITCase extends TestLog
 				}
 			});
 
-		cluster = new LocalFlinkMiniCluster(config, haServices, false);
+		MiniClusterConfiguration.Builder builder = new MiniClusterConfiguration.Builder()
+			.setConfiguration(config)
+			.setNumSlotsPerTaskManager(2)
+			.setNumTaskManagers(4);
+
+		cluster = new MiniCluster(builder.build());//new LocalFlinkMiniCluster(config, haServices, false);
 		cluster.start();
 
 		env = new TestStreamEnvironment(cluster, PARALLELISM);
@@ -212,9 +227,9 @@ public abstract class AbstractEventTimeWindowCheckpointingITCase extends TestLog
 	}
 
 	@After
-	public void stopTestCluster() throws IOException {
+	public void stopTestCluster() throws Exception {
 		if (cluster != null) {
-			cluster.stop();
+			cluster.shutdown();
 			cluster = null;
 		}
 
