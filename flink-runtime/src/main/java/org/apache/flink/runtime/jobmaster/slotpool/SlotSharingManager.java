@@ -216,7 +216,6 @@ public class SlotSharingManager {
 		synchronized (lock) {
 			for (TaskManagerLocation locationPreference : locationPreferences) {
 				final Set<MultiTaskSlot> multiTaskSlots = resolvedRootSlots.get(locationPreference);
-
 				if (multiTaskSlots != null) {
 					for (MultiTaskSlot multiTaskSlot : multiTaskSlots) {
 						if (!multiTaskSlot.contains(groupId)) {
