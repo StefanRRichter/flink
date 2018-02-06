@@ -205,7 +205,7 @@ public class TaskExecutor extends RpcEndpoint implements TaskExecutorGateway {
 		this.jobManagerTable = taskExecutorServices.getJobManagerTable();
 		this.jobLeaderService = taskExecutorServices.getJobLeaderService();
 		this.taskManagerLocation = taskExecutorServices.getTaskManagerLocation();
-		this.localStateStoresManager = taskExecutorServices.getTaskStateManager();
+		this.localStateStoresManager = taskExecutorServices.getTaskManagerStateStore();
 		this.networkEnvironment = taskExecutorServices.getNetworkEnvironment();
 
 		this.jobManagerConnections = new HashMap<>(4);
@@ -280,6 +280,8 @@ public class TaskExecutor extends RpcEndpoint implements TaskExecutorGateway {
 		} catch (Throwable t) {
 			throwable = ExceptionUtils.firstOrSuppressed(t, throwable);
 		}
+
+		localStateStoresManager.shutdown();
 
 		try {
 			super.postStop();
@@ -458,8 +460,9 @@ public class TaskExecutor extends RpcEndpoint implements TaskExecutorGateway {
 			ResultPartitionConsumableNotifier resultPartitionConsumableNotifier = jobManagerConnection.getResultPartitionConsumableNotifier();
 			PartitionProducerStateChecker partitionStateChecker = jobManagerConnection.getPartitionStateChecker();
 
-			final TaskLocalStateStore localStateStore = localStateStoresManager.localStateStoreForTask(
+			final TaskLocalStateStore localStateStore = localStateStoresManager.localStateStoreForSubtask(
 				jobId,
+				tdd.getAllocationId(),
 				taskInformation.getJobVertexId(),
 				tdd.getSubtaskIndex());
 
@@ -749,6 +752,9 @@ public class TaskExecutor extends RpcEndpoint implements TaskExecutorGateway {
 						// just allocated the slot. So let's fail hard in this case!
 						onFatalError(slotNotFoundException);
 					}
+
+					// release local state under the allocation id.
+					localStateStoresManager.releaseLocalStateForAllocationId(allocationId);
 
 					// sanity check
 					if (!taskSlotTable.isSlotFree(slotId.getSlotNumber())) {
@@ -1277,6 +1283,8 @@ public class TaskExecutor extends RpcEndpoint implements TaskExecutorGateway {
 		} catch (SlotNotFoundException e) {
 			log.debug("Could not free slot for allocation id {}.", allocationId, e);
 		}
+
+		localStateStoresManager.releaseLocalStateForAllocationId(allocationId);
 	}
 
 	private void timeoutSlot(AllocationID allocationId, UUID ticket) {

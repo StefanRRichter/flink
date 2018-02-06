@@ -58,6 +58,7 @@ import org.apache.flink.runtime.state.CompletedCheckpointStorageLocation;
 import org.apache.flink.runtime.state.KeyGroupRange;
 import org.apache.flink.runtime.state.OperatorStateBackend;
 import org.apache.flink.runtime.state.OperatorStateHandle;
+import org.apache.flink.runtime.state.SnapshotResult;
 import org.apache.flink.runtime.state.StateBackend;
 import org.apache.flink.runtime.state.TestTaskStateManager;
 import org.apache.flink.runtime.state.memory.MemoryBackendCheckpointStorage;
@@ -96,7 +97,6 @@ public class StreamTaskTerminationTest extends TestLogger {
 	public static final OneShotLatch RUN_LATCH = new OneShotLatch();
 	public static final OneShotLatch CHECKPOINTING_LATCH = new OneShotLatch();
 	private static final OneShotLatch CLEANUP_LATCH = new OneShotLatch();
-	private static final OneShotLatch HANDLE_ASYNC_EXCEPTION_LATCH = new OneShotLatch();
 
 	/**
 	 * FLINK-6833
@@ -208,8 +208,7 @@ public class StreamTaskTerminationTest extends TestLogger {
 		}
 
 		@Override
-		protected void init() throws Exception {
-
+		protected void init() {
 		}
 
 		@Override
@@ -231,7 +230,7 @@ public class StreamTaskTerminationTest extends TestLogger {
 		}
 
 		@Override
-		protected void cancelTask() throws Exception {
+		protected void cancelTask() {
 		}
 
 		@Override
@@ -242,7 +241,7 @@ public class StreamTaskTerminationTest extends TestLogger {
 		}
 	}
 
-	static class NoOpStreamOperator<T> extends AbstractStreamOperator<T> {
+	private static class NoOpStreamOperator<T> extends AbstractStreamOperator<T> {
 		private static final long serialVersionUID = 4517845269225218312L;
 	}
 
@@ -251,7 +250,7 @@ public class StreamTaskTerminationTest extends TestLogger {
 		private static final long serialVersionUID = -5053068148933314100L;
 
 		@Override
-		public CompletedCheckpointStorageLocation resolveCheckpoint(String pointer) throws IOException {
+		public CompletedCheckpointStorageLocation resolveCheckpoint(String pointer) {
 			throw new UnsupportedOperationException();
 		}
 
@@ -268,7 +267,7 @@ public class StreamTaskTerminationTest extends TestLogger {
 			TypeSerializer<K> keySerializer,
 			int numberOfKeyGroups,
 			KeyGroupRange keyGroupRange,
-			TaskKvStateRegistry kvStateRegistry) throws IOException {
+			TaskKvStateRegistry kvStateRegistry) {
 			return null;
 		}
 
@@ -282,10 +281,10 @@ public class StreamTaskTerminationTest extends TestLogger {
 		}
 	}
 
-	static class BlockingCallable implements Callable<OperatorStateHandle> {
+	static class BlockingCallable implements Callable<SnapshotResult<OperatorStateHandle>> {
 
 		@Override
-		public OperatorStateHandle call() throws Exception {
+		public SnapshotResult<OperatorStateHandle> call() throws Exception {
 			// notify that we have started the asynchronous checkpointed operation
 			CHECKPOINTING_LATCH.trigger();
 			// wait until we have reached the StreamTask#cleanup --> This will already cancel this FutureTask
