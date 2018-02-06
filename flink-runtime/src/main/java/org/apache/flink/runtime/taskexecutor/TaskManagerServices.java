@@ -18,6 +18,7 @@
 
 package org.apache.flink.runtime.taskexecutor;
 
+import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.TaskManagerOptions;
 import org.apache.flink.core.memory.MemoryType;
@@ -42,6 +43,7 @@ import org.apache.flink.runtime.query.KvStateClientProxy;
 import org.apache.flink.runtime.query.KvStateRegistry;
 import org.apache.flink.runtime.query.KvStateServer;
 import org.apache.flink.runtime.query.QueryableStateUtils;
+import org.apache.flink.runtime.state.LocalRecoveryConfig;
 import org.apache.flink.runtime.state.TaskExecutorLocalStateStoresManager;
 import org.apache.flink.runtime.taskexecutor.slot.TaskSlotTable;
 import org.apache.flink.runtime.taskexecutor.slot.TimerService;
@@ -58,6 +60,7 @@ import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 
 /**
@@ -67,6 +70,9 @@ import java.util.concurrent.ScheduledThreadPoolExecutor;
  */
 public class TaskManagerServices {
 	private static final Logger LOG = LoggerFactory.getLogger(TaskManagerServices.class);
+
+	@VisibleForTesting
+	public static final String LOCAL_STATE_SUB_DIRECTORY_ROOT = "localState";
 
 	/** TaskManager services. */
 	private final TaskManagerLocation taskManagerLocation;
@@ -144,7 +150,7 @@ public class TaskManagerServices {
 		return jobLeaderService;
 	}
 
-	public TaskExecutorLocalStateStoresManager getTaskStateManager() {
+	public TaskExecutorLocalStateStoresManager getTaskManagerStateStore() {
 		return taskStateManager;
 	}
 
@@ -209,6 +215,7 @@ public class TaskManagerServices {
 	 *
 	 * @param resourceID resource ID of the task manager
 	 * @param taskManagerServicesConfiguration task manager configuration
+	 * @param taskIOExecutor executor for async IO operations.
 	 * @param freeHeapMemoryWithDefrag an estimate of the size of the free heap memory
 	 * @param maxJvmHeapMemory the maximum JVM heap size
 	 * @return task manager components
@@ -217,6 +224,7 @@ public class TaskManagerServices {
 	public static TaskManagerServices fromConfiguration(
 			TaskManagerServicesConfiguration taskManagerServicesConfiguration,
 			ResourceID resourceID,
+			Executor taskIOExecutor,
 			long freeHeapMemoryWithDefrag,
 			long maxJvmHeapMemory) throws Exception {
 
@@ -256,7 +264,20 @@ public class TaskManagerServices {
 		final JobManagerTable jobManagerTable = new JobManagerTable();
 
 		final JobLeaderService jobLeaderService = new JobLeaderService(taskManagerLocation);
-		final TaskExecutorLocalStateStoresManager taskStateManager = new TaskExecutorLocalStateStoresManager();
+
+		LocalRecoveryConfig.LocalRecoveryMode localRecoveryMode = taskManagerServicesConfiguration.getLocalRecoveryMode();
+
+		final String[] stateRootDirectoryStrings = taskManagerServicesConfiguration.getLocalRecoveryStateRootDirectories();
+
+		final File[] stateRootDirectoryFiles = new File[stateRootDirectoryStrings.length];
+
+		for (int i = 0; i < stateRootDirectoryStrings.length; ++i) {
+			stateRootDirectoryFiles[i] = new File(stateRootDirectoryStrings[i], LOCAL_STATE_SUB_DIRECTORY_ROOT);
+		}
+
+		final TaskExecutorLocalStateStoresManager taskStateManager =
+			new TaskExecutorLocalStateStoresManager(localRecoveryMode, stateRootDirectoryFiles, taskIOExecutor);
+
 		return new TaskManagerServices(
 			taskManagerLocation,
 			memoryManager,
