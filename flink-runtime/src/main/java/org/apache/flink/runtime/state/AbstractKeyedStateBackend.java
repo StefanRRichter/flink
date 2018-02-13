@@ -38,7 +38,6 @@ import org.apache.flink.api.common.state.ValueStateDescriptor;
 import org.apache.flink.api.common.typeutils.TypeSerializer;
 import org.apache.flink.core.fs.CloseableRegistry;
 import org.apache.flink.runtime.checkpoint.CheckpointOptions;
-import org.apache.flink.runtime.checkpoint.StateObjectCollection;
 import org.apache.flink.runtime.query.TaskKvStateRegistry;
 import org.apache.flink.runtime.state.internal.InternalAggregatingState;
 import org.apache.flink.runtime.state.internal.InternalFoldingState;
@@ -52,6 +51,7 @@ import org.apache.flink.util.Preconditions;
 
 import java.io.Closeable;
 import java.io.IOException;
+import java.util.Collection;
 import java.util.HashMap;
 
 import static org.apache.flink.util.Preconditions.checkNotNull;
@@ -64,7 +64,7 @@ import static org.apache.flink.util.Preconditions.checkNotNull;
  */
 public abstract class AbstractKeyedStateBackend<K> implements
 	KeyedStateBackend<K>,
-	Snapshotable<SnapshotResult<KeyedStateHandle>, StateObjectCollection<KeyedStateHandle>>,
+	Snapshotable<SnapshotResult<KeyedStateHandle>, Collection<KeyedStateHandle>>,
 	Closeable,
 	CheckpointListener {
 

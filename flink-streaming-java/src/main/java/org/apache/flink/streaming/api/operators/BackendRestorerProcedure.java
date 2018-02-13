@@ -19,21 +19,19 @@
 package org.apache.flink.streaming.api.operators;
 
 import org.apache.flink.core.fs.CloseableRegistry;
-import org.apache.flink.runtime.checkpoint.StateObjectCollection;
 import org.apache.flink.runtime.state.Snapshotable;
 import org.apache.flink.runtime.state.StateObject;
 import org.apache.flink.util.Disposable;
 import org.apache.flink.util.ExceptionUtils;
 import org.apache.flink.util.Preconditions;
 import org.apache.flink.util.ThrowingSupplier;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.annotation.Nonnull;
-
 import java.io.Closeable;
 import java.io.IOException;
+import java.util.Collection;
 import java.util.Iterator;
 
 /**
@@ -48,7 +46,7 @@ import java.util.Iterator;
  * @param <S> type of the supplied snapshots from which the backend restores.
  */
 public class BackendRestorerProcedure<
-	T extends Closeable & Disposable & Snapshotable<?, StateObjectCollection<S>>,
+	T extends Closeable & Disposable & Snapshotable<?, Collection<S>>,
 	S extends StateObject> {
 
 	/** Logger for this class. */
@@ -81,9 +79,10 @@ public class BackendRestorerProcedure<
 	 * @return the created (and restored) state backend.
 	 * @throws Exception if the backend could not be created or restored.
 	 */
-	public @Nonnull T createAndRestore(@Nonnull Iterator<StateObjectCollection<S>> restoreOptions) throws Exception {
+	public @Nonnull T createAndRestore(
+		@Nonnull Iterator<? extends Collection<S>> restoreOptions) throws Exception {
 
-		StateObjectCollection<S> restoreState = null;
+		Collection<S> restoreState = null;
 
 		boolean retry;
 
