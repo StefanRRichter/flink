@@ -581,7 +581,7 @@ public class HeapKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 			long checkpointId,
 			long timestamp,
 			CheckpointStreamFactory primaryStreamFactory,
-			CheckpointOptions checkpointOptions) throws Exception {
+			CheckpointOptions checkpointOptions) {
 
 			if (!hasRegisteredState()) {
 				return DoneFuture.nullValue();

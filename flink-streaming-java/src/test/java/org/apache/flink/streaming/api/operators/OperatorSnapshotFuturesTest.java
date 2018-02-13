@@ -18,6 +18,7 @@
 
 package org.apache.flink.streaming.api.operators;
 
+import org.apache.flink.runtime.state.DoneFuture;
 import org.apache.flink.runtime.state.KeyedStateHandle;
 import org.apache.flink.runtime.state.OperatorStateHandle;
 import org.apache.flink.runtime.state.OperatorStreamStateHandle;
@@ -48,25 +49,25 @@ public class OperatorSnapshotFuturesTest extends TestLogger {
 		operatorSnapshotResult.cancel();
 
 		KeyedStateHandle keyedManagedStateHandle = mock(KeyedStateHandle.class);
-		RunnableFuture<SnapshotResult<KeyedStateHandle>> keyedStateManagedFuture = mock(RunnableFuture.class);
+		RunnableFuture<SnapshotResult<KeyedStateHandle>> keyedStateManagedFuture = DoneFuture.nullValue();
 		SnapshotResult<KeyedStateHandle> keyedStateManagedResult =
 			new SnapshotResult<>(keyedManagedStateHandle, null);
 		when(keyedStateManagedFuture.get()).thenReturn(keyedStateManagedResult);
 
 		KeyedStateHandle keyedRawStateHandle = mock(KeyedStateHandle.class);
-		RunnableFuture<SnapshotResult<KeyedStateHandle>> keyedStateRawFuture = mock(RunnableFuture.class);
+		RunnableFuture<SnapshotResult<KeyedStateHandle>> keyedStateRawFuture = DoneFuture.nullValue();
 		SnapshotResult<KeyedStateHandle> keyedStateRawResult =
 			new SnapshotResult<>(keyedRawStateHandle, null);
 		when(keyedStateRawFuture.get()).thenReturn(keyedStateRawResult);
 
 		OperatorStateHandle operatorManagedStateHandle = mock(OperatorStreamStateHandle.class);
-		RunnableFuture<SnapshotResult<OperatorStateHandle>> operatorStateManagedFuture = mock(RunnableFuture.class);
+		RunnableFuture<SnapshotResult<OperatorStateHandle>> operatorStateManagedFuture = DoneFuture.nullValue();
 		SnapshotResult<OperatorStateHandle> operatorStateManagedResult =
 			new SnapshotResult<>(operatorManagedStateHandle, null);
 		when(operatorStateManagedFuture.get()).thenReturn(operatorStateManagedResult);
 
 		OperatorStateHandle operatorRawStateHandle = mock(OperatorStreamStateHandle.class);
-		RunnableFuture<SnapshotResult<OperatorStateHandle>> operatorStateRawFuture = mock(RunnableFuture.class);
+		RunnableFuture<SnapshotResult<OperatorStateHandle>> operatorStateRawFuture = DoneFuture.nullValue();
 		SnapshotResult<OperatorStateHandle> operatorStateRawResult =
 			new SnapshotResult<>(operatorRawStateHandle, null);
 		when(operatorStateRawFuture.get()).thenReturn(operatorStateRawResult);

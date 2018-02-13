@@ -110,18 +110,19 @@ public class StateSnapshotContextSynchronousImpl implements StateSnapshotContext
 	}
 
 	public RunnableFuture<SnapshotResult<KeyedStateHandle>> getKeyedStateStreamFuture() throws IOException {
-		return getGenericStateStreamFuture(keyedStateCheckpointOutputStream);
+		KeyedStateHandle keyGroupsStateHandle =
+			closeAndUnregisterStreamToObtainStateHandle(keyedStateCheckpointOutputStream);
+		return toDoneFutureOfSnapshotResult(keyGroupsStateHandle);
 	}
 
 	public RunnableFuture<SnapshotResult<OperatorStateHandle>> getOperatorStateStreamFuture() throws IOException {
-		return getGenericStateStreamFuture(operatorStateCheckpointOutputStream);
+		OperatorStateHandle operatorStateHandle =
+			closeAndUnregisterStreamToObtainStateHandle(operatorStateCheckpointOutputStream);
+		return toDoneFutureOfSnapshotResult(operatorStateHandle);
 	}
 
-	private <T extends StateObject> RunnableFuture<SnapshotResult<T>> getGenericStateStreamFuture(
-		NonClosingCheckpointOutputStream<? extends T> stream) throws IOException {
-		T operatorStateHandle = (T) closeAndUnregisterStreamToObtainStateHandle(stream);
-		SnapshotResult<T> snapshotResult =
-			new SnapshotResult<>(operatorStateHandle, null);
+	private <T extends StateObject> RunnableFuture<SnapshotResult<T>> toDoneFutureOfSnapshotResult(T handle) {
+		SnapshotResult<T> snapshotResult = new SnapshotResult<>(handle, null);
 		return new DoneFuture<>(snapshotResult);
 	}
 
