@@ -22,11 +22,9 @@ import org.apache.flink.runtime.checkpoint.OperatorSubtaskState;
 import org.apache.flink.runtime.state.KeyedStateHandle;
 import org.apache.flink.runtime.state.OperatorStateHandle;
 import org.apache.flink.runtime.state.SnapshotResult;
-import org.apache.flink.runtime.state.StateObject;
 import org.apache.flink.util.FutureUtil;
 
 import javax.annotation.Nonnull;
-
 import java.util.concurrent.ExecutionException;
 
 /**
@@ -57,17 +55,17 @@ public class OperatorSnapshotFinalizer {
 			FutureUtil.runIfNotDoneAndGet(snapshotFutures.getOperatorStateRawFuture());
 
 		jobManagerOwnedState = new OperatorSubtaskState(
-			extractJobManagerOwned(operatorManaged),
-			extractJobManagerOwned(operatorRaw),
-			extractJobManagerOwned(keyedManaged),
-			extractJobManagerOwned(keyedRaw)
+			operatorManaged.getJobManagerOwnedSnapshot(),
+			operatorRaw.getJobManagerOwnedSnapshot(),
+			keyedManaged.getJobManagerOwnedSnapshot(),
+			keyedRaw.getJobManagerOwnedSnapshot()
 		);
 
 		taskLocalState = new OperatorSubtaskState(
-			extractTaskLocal(operatorManaged),
-			extractTaskLocal(operatorRaw),
-			extractTaskLocal(keyedManaged),
-			extractTaskLocal(keyedRaw)
+			operatorManaged.getTaskLocalSnapshot(),
+			operatorRaw.getTaskLocalSnapshot(),
+			keyedManaged.getTaskLocalSnapshot(),
+			keyedRaw.getTaskLocalSnapshot()
 		);
 	}
 
@@ -77,13 +75,5 @@ public class OperatorSnapshotFinalizer {
 
 	public OperatorSubtaskState getJobManagerOwnedState() {
 		return jobManagerOwnedState;
-	}
-
-	private <T extends StateObject> T extractJobManagerOwned(SnapshotResult<T> snapshotResult) {
-		return snapshotResult != null ? snapshotResult.getJobManagerOwnedSnapshot() : null;
-	}
-
-	private <T extends StateObject> T extractTaskLocal(SnapshotResult<T> snapshotResult) {
-		return snapshotResult != null ? snapshotResult.getTaskLocalSnapshot() : null;
 	}
 }

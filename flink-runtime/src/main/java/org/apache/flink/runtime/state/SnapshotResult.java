@@ -34,6 +34,9 @@ public class SnapshotResult<T extends StateObject> implements StateObject {
 
 	private static final long serialVersionUID = 1L;
 
+	/** An singleton instance to represent an empty snapshot result. */
+	private static final SnapshotResult<?> EMPTY = new SnapshotResult<>(null, null);
+
 	/** This is the state snapshot that will be reported to the Job Manager to acknowledge a checkpoint. */
 	private final T jobManagerOwnedSnapshot;
 
@@ -95,5 +98,10 @@ public class SnapshotResult<T extends StateObject> implements StateObject {
 	@Override
 	public long getStateSize() {
 		return jobManagerOwnedSnapshot != null ? jobManagerOwnedSnapshot.getStateSize() : 0L;
+	}
+
+	@SuppressWarnings("unchecked")
+	public static <T extends StateObject> SnapshotResult<T> empty() {
+		return (SnapshotResult<T>) EMPTY;
 	}
 }

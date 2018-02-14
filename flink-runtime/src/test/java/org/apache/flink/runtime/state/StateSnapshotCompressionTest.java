@@ -40,7 +40,7 @@ import static org.mockito.Mockito.mock;
 public class StateSnapshotCompressionTest extends TestLogger {
 
 	@Test
-	public void testCompressionConfiguration() throws Exception {
+	public void testCompressionConfiguration() {
 
 		ExecutionConfig executionConfig = new ExecutionConfig();
 		executionConfig.setUseSnapshotCompression(true);
@@ -141,7 +141,7 @@ public class StateSnapshotCompressionTest extends TestLogger {
 				stateBackend.snapshot(0L, 0L, streamFactory, CheckpointOptions.forCheckpointWithDefaultLocation());
 			snapshot.run();
 			SnapshotResult<KeyedStateHandle> snapshotResult = snapshot.get();
-			stateHandle = snapshotResult != null ? snapshotResult.getJobManagerOwnedSnapshot() : null;
+			stateHandle = snapshotResult.getJobManagerOwnedSnapshot();
 
 		} finally {
 			IOUtils.closeQuietly(stateBackend);

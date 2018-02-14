@@ -21,14 +21,12 @@ package org.apache.flink.runtime.state;
 import org.apache.flink.core.fs.Path;
 import org.apache.flink.runtime.state.filesystem.FileBasedStateOutputStream;
 import org.apache.flink.util.ExceptionUtils;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.annotation.Nonnegative;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
-
 import java.io.Closeable;
 import java.io.File;
 import java.io.IOException;
@@ -43,19 +41,18 @@ public interface CheckpointStreamWithResultProvider extends Closeable {
 	/**
 	 * Closes the stream ans returns a snapshot result with the stream handle(s).
 	 */
+	@Nonnull
 	SnapshotResult<StreamStateHandle> closeAndFinalizeCheckpointStreamResult() throws IOException;
 
 	/**
 	 * Returns the encapsulated output stream.
 	 */
+	@Nonnull
 	CheckpointStreamFactory.CheckpointStateOutputStream getCheckpointOutputStream();
 
 	@Override
 	default void close() throws IOException {
-		CheckpointStreamFactory.CheckpointStateOutputStream outputStream = getCheckpointOutputStream();
-		if (outputStream != null) {
-			outputStream.close();
-		}
+		getCheckpointOutputStream().close();
 	}
 
 	/**
@@ -64,17 +61,20 @@ public interface CheckpointStreamWithResultProvider extends Closeable {
 	 */
 	class PrimaryStreamOnly implements CheckpointStreamWithResultProvider {
 
+		@Nonnull
 		private final CheckpointStreamFactory.CheckpointStateOutputStream outputStream;
 
 		public PrimaryStreamOnly(@Nonnull CheckpointStreamFactory.CheckpointStateOutputStream outputStream) {
 			this.outputStream = outputStream;
 		}
 
+		@Nonnull
 		@Override
 		public SnapshotResult<StreamStateHandle> closeAndFinalizeCheckpointStreamResult() throws IOException {
 			return new SnapshotResult<>(outputStream.closeAndGetHandle(), null);
 		}
 
+		@Nonnull
 		@Override
 		public CheckpointStreamFactory.CheckpointStateOutputStream getCheckpointOutputStream() {
 			return outputStream;
@@ -89,12 +89,14 @@ public interface CheckpointStreamWithResultProvider extends Closeable {
 
 		private static final Logger LOG = LoggerFactory.getLogger(PrimaryAndSecondaryStream.class);
 
+		@Nonnull
 		private final DuplicatingCheckpointOutputStream outputStream;
 
 		public PrimaryAndSecondaryStream(@Nonnull DuplicatingCheckpointOutputStream outputStream) {
 			this.outputStream = outputStream;
 		}
 
+		@Nonnull
 		@Override
 		public SnapshotResult<StreamStateHandle> closeAndFinalizeCheckpointStreamResult() throws IOException {
 
@@ -123,9 +125,10 @@ public interface CheckpointStreamWithResultProvider extends Closeable {
 				return new SnapshotResult<>(primaryStreamStateHandle, secondaryStreamStateHandle);
 			}
 
-			return null;
+			return SnapshotResult.empty();
 		}
 
+		@Nonnull
 		@Override
 		public DuplicatingCheckpointOutputStream getCheckpointOutputStream() {
 			return outputStream;
@@ -136,6 +139,7 @@ public interface CheckpointStreamWithResultProvider extends Closeable {
 
 		private static final Logger LOG = LoggerFactory.getLogger(PrimaryAndSecondaryStream.class);
 
+		@Nonnull
 		public CheckpointStreamWithResultProvider create(
 			@Nonnegative long checkpointId,
 			@Nonnull CheckpointedStateScope checkpointedStateScope,
@@ -173,24 +177,22 @@ public interface CheckpointStreamWithResultProvider extends Closeable {
 	 * creates a {@link SnapshotResult<KeyGroupsStateHandle>} by combining the key groups offsets with all the
 	 * present stream state handles.
 	 */
+	@Nonnull
 	static SnapshotResult<KeyedStateHandle> toKeyedStateHandleSnapshotResult(
-		@Nullable SnapshotResult<StreamStateHandle> snapshotResult,
+		@Nonnull SnapshotResult<StreamStateHandle> snapshotResult,
 		@Nonnull KeyGroupRangeOffsets keyGroupRangeOffsets) {
 
-		if (snapshotResult == null) {
-			return null;
-		}
-
-		StreamStateHandle jobManagerOwnedSnapshot = snapshotResult.getJobManagerOwnedSnapshot();
-
-		if (jobManagerOwnedSnapshot == null) {
-			return null;
-		}
-
-		StreamStateHandle taskLocalSnapshot = snapshotResult.getTaskLocalSnapshot();
-
 		return new SnapshotResult<>(
-			new KeyGroupsStateHandle(keyGroupRangeOffsets, jobManagerOwnedSnapshot),
-			taskLocalSnapshot != null ? new KeyGroupsStateHandle(keyGroupRangeOffsets, taskLocalSnapshot) : null);
+			fromStateHandlePlusKeyGroupOffsets(snapshotResult.getJobManagerOwnedSnapshot(), keyGroupRangeOffsets),
+			fromStateHandlePlusKeyGroupOffsets(snapshotResult.getTaskLocalSnapshot(), keyGroupRangeOffsets)
+		);
+	}
+
+	@Nullable
+	static KeyedStateHandle fromStateHandlePlusKeyGroupOffsets(
+		@Nullable StreamStateHandle streamStateHandle,
+		@Nonnull KeyGroupRangeOffsets keyGroupRangeOffsets) {
+
+		return streamStateHandle != null ? new KeyGroupsStateHandle(keyGroupRangeOffsets, streamStateHandle) : null;
 	}
 }

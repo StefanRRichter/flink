@@ -3238,7 +3238,7 @@ public abstract class StateBackendTestBase<B extends AbstractStateBackend> exten
 
 			runner.join();
 			SnapshotResult<KeyedStateHandle> snapshotResult = snapshot.get();
-			stateHandle = snapshotResult != null ? snapshotResult.getJobManagerOwnedSnapshot() : null;
+			stateHandle = snapshotResult.getJobManagerOwnedSnapshot();
 
 			// test isolation
 			for (int i = 0; i < 20; ++i) {
@@ -3429,7 +3429,7 @@ public abstract class StateBackendTestBase<B extends AbstractStateBackend> exten
 		}
 
 		SnapshotResult<KeyedStateHandle> snapshotResult = snapshotRunnableFuture.get();
-		return snapshotResult != null ? snapshotResult.getJobManagerOwnedSnapshot() : null;
+		return snapshotResult.getJobManagerOwnedSnapshot();
 	}
 
 	public static class TestPojo implements Serializable {

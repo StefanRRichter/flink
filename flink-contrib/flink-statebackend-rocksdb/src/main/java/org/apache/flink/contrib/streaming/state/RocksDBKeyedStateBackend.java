@@ -103,6 +103,7 @@ import org.rocksdb.WriteOptions;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.annotation.Nonnull;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
@@ -1564,7 +1565,7 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 						timestamp);
 				}
 
-				return DoneFuture.nullValue();
+				return DoneFuture.of(SnapshotResult.empty());
 			}
 
 			LocalRecoveryDirectoryProvider directoryProvider =
@@ -1622,6 +1623,7 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 						}
 					}
 
+					@Nonnull
 					@Override
 					public SnapshotResult<KeyedStateHandle> performOperation() throws Exception {
 						long startTime = System.currentTimeMillis();
@@ -1685,7 +1687,7 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 				if (LOG.isDebugEnabled()) {
 					LOG.debug("Asynchronous RocksDB snapshot performed on empty keyed state at {}. Returning null.", checkpointTimestamp);
 				}
-				return DoneFuture.nullValue();
+				return DoneFuture.of(SnapshotResult.empty());
 			}
 
 			SnapshotDirectory snapshotDirectory;
@@ -1715,8 +1717,7 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 					RocksDBKeyedStateBackend.this,
 					checkpointStreamFactory,
 					snapshotDirectory,
-					checkpointId,
-					checkpointTimestamp);
+					checkpointId);
 
 			try {
 				snapshotOperation.takeSnapshot();
@@ -1820,10 +1821,11 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 		}
 
 		/**
-		 * 4) Returns a state handle to the snapshot after the snapshot procedure is completed and null before.
+		 * 4) Returns a snapshot result for the completed snapshot.
 		 *
-		 * @return state handle to the completed snapshot
+		 * @return snapshot result for the completed snapshot.
 		 */
+		@Nonnull
 		public SnapshotResult<KeyedStateHandle> getSnapshotResultStateHandle() throws IOException {
 
 			if (snapshotCloseableRegistry.unregisterCloseable(checkpointStreamWithResultProvider)) {
@@ -1833,7 +1835,8 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 				checkpointStreamWithResultProvider = null;
 				return CheckpointStreamWithResultProvider.toKeyedStateHandleSnapshotResult(res, keyGroupRangeOffsets);
 			}
-			return null;
+
+			return SnapshotResult.empty();
 		}
 
 		/**
@@ -2025,7 +2028,7 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 		}
 
 		@Override
-		protected void releaseResources() throws Exception {
+		protected void releaseResources() {
 			closeLocalRegistry();
 			releaseSnapshotOperationResources();
 		}
@@ -2036,7 +2039,7 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 		}
 
 		@Override
-		protected void stopOperation() throws Exception {
+		protected void stopOperation() {
 			closeLocalRegistry();
 		}
 
@@ -2050,6 +2053,7 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 			}
 		}
 
+		@Nonnull
 		@Override
 		public SnapshotResult<KeyedStateHandle> performOperation() throws Exception {
 			long startTime = System.currentTimeMillis();
@@ -2081,9 +2085,6 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 		/** Id for the current checkpoint. */
 		private final long checkpointId;
 
-		/** Timestamp for the current checkpoint. */
-		private final long checkpointTimestamp;
-
 		/** All sst files that were part of the last previously completed checkpoint. */
 		private Set<StateHandleID> baseSstFiles;
 
@@ -2111,13 +2112,11 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 			RocksDBKeyedStateBackend<K> stateBackend,
 			CheckpointStreamFactory checkpointStreamFactory,
 			SnapshotDirectory localBackupDirectory,
-			long checkpointId,
-			long checkpointTimestamp) throws IOException {
+			long checkpointId) throws IOException {
 
 			this.stateBackend = stateBackend;
 			this.checkpointStreamFactory = checkpointStreamFactory;
 			this.checkpointId = checkpointId;
-			this.checkpointTimestamp = checkpointTimestamp;
 			this.dbLease = this.stateBackend.rocksDBResourceGuard.acquireResource();
 			this.localBackupDirectory = localBackupDirectory;
 		}
@@ -2166,6 +2165,7 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 			}
 		}
 
+		@Nonnull
 		private SnapshotResult<StreamStateHandle> materializeMetaData() throws Exception {
 
 			LocalRecoveryConfig localRecoveryConfig = stateBackend.localRecoveryConfig;
@@ -2196,15 +2196,14 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 
 				serializationProxy.write(out);
 
-				SnapshotResult<StreamStateHandle> result = null;
 				if (closeableRegistry.unregisterCloseable(streamWithResultProvider)) {
-					result = streamWithResultProvider.closeAndFinalizeCheckpointStreamResult();
+					SnapshotResult<StreamStateHandle> result =
+						streamWithResultProvider.closeAndFinalizeCheckpointStreamResult();
 					streamWithResultProvider = null;
+					return result;
 				} else {
 					throw new IOException("Stream already closed and cannot return a handle.");
 				}
-
-				return result;
 			} finally {
 				if (streamWithResultProvider != null) {
 					if (closeableRegistry.unregisterCloseable(streamWithResultProvider)) {
@@ -2244,6 +2243,7 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 			checkpoint.createCheckpoint(localBackupDirectory.getDirectory().getPath());
 		}
 
+		@Nonnull
 		SnapshotResult<KeyedStateHandle> runSnapshot() throws Exception {
 
 			stateBackend.cancelStreamRegistry.registerCloseable(closeableRegistry);

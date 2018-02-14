@@ -73,6 +73,7 @@ import org.apache.flink.util.ThrowingSupplier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.annotation.Nonnull;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -305,7 +306,7 @@ public class HeapKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 			final long checkpointId,
 			final long timestamp,
 			final CheckpointStreamFactory streamFactory,
-			CheckpointOptions checkpointOptions) throws Exception {
+			CheckpointOptions checkpointOptions) {
 
 		return snapshotStrategy.performSnapshot(checkpointId, timestamp, streamFactory, checkpointOptions);
 	}
@@ -584,7 +585,7 @@ public class HeapKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 			CheckpointOptions checkpointOptions) {
 
 			if (!hasRegisteredState()) {
-				return DoneFuture.nullValue();
+				return DoneFuture.of(SnapshotResult.empty());
 			}
 
 			long syncStartTime = System.currentTimeMillis();
@@ -664,6 +665,7 @@ public class HeapKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 						}
 					}
 
+					@Nonnull
 					@Override
 					protected SnapshotResult<KeyedStateHandle> performOperation() throws Exception {
 
@@ -700,7 +702,7 @@ public class HeapKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 							return CheckpointStreamWithResultProvider.toKeyedStateHandleSnapshotResult(result, kgOffs);
 						}
 
-						return null;
+						return SnapshotResult.empty();
 					}
 				};
 

@@ -23,6 +23,7 @@ import org.apache.flink.core.fs.CloseableRegistry;
 import org.apache.flink.util.ExceptionUtils;
 import org.apache.flink.util.Preconditions;
 
+import javax.annotation.Nonnull;
 import java.io.Closeable;
 import java.io.IOException;
 import java.util.concurrent.RunnableFuture;
@@ -109,12 +110,14 @@ public class StateSnapshotContextSynchronousImpl implements StateSnapshotContext
 		return operatorStateCheckpointOutputStream;
 	}
 
+	@Nonnull
 	public RunnableFuture<SnapshotResult<KeyedStateHandle>> getKeyedStateStreamFuture() throws IOException {
 		KeyedStateHandle keyGroupsStateHandle =
 			closeAndUnregisterStreamToObtainStateHandle(keyedStateCheckpointOutputStream);
 		return toDoneFutureOfSnapshotResult(keyGroupsStateHandle);
 	}
 
+	@Nonnull
 	public RunnableFuture<SnapshotResult<OperatorStateHandle>> getOperatorStateStreamFuture() throws IOException {
 		OperatorStateHandle operatorStateHandle =
 			closeAndUnregisterStreamToObtainStateHandle(operatorStateCheckpointOutputStream);

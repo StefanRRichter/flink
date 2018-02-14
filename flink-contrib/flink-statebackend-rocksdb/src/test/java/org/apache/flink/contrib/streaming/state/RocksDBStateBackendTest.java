@@ -337,7 +337,7 @@ public class RocksDBStateBackendTest extends StateBackendTestBase<RocksDBStateBa
 			waiter.await(); // wait for snapshot stream writing to run
 
 			SnapshotResult<KeyedStateHandle> snapshotResult = snapshot.get();
-			KeyedStateHandle keyedStateHandle = snapshotResult != null ? snapshotResult.getJobManagerOwnedSnapshot() : null;
+			KeyedStateHandle keyedStateHandle = snapshotResult.getJobManagerOwnedSnapshot();
 			assertNotNull(keyedStateHandle);
 			assertTrue(keyedStateHandle.getStateSize() > 0);
 			assertEquals(2, keyedStateHandle.getKeyGroupRange().getNumberOfKeyGroups());
@@ -441,8 +441,8 @@ public class RocksDBStateBackendTest extends StateBackendTestBase<RocksDBStateBa
 
 					SnapshotResult<KeyedStateHandle> snapshotResult = snapshot.get();
 
-					IncrementalKeyedStateHandle stateHandle = snapshotResult != null ?
-						(IncrementalKeyedStateHandle) snapshotResult.getJobManagerOwnedSnapshot() : null;
+					IncrementalKeyedStateHandle stateHandle =
+						(IncrementalKeyedStateHandle) snapshotResult.getJobManagerOwnedSnapshot();
 
 					Map<StateHandleID, StreamStateHandle> sharedState =
 						new HashMap<>(stateHandle.getSharedState());

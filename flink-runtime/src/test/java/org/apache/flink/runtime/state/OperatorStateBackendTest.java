@@ -380,7 +380,7 @@ public class OperatorStateBackendTest {
 				operatorStateBackend.snapshot(0L, 0L, streamFactory, CheckpointOptions.forCheckpointWithDefaultLocation());
 
 		SnapshotResult<OperatorStateHandle> snapshotResult = FutureUtil.runIfNotDoneAndGet(snapshot);
-		OperatorStateHandle stateHandle = snapshotResult != null ? snapshotResult.getJobManagerOwnedSnapshot() : null;
+		OperatorStateHandle stateHandle = snapshotResult.getJobManagerOwnedSnapshot();
 		assertNull(stateHandle);
 	}
 
@@ -410,7 +410,7 @@ public class OperatorStateBackendTest {
 					operatorStateBackend.snapshot(0L, 0L, streamFactory, CheckpointOptions.forCheckpointWithDefaultLocation());
 
 			SnapshotResult<OperatorStateHandle> snapshotResult = FutureUtil.runIfNotDoneAndGet(snapshot);
-			stateHandle = snapshotResult != null ? snapshotResult.getJobManagerOwnedSnapshot() : null;
+			stateHandle = snapshotResult.getJobManagerOwnedSnapshot();
 			assertNotNull(stateHandle);
 
 			final Map<Integer, Integer> retrieved = new HashMap<>();
@@ -430,7 +430,7 @@ public class OperatorStateBackendTest {
 			snapshotResult = FutureUtil.runIfNotDoneAndGet(snapshot);
 
 			stateHandle.discardState();
-			stateHandle = snapshotResult != null ? snapshotResult.getJobManagerOwnedSnapshot() : null;
+			stateHandle = snapshotResult.getJobManagerOwnedSnapshot();
 
 			retrieved.clear();
 			operatorStateBackend.restore(StateObjectCollection.singleton(stateHandle));
@@ -449,7 +449,7 @@ public class OperatorStateBackendTest {
 			if (stateHandle != null) {
 				stateHandle.discardState();
 			}
-			stateHandle = snapshotResult != null ? snapshotResult.getJobManagerOwnedSnapshot() : null;
+			stateHandle = snapshotResult.getJobManagerOwnedSnapshot();
 
 			retrieved.clear();
 			operatorStateBackend.restore(StateObjectCollection.singleton(stateHandle));
@@ -515,7 +515,7 @@ public class OperatorStateBackendTest {
 			operatorStateBackend.snapshot(1L, 1L, streamFactory, CheckpointOptions.forCheckpointWithDefaultLocation());
 
 		SnapshotResult<OperatorStateHandle> snapshotResult = FutureUtil.runIfNotDoneAndGet(snapshot);
-		OperatorStateHandle stateHandle = snapshot != null ? snapshotResult.getJobManagerOwnedSnapshot() : null;
+		OperatorStateHandle stateHandle = snapshotResult.getJobManagerOwnedSnapshot();
 
 		try {
 
@@ -674,7 +674,7 @@ public class OperatorStateBackendTest {
 
 		// run the snapshot
 		SnapshotResult<OperatorStateHandle> snapshotResult = runnableFuture.get();
-		OperatorStateHandle stateHandle = snapshotResult != null ? snapshotResult.getJobManagerOwnedSnapshot() : null;
+		OperatorStateHandle stateHandle = snapshotResult.getJobManagerOwnedSnapshot();
 
 		try {
 
@@ -877,7 +877,7 @@ public class OperatorStateBackendTest {
 			operatorStateBackend.snapshot(1, 1, streamFactory, CheckpointOptions.forCheckpointWithDefaultLocation());
 
 		SnapshotResult<OperatorStateHandle> snapshotResult = FutureUtil.runIfNotDoneAndGet(runnableFuture);
-		OperatorStateHandle stateHandle = snapshotResult != null ? snapshotResult.getJobManagerOwnedSnapshot() : null;
+		OperatorStateHandle stateHandle = snapshotResult.getJobManagerOwnedSnapshot();
 
 		try {
 

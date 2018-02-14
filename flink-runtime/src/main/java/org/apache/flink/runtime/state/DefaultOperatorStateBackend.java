@@ -44,6 +44,7 @@ import org.apache.flink.util.StateMigrationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.annotation.Nonnull;
 import java.io.IOException;
 import java.io.Serializable;
 import java.util.ArrayList;
@@ -307,7 +308,7 @@ public class DefaultOperatorStateBackend implements OperatorStateBackend {
 		final long syncStartTime = System.currentTimeMillis();
 
 		if (registeredOperatorStates.isEmpty() && registeredBroadcastStates.isEmpty()) {
-			return DoneFuture.nullValue();
+			return DoneFuture.of(SnapshotResult.empty());
 		}
 
 		final Map<String, PartitionableListState<?>> registeredOperatorStatesDeepCopies =
@@ -356,12 +357,12 @@ public class DefaultOperatorStateBackend implements OperatorStateBackend {
 				}
 
 				@Override
-				protected void releaseResources() throws Exception {
+				protected void releaseResources() {
 					closeOutStream();
 				}
 
 				@Override
-				protected void stopOperation() throws Exception {
+				protected void stopOperation() {
 					closeOutStream();
 				}
 
@@ -376,6 +377,7 @@ public class DefaultOperatorStateBackend implements OperatorStateBackend {
 					}
 				}
 
+				@Nonnull
 				@Override
 				public SnapshotResult<OperatorStateHandle> performOperation() throws Exception {
 					long asyncStartTime = System.currentTimeMillis();

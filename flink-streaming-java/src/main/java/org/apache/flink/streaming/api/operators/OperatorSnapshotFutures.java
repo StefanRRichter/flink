@@ -18,12 +18,14 @@
 
 package org.apache.flink.streaming.api.operators;
 
+import org.apache.flink.runtime.state.DoneFuture;
 import org.apache.flink.runtime.state.KeyedStateHandle;
 import org.apache.flink.runtime.state.OperatorStateHandle;
 import org.apache.flink.runtime.state.SnapshotResult;
 import org.apache.flink.runtime.state.StateUtil;
 import org.apache.flink.util.ExceptionUtils;
 
+import javax.annotation.Nonnull;
 import java.util.concurrent.RunnableFuture;
 
 /**
@@ -31,55 +33,74 @@ import java.util.concurrent.RunnableFuture;
  */
 public class OperatorSnapshotFutures {
 
+	@Nonnull
 	private RunnableFuture<SnapshotResult<KeyedStateHandle>> keyedStateManagedFuture;
+
+	@Nonnull
 	private RunnableFuture<SnapshotResult<KeyedStateHandle>> keyedStateRawFuture;
+
+	@Nonnull
 	private RunnableFuture<SnapshotResult<OperatorStateHandle>> operatorStateManagedFuture;
+
+	@Nonnull
 	private RunnableFuture<SnapshotResult<OperatorStateHandle>> operatorStateRawFuture;
 
 	public OperatorSnapshotFutures() {
-		this(null, null, null, null);
+		this(
+			DoneFuture.of(SnapshotResult.empty()),
+			DoneFuture.of(SnapshotResult.empty()),
+			DoneFuture.of(SnapshotResult.empty()),
+			DoneFuture.of(SnapshotResult.empty()));
 	}
 
 	public OperatorSnapshotFutures(
-			RunnableFuture<SnapshotResult<KeyedStateHandle>> keyedStateManagedFuture,
-			RunnableFuture<SnapshotResult<KeyedStateHandle>> keyedStateRawFuture,
-			RunnableFuture<SnapshotResult<OperatorStateHandle>> operatorStateManagedFuture,
-			RunnableFuture<SnapshotResult<OperatorStateHandle>> operatorStateRawFuture) {
+		@Nonnull RunnableFuture<SnapshotResult<KeyedStateHandle>> keyedStateManagedFuture,
+		@Nonnull RunnableFuture<SnapshotResult<KeyedStateHandle>> keyedStateRawFuture,
+		@Nonnull RunnableFuture<SnapshotResult<OperatorStateHandle>> operatorStateManagedFuture,
+		@Nonnull RunnableFuture<SnapshotResult<OperatorStateHandle>> operatorStateRawFuture) {
 		this.keyedStateManagedFuture = keyedStateManagedFuture;
 		this.keyedStateRawFuture = keyedStateRawFuture;
 		this.operatorStateManagedFuture = operatorStateManagedFuture;
 		this.operatorStateRawFuture = operatorStateRawFuture;
 	}
 
+	@Nonnull
 	public RunnableFuture<SnapshotResult<KeyedStateHandle>> getKeyedStateManagedFuture() {
 		return keyedStateManagedFuture;
 	}
 
-	public void setKeyedStateManagedFuture(RunnableFuture<SnapshotResult<KeyedStateHandle>> keyedStateManagedFuture) {
+	public void setKeyedStateManagedFuture(
+		@Nonnull RunnableFuture<SnapshotResult<KeyedStateHandle>> keyedStateManagedFuture) {
 		this.keyedStateManagedFuture = keyedStateManagedFuture;
 	}
 
+	@Nonnull
 	public RunnableFuture<SnapshotResult<KeyedStateHandle>> getKeyedStateRawFuture() {
 		return keyedStateRawFuture;
 	}
 
-	public void setKeyedStateRawFuture(RunnableFuture<SnapshotResult<KeyedStateHandle>> keyedStateRawFuture) {
+	public void setKeyedStateRawFuture(
+		@Nonnull RunnableFuture<SnapshotResult<KeyedStateHandle>> keyedStateRawFuture) {
 		this.keyedStateRawFuture = keyedStateRawFuture;
 	}
 
+	@Nonnull
 	public RunnableFuture<SnapshotResult<OperatorStateHandle>> getOperatorStateManagedFuture() {
 		return operatorStateManagedFuture;
 	}
 
-	public void setOperatorStateManagedFuture(RunnableFuture<SnapshotResult<OperatorStateHandle>> operatorStateManagedFuture) {
+	public void setOperatorStateManagedFuture(
+		@Nonnull RunnableFuture<SnapshotResult<OperatorStateHandle>> operatorStateManagedFuture) {
 		this.operatorStateManagedFuture = operatorStateManagedFuture;
 	}
 
+	@Nonnull
 	public RunnableFuture<SnapshotResult<OperatorStateHandle>> getOperatorStateRawFuture() {
 		return operatorStateRawFuture;
 	}
 
-	public void setOperatorStateRawFuture(RunnableFuture<SnapshotResult<OperatorStateHandle>> operatorStateRawFuture) {
+	public void setOperatorStateRawFuture(
+		@Nonnull RunnableFuture<SnapshotResult<OperatorStateHandle>> operatorStateRawFuture) {
 		this.operatorStateRawFuture = operatorStateRawFuture;
 	}
 

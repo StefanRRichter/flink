@@ -124,7 +124,7 @@ public class MemoryStateBackendTest extends StateBackendTestBase<MemoryStateBack
 			operatorStateBackend.snapshot(1, 1, streamFactory, CheckpointOptions.forCheckpointWithDefaultLocation());
 
 		SnapshotResult<OperatorStateHandle> snapshotResult = FutureUtil.runIfNotDoneAndGet(runnableFuture);
-		OperatorStateHandle stateHandle = snapshotResult != null ? snapshotResult.getJobManagerOwnedSnapshot() : null;
+		OperatorStateHandle stateHandle = snapshotResult.getJobManagerOwnedSnapshot();
 
 		try {
 
