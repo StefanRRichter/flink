@@ -210,8 +210,7 @@ public class StreamTaskTerminationTest extends TestLogger {
 		}
 
 		@Override
-		protected void init() throws Exception {
-
+		protected void init() {
 		}
 
 		@Override
@@ -232,11 +231,11 @@ public class StreamTaskTerminationTest extends TestLogger {
 		}
 
 		@Override
-		protected void cancelTask() throws Exception {
+		protected void cancelTask() {
 		}
 	}
 
-	static class NoOpStreamOperator<T> extends AbstractStreamOperator<T> {
+	private static class NoOpStreamOperator<T> extends AbstractStreamOperator<T> {
 		private static final long serialVersionUID = 4517845269225218312L;
 	}
 
@@ -245,7 +244,7 @@ public class StreamTaskTerminationTest extends TestLogger {
 		private static final long serialVersionUID = -5053068148933314100L;
 
 		@Override
-		public CompletedCheckpointStorageLocation resolveCheckpoint(String pointer) throws IOException {
+		public CompletedCheckpointStorageLocation resolveCheckpoint(String pointer) {
 			throw new UnsupportedOperationException();
 		}
 
@@ -262,7 +261,7 @@ public class StreamTaskTerminationTest extends TestLogger {
 			TypeSerializer<K> keySerializer,
 			int numberOfKeyGroups,
 			KeyGroupRange keyGroupRange,
-			TaskKvStateRegistry kvStateRegistry) throws IOException {
+			TaskKvStateRegistry kvStateRegistry) {
 			return null;
 		}
 
