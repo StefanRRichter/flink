@@ -105,7 +105,7 @@ public class RocksDBStateBackend extends AbstractStateBackend implements Configu
 	@Nullable
 	private OptionsFactory optionsFactory;
 
-	/** True if incremental checkpointing is enabled. */
+	/** This determines if incremental checkpointing is enabled. */
 	private final TernaryBoolean enableIncrementalCheckpointing;
 
 	// -- runtime values, set on TaskManager when initializing / using the backend

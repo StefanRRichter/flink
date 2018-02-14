@@ -20,7 +20,6 @@ package org.apache.flink.runtime.state;
 
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.configuration.CheckpointingOptions;
-import org.apache.flink.configuration.ConfigConstants;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.runtime.clusterframework.types.AllocationID;
 import org.apache.flink.runtime.clusterframework.types.ResourceID;
@@ -31,6 +30,7 @@ import org.apache.flink.runtime.taskexecutor.TaskManagerServicesConfiguration;
 import org.apache.flink.util.FileUtils;
 import org.apache.flink.util.TestLogger;
 import org.junit.Assert;
+import org.junit.ClassRule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
 
@@ -38,6 +38,9 @@ import java.io.File;
 import java.net.InetAddress;
 
 public class TaskExecutorLocalStateStoresManagerTest extends TestLogger {
+
+	@ClassRule
+	public static TemporaryFolder temporaryFolder = new TemporaryFolder();
 
 	/**
 	 * This tests that the creation of {@link TaskManagerServices} correctly creates the local state root directory
@@ -48,11 +51,12 @@ public class TaskExecutorLocalStateStoresManagerTest extends TestLogger {
 
 		final Configuration config = new Configuration();
 
-		String tmpDir = System.getProperty("java.io.tmpdir") + File.separator;
+		File newFolder = temporaryFolder.newFolder();
+		String tmpDir = newFolder.getAbsolutePath() + File.separator;
 		final String rootDirString = "__localStateRoot1,__localStateRoot2,__localStateRoot3".replaceAll("__", tmpDir);
 
 		// test configuration of the local state directories
-		config.setString(ConfigConstants.TASK_MANAGER_LOCAL_STATE_ROOT_DIR_KEY, rootDirString);
+		config.setString(CheckpointingOptions.LOCAL_RECOVERY_TASK_MANAGER_STATE_ROOT_DIRS, rootDirString);
 
 		// test configuration of the local state mode
 		config.setString(CheckpointingOptions.LOCAL_RECOVERY, "ENABLE_FILE_BASED");
@@ -136,76 +140,70 @@ public class TaskExecutorLocalStateStoresManagerTest extends TestLogger {
 		JobVertexID jobVertexID = new JobVertexID();
 		AllocationID allocationID = new AllocationID();
 		int subtaskIdx = 23;
-		TemporaryFolder tmp = new TemporaryFolder();
-		try {
 
-			tmp.create();
-			File[] rootDirs = {tmp.newFolder(), tmp.newFolder(), tmp.newFolder()};
-			TaskExecutorLocalStateStoresManager storesManager = new TaskExecutorLocalStateStoresManager(
-				LocalRecoveryConfig.LocalRecoveryMode.ENABLE_FILE_BASED,
-				rootDirs,
-				Executors.directExecutor());
+		File[] rootDirs = {temporaryFolder.newFolder(), temporaryFolder.newFolder(), temporaryFolder.newFolder()};
+		TaskExecutorLocalStateStoresManager storesManager = new TaskExecutorLocalStateStoresManager(
+			LocalRecoveryConfig.LocalRecoveryMode.ENABLE_FILE_BASED,
+			rootDirs,
+			Executors.directExecutor());
 
-			TaskLocalStateStore taskLocalStateStore =
-				storesManager.localStateStoreForSubtask(jobID, allocationID, jobVertexID, subtaskIdx);
+		TaskLocalStateStore taskLocalStateStore =
+			storesManager.localStateStoreForSubtask(jobID, allocationID, jobVertexID, subtaskIdx);
 
-			LocalRecoveryDirectoryProvider directoryProvider =
-				taskLocalStateStore.getLocalRecoveryConfig().getLocalStateDirectoryProvider();
+		LocalRecoveryDirectoryProvider directoryProvider =
+			taskLocalStateStore.getLocalRecoveryConfig().getLocalStateDirectoryProvider();
 
-			for (int i = 0; i < 10; ++i) {
-				Assert.assertEquals(
-					new File(
-						rootDirs[(i & Integer.MAX_VALUE) % rootDirs.length],
-						storesManager.allocationSubDirString(allocationID)),
-					directoryProvider.allocationBaseDirectory(i));
-			}
-
-			long chkId = 42L;
-			File allocBaseDirChk42 = directoryProvider.allocationBaseDirectory(chkId);
-			File subtaskSpecificCheckpointDirectory = directoryProvider.subtaskSpecificCheckpointDirectory(chkId);
+		for (int i = 0; i < 10; ++i) {
 			Assert.assertEquals(
 				new File(
-					allocBaseDirChk42,
-					"jid_" + jobID + File.separator +
-						"vtx_" + jobVertexID + "_" +
-						"sti_" + subtaskIdx + File.separator +
-						"chk_" + chkId),
-				subtaskSpecificCheckpointDirectory);
-
-			Assert.assertTrue(subtaskSpecificCheckpointDirectory.mkdirs());
-
-			File testFile = new File(subtaskSpecificCheckpointDirectory, "test");
-			Assert.assertTrue(testFile.createNewFile());
-
-			// test that local recovery mode is forwarded to the created store
-			Assert.assertEquals(
-				storesManager.getLocalRecoveryMode(),
-				taskLocalStateStore.getLocalRecoveryConfig().getLocalRecoveryMode());
-
-			Assert.assertTrue(testFile.exists());
-
-			// check cleanup after releasing allocation id
-			storesManager.releaseLocalStateForAllocationId(allocationID);
-			checkRootDirsClean(rootDirs);
-
-			AllocationID otherAllocationID = new AllocationID();
-
-			taskLocalStateStore =
-				storesManager.localStateStoreForSubtask(jobID, otherAllocationID, jobVertexID, subtaskIdx);
-
-			directoryProvider = taskLocalStateStore.getLocalRecoveryConfig().getLocalStateDirectoryProvider();
-
-			File chkDir = directoryProvider.subtaskSpecificCheckpointDirectory(23L);
-			chkDir.mkdirs();
-			testFile = new File(chkDir, "test");
-			Assert.assertTrue(testFile.createNewFile());
-
-			// check cleanup after shutdown
-			storesManager.shutdown();
-			checkRootDirsClean(rootDirs);
-		} finally {
-			tmp.delete();
+					rootDirs[(i & Integer.MAX_VALUE) % rootDirs.length],
+					storesManager.allocationSubDirString(allocationID)),
+				directoryProvider.allocationBaseDirectory(i));
 		}
+
+		long chkId = 42L;
+		File allocBaseDirChk42 = directoryProvider.allocationBaseDirectory(chkId);
+		File subtaskSpecificCheckpointDirectory = directoryProvider.subtaskSpecificCheckpointDirectory(chkId);
+		Assert.assertEquals(
+			new File(
+				allocBaseDirChk42,
+				"jid_" + jobID + File.separator +
+					"vtx_" + jobVertexID + "_" +
+					"sti_" + subtaskIdx + File.separator +
+					"chk_" + chkId),
+			subtaskSpecificCheckpointDirectory);
+
+		Assert.assertTrue(subtaskSpecificCheckpointDirectory.mkdirs());
+
+		File testFile = new File(subtaskSpecificCheckpointDirectory, "test");
+		Assert.assertTrue(testFile.createNewFile());
+
+		// test that local recovery mode is forwarded to the created store
+		Assert.assertEquals(
+			storesManager.getLocalRecoveryMode(),
+			taskLocalStateStore.getLocalRecoveryConfig().getLocalRecoveryMode());
+
+		Assert.assertTrue(testFile.exists());
+
+		// check cleanup after releasing allocation id
+		storesManager.releaseLocalStateForAllocationId(allocationID);
+		checkRootDirsClean(rootDirs);
+
+		AllocationID otherAllocationID = new AllocationID();
+
+		taskLocalStateStore =
+			storesManager.localStateStoreForSubtask(jobID, otherAllocationID, jobVertexID, subtaskIdx);
+
+		directoryProvider = taskLocalStateStore.getLocalRecoveryConfig().getLocalStateDirectoryProvider();
+
+		File chkDir = directoryProvider.subtaskSpecificCheckpointDirectory(23L);
+		chkDir.mkdirs();
+		testFile = new File(chkDir, "test");
+		Assert.assertTrue(testFile.createNewFile());
+
+		// check cleanup after shutdown
+		storesManager.shutdown();
+		checkRootDirsClean(rootDirs);
 	}
 
 	private void checkRootDirsClean(File[] rootDirs) {

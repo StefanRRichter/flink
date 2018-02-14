@@ -47,6 +47,7 @@ import org.apache.flink.runtime.taskmanager.TestCheckpointResponder;
 import org.apache.flink.streaming.api.operators.OperatorSnapshotFutures;
 import org.apache.flink.util.TestLogger;
 import org.junit.Assert;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
 
@@ -65,6 +66,9 @@ import static org.mockito.Mockito.mock;
  * Test for forwarding of state reporting to and from {@link org.apache.flink.runtime.state.TaskStateManager}.
  */
 public class LocalStateForwardingTest extends TestLogger {
+
+	@Rule
+	public TemporaryFolder temporaryFolder = new TemporaryFolder();
 
 	/**
 	 * This tests the forwarding of jm and tm-local state from the futures reported by the backends, through the
@@ -139,8 +143,8 @@ public class LocalStateForwardingTest extends TestLogger {
 		final int subtaskIdx = 42;
 		JobVertexID jobVertexID = new JobVertexID();
 
-		TaskStateSnapshot jm = new TaskStateSnapshot();
-		TaskStateSnapshot tm = new TaskStateSnapshot();
+		TaskStateSnapshot jmSnapshot = new TaskStateSnapshot();
+		TaskStateSnapshot tmSnapshot = new TaskStateSnapshot();
 
 		final AtomicBoolean jmReported = new AtomicBoolean(false);
 		final AtomicBoolean tmReported = new AtomicBoolean(false);
@@ -163,9 +167,6 @@ public class LocalStateForwardingTest extends TestLogger {
 			}
 		};
 
-		TemporaryFolder temporaryFolder = new TemporaryFolder();
-		temporaryFolder.create();
-
 		Executor executor = Executors.directExecutor();
 
 		LocalRecoveryDirectoryProviderImpl directoryProvider = new LocalRecoveryDirectoryProviderImpl(
@@ -179,60 +180,55 @@ public class LocalStateForwardingTest extends TestLogger {
 			LocalRecoveryConfig.LocalRecoveryMode.ENABLE_FILE_BASED,
 			directoryProvider);
 
-		try {
-			TaskLocalStateStore taskLocalStateStore =
-				new TaskLocalStateStoreImpl(jobID, allocationID, jobVertexID, subtaskIdx, localRecoveryConfig, executor) {
-					@Override
-					public void storeLocalState(
-						@Nonnegative long checkpointId,
-						@Nullable TaskStateSnapshot localState) {
+		TaskLocalStateStore taskLocalStateStore =
+			new TaskLocalStateStoreImpl(jobID, allocationID, jobVertexID, subtaskIdx, localRecoveryConfig, executor) {
+				@Override
+				public void storeLocalState(
+					@Nonnegative long checkpointId,
+					@Nullable TaskStateSnapshot localState) {
 
-						Assert.assertEquals(tm, localState);
-						tmReported.set(true);
-					}
-				};
+					Assert.assertEquals(tmSnapshot, localState);
+					tmReported.set(true);
+				}
+			};
 
-			TaskStateManagerImpl taskStateManager =
-				new TaskStateManagerImpl(
-					jobID,
-					executionAttemptID,
-					taskLocalStateStore,
-					null,
-					checkpointResponder);
+		TaskStateManagerImpl taskStateManager =
+			new TaskStateManagerImpl(
+				jobID,
+				executionAttemptID,
+				taskLocalStateStore,
+				null,
+				checkpointResponder);
 
-			taskStateManager.reportTaskStateSnapshots(
-				checkpointMetaData,
-				checkpointMetrics,
-				jm,
-				tm);
-		} catch (Exception ex) {
-			temporaryFolder.delete();
-			throw new RuntimeException(ex);
-		}
+		taskStateManager.reportTaskStateSnapshots(
+			checkpointMetaData,
+			checkpointMetrics,
+			jmSnapshot,
+			tmSnapshot);
 
 		Assert.assertTrue("Reporting for JM state was not called.", jmReported.get());
 		Assert.assertTrue("Reporting for TM state was not called.", tmReported.get());
 	}
 
 	private static <T extends StateObject> void performCheck(
-		Future<SnapshotResult<T>> cc,
-		StateObjectCollection<T> jm,
-		StateObjectCollection<T> tm) {
+		Future<SnapshotResult<T>> resultFuture,
+		StateObjectCollection<T> jmState,
+		StateObjectCollection<T> tmState) {
 
 		SnapshotResult<T> snapshotResult;
 		try {
-			snapshotResult = cc.get();
+			snapshotResult = resultFuture.get();
 		} catch (Exception e) {
 			throw new RuntimeException(e);
 		}
 
 		Assert.assertEquals(
 			snapshotResult.getJobManagerOwnedSnapshot(),
-			jm.iterator().next());
+			jmState.iterator().next());
 
 		Assert.assertEquals(
 			snapshotResult.getTaskLocalSnapshot(),
-			tm.iterator().next());
+			tmState.iterator().next());
 	}
 
 	private static <T extends StateObject> RunnableFuture<SnapshotResult<T>> createSnapshotResult(Class<T> clazz) {

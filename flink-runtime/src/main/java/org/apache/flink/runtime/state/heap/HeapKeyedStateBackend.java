@@ -643,7 +643,7 @@ public class HeapKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 					}
 
 					@Override
-					protected void releaseResources() throws Exception {
+					protected void releaseResources() {
 
 						unregisterAndCloseStreamAndResultExtractor();
 
@@ -653,7 +653,7 @@ public class HeapKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 					}
 
 					@Override
-					protected void stopOperation() throws Exception {
+					protected void stopOperation() {
 						unregisterAndCloseStreamAndResultExtractor();
 					}
 
@@ -683,11 +683,11 @@ public class HeapKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 							outView.writeInt(keyGroupId);
 
 							for (Map.Entry<String, StateTable<K, ?, ?>> kvState : stateTables.entrySet()) {
-								OutputStream kgCompressionOut = keyGroupCompressionDecorator.decorateWithCompression(localStream);
-								DataOutputViewStreamWrapper kgCompressionView = new DataOutputViewStreamWrapper(kgCompressionOut);
-								kgCompressionView.writeShort(kVStateToId.get(kvState.getKey()));
-								cowStateStableSnapshots.get(kvState.getValue()).writeMappingsInKeyGroup(kgCompressionView, keyGroupId);
-								kgCompressionOut.close(); // this will just close the outer stream
+								try (OutputStream kgCompressionOut = keyGroupCompressionDecorator.decorateWithCompression(localStream)) {
+									DataOutputViewStreamWrapper kgCompressionView = new DataOutputViewStreamWrapper(kgCompressionOut);
+									kgCompressionView.writeShort(kVStateToId.get(kvState.getKey()));
+									cowStateStableSnapshots.get(kvState.getValue()).writeMappingsInKeyGroup(kgCompressionView, keyGroupId);
+								} // this will just close the outer compression stream
 							}
 						}
 

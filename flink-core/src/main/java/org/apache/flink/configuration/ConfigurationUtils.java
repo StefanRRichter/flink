@@ -43,14 +43,14 @@ public class ConfigurationUtils {
 
 	/**
 	 * Extracts the local state directories  as defined by
-	 * {@link org.apache.flink.configuration.ConfigConstants#TASK_MANAGER_LOCAL_STATE_ROOT_DIR_KEY}.
+	 * {@link CheckpointingOptions#LOCAL_RECOVERY_TASK_MANAGER_STATE_ROOT_DIRS}.
 	 *
 	 * @param configuration configuration object
 	 * @return array of configured directories (in order)
 	 */
 	@Nonnull
 	public static String[] parseLocalStateDirectories(Configuration configuration) {
-		String configValue = configuration.getString(ConfigConstants.TASK_MANAGER_LOCAL_STATE_ROOT_DIR_KEY, "");
+		String configValue = configuration.getString(CheckpointingOptions.LOCAL_RECOVERY_TASK_MANAGER_STATE_ROOT_DIRS, "");
 		return splitPaths(configValue);
 	}
 

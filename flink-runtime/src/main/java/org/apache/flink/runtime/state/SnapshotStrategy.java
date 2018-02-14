@@ -28,6 +28,7 @@ import java.util.concurrent.RunnableFuture;
  *
  * @param <S> type of the returned state object that represents the result of the snapshot operation.
  */
+@FunctionalInterface
 public interface SnapshotStrategy<S extends StateObject> {
 
 	/**

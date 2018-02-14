@@ -70,7 +70,7 @@ import org.apache.flink.runtime.taskmanager.TaskManagerRuntimeInfo;
 import org.apache.flink.runtime.testutils.TestJvmProcess;
 import org.apache.flink.util.OperatingSystem;
 import org.apache.flink.util.SerializedValue;
-
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
 
@@ -88,6 +88,9 @@ import static org.mockito.Mockito.when;
  * {@link JvmShutdownSafeguard} that guards against it.
  */
 public class JvmExitOnFatalErrorTest {
+
+	@Rule
+	public TemporaryFolder temporaryFolder = new TemporaryFolder();
 
 	@Test
 	public void testExitJvmOnOutOfMemory() throws Exception {
@@ -140,12 +143,9 @@ public class JvmExitOnFatalErrorTest {
 
 			System.err.println("creating task");
 
-			TemporaryFolder temporaryFolder = new TemporaryFolder();
-
 			// we suppress process exits via errors here to not
 			// have a test that exits accidentally due to a programming error
 			try {
-				temporaryFolder.create();
 				final Configuration taskManagerConfig = new Configuration();
 				taskManagerConfig.setBoolean(TaskManagerOptions.KILL_ON_OUT_OF_MEMORY, true);
 
@@ -233,7 +233,6 @@ public class JvmExitOnFatalErrorTest {
 			catch (Throwable t) {
 				System.err.println("ERROR STARTING TASK");
 				t.printStackTrace();
-				temporaryFolder.delete();
 			}
 
 			System.err.println("parking the main thread");

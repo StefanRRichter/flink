@@ -64,6 +64,13 @@ public class CheckpointingOptions {
 		.key("state.backend.local-recovery")
 		.defaultValue("DISABLED");
 
+	/**
+	 * The config parameter defining the root directories for storing file-based state for local recovery.
+	 */
+	public static final ConfigOption<String> LOCAL_RECOVERY_TASK_MANAGER_STATE_ROOT_DIRS = ConfigOptions
+		.key("taskmanager.state.local.root-dirs")
+		.noDefaultValue();
+
 	// ------------------------------------------------------------------------
 	//  Options specific to the file-system-based state backends
 	// ------------------------------------------------------------------------
