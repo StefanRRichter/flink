@@ -22,18 +22,18 @@ import org.mockito.Mockito;
 import org.mockito.internal.util.MockUtil;
 
 import java.lang.reflect.Array;
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.Collections;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
-import static org.junit.Assert.fail;
 import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.spy;
 
 /**
- * Helper class with a method that attempt to automatically test method forwarding between a delegate and a wrapper.
+ * Helper class with a method that attempts to automatically test method forwarding between a delegate and a wrapper.
  */
 public class MethodForwardingTestUtil {
 
@@ -48,7 +48,8 @@ public class MethodForwardingTestUtil {
 	 */
 	public static <D, W> void testMethodForwarding(
 		Class<D> delegateClass,
-		Function<D, W> wrapperFactory) {
+		Function<D, W> wrapperFactory)
+		throws NoSuchMethodException, IllegalAccessException, InvocationTargetException {
 		testMethodForwarding(delegateClass, wrapperFactory, () -> spy(delegateClass), Collections.emptySet());
 	}
 
@@ -66,7 +67,8 @@ public class MethodForwardingTestUtil {
 	public static <D, W, I extends D> void testMethodForwarding(
 		Class<D> delegateClass,
 		Function<I, W> wrapperFactory,
-		Supplier<I> delegateObjectSupplier) {
+		Supplier<I> delegateObjectSupplier)
+		throws NoSuchMethodException, IllegalAccessException, InvocationTargetException {
 		testMethodForwarding(delegateClass, wrapperFactory, delegateObjectSupplier, Collections.emptySet());
 	}
 
@@ -87,7 +89,7 @@ public class MethodForwardingTestUtil {
 		Class<D> delegateClass,
 		Function<I, W> wrapperFactory,
 		Supplier<I> delegateObjectSupplier,
-		Set<Method> skipMethodSet) {
+		Set<Method> skipMethodSet) throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
 
 		Preconditions.checkNotNull(delegateClass);
 		Preconditions.checkNotNull(wrapperFactory);
@@ -112,45 +114,46 @@ public class MethodForwardingTestUtil {
 				continue;
 			}
 
-			try {
-				// find the correct method to substitute the bridge for erased generic types.
-				// if this doesn't work, the user need to exclude the method and write an additional test.
-				Method wrapperMethod = wrapper.getClass().getMethod(
-					delegateMethod.getName(),
-					delegateMethod.getParameterTypes());
+			// find the correct method to substitute the bridge for erased generic types.
+			// if this doesn't work, the user need to exclude the method and write an additional test.
+			Method wrapperMethod = wrapper.getClass().getMethod(
+				delegateMethod.getName(),
+				delegateMethod.getParameterTypes());
 
-				// things get a bit fuzzy here, best effort to find a match but this might end up with a wrong method.
-				if (wrapperMethod.isBridge()) {
-					for (Method method : wrapper.getClass().getMethods()) {
-						if (!method.isBridge()
-							&& method.getName().equals(wrapperMethod.getName())
-							&& method.getParameterCount() == wrapperMethod.getParameterCount()) {
-							wrapperMethod = method;
-							break;
-						}
+			// things get a bit fuzzy here, best effort to find a match but this might end up with a wrong method.
+			if (wrapperMethod.isBridge()) {
+				for (Method method : wrapper.getClass().getMethods()) {
+					if (!method.isBridge()
+						&& method.getName().equals(wrapperMethod.getName())
+						&& method.getParameterCount() == wrapperMethod.getParameterCount()) {
+						wrapperMethod = method;
+						break;
 					}
 				}
-
-				Class<?>[] parameterTypes = wrapperMethod.getParameterTypes();
-				Object[] arguments = new Object[parameterTypes.length];
-				for (int j = 0; j < arguments.length; j++) {
-					Class<?> parameterType = parameterTypes[j];
-					if (parameterType.isArray()) {
-						arguments[j] = Array.newInstance(parameterType.getComponentType(), 0);
-					} else if (parameterType.isPrimitive()) {
-						arguments[j] = 0;
-					} else {
-						arguments[j] = Mockito.mock(parameterType);
-					}
-				}
-
-				wrapperMethod.invoke(wrapper, arguments);
-				delegateMethod.invoke(Mockito.verify(delegate, Mockito.times(1)), arguments);
-				reset(delegate);
-			} catch (Exception ex) {
-				ex.printStackTrace();
-				fail("Forwarding test failed: " + ex.getMessage());
 			}
+
+			Class<?>[] parameterTypes = wrapperMethod.getParameterTypes();
+			Object[] arguments = new Object[parameterTypes.length];
+			for (int j = 0; j < arguments.length; j++) {
+				Class<?> parameterType = parameterTypes[j];
+				if (parameterType.isArray()) {
+					arguments[j] = Array.newInstance(parameterType.getComponentType(), 0);
+				} else if (parameterType.isPrimitive()) {
+					if (boolean.class.equals(parameterType)) {
+						arguments[j] = false;
+					} else if (char.class.equals(parameterType)) {
+						arguments[j] = 'a';
+					} else {
+						arguments[j] = (byte) 0;
+					}
+				} else {
+					arguments[j] = Mockito.mock(parameterType);
+				}
+			}
+
+			wrapperMethod.invoke(wrapper, arguments);
+			delegateMethod.invoke(Mockito.verify(delegate, Mockito.times(1)), arguments);
+			reset(delegate);
 		}
 	}
 

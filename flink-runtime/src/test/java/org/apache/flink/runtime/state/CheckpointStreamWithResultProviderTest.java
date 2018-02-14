@@ -134,7 +134,7 @@ public class CheckpointStreamWithResultProviderTest extends TestLogger {
 	}
 
 	@Test
-	public void testCloseMethodForwarding() throws IOException {
+	public void testCloseMethodForwarding() throws Exception {
 		CheckpointStreamFactory streamFactory = createCheckpointStreamFactory();
 
 		MethodForwardingTestUtil.testMethodForwarding(

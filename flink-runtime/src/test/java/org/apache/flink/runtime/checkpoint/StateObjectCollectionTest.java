@@ -43,14 +43,14 @@ public class StateObjectCollectionTest extends TestLogger {
 	}
 
 	@Test
-	public void testForwardingCollectionMethods() {
+	public void testForwardingCollectionMethods() throws Exception {
 		MethodForwardingTestUtil.testMethodForwarding(
 			Collection.class,
 			((Function<Collection, StateObjectCollection>) StateObjectCollection::new));
 	}
 
 	@Test
-	public void testForwardingStateObjectMethods() {
+	public void testForwardingStateObjectMethods() throws Exception {
 		MethodForwardingTestUtil.testMethodForwarding(
 			StateObject.class,
 			object -> new StateObjectCollection<>(Collections.singletonList(object)));
