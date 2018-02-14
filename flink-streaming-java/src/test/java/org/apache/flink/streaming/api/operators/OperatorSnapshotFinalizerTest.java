@@ -27,7 +27,7 @@ import org.apache.flink.runtime.state.KeyedStateHandle;
 import org.apache.flink.runtime.state.OperatorStateHandle;
 import org.apache.flink.runtime.state.SnapshotResult;
 import org.apache.flink.runtime.state.StateObject;
-
+import org.apache.flink.util.TestLogger;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -36,7 +36,7 @@ import java.util.Random;
 /**
  * Tests for {@link OperatorSnapshotFinalizer}.
  */
-public class OperatorSnapshotFinalizerTest {
+public class OperatorSnapshotFinalizerTest extends TestLogger {
 
 	/**
 	 * Test that the runnable futures are executed and the result is correctly extracted.

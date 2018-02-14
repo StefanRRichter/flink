@@ -29,7 +29,7 @@ import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.runtime.taskexecutor.TaskManagerServices;
 import org.apache.flink.runtime.taskexecutor.TaskManagerServicesConfiguration;
 import org.apache.flink.util.FileUtils;
-
+import org.apache.flink.util.TestLogger;
 import org.junit.Assert;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
@@ -37,7 +37,7 @@ import org.junit.rules.TemporaryFolder;
 import java.io.File;
 import java.net.InetAddress;
 
-public class TaskExecutorLocalStateStoresManagerTest {
+public class TaskExecutorLocalStateStoresManagerTest extends TestLogger {
 
 	/**
 	 * This tests that the creation of {@link TaskManagerServices} correctly creates the local state root directory

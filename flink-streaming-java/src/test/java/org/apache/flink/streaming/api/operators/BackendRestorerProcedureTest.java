@@ -32,8 +32,8 @@ import org.apache.flink.runtime.state.OperatorStateHandle;
 import org.apache.flink.runtime.state.SnapshotResult;
 import org.apache.flink.runtime.state.memory.MemCheckpointStreamFactory;
 import org.apache.flink.runtime.util.BlockingFSDataInputStream;
+import org.apache.flink.util.TestLogger;
 import org.apache.flink.util.ThrowingSupplier;
-
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -54,7 +54,7 @@ import static org.powermock.api.mockito.PowerMockito.when;
 /**
  * Tests for {@link BackendRestorerProcedure}.
  */
-public class BackendRestorerProcedureTest {
+public class BackendRestorerProcedureTest extends TestLogger {
 
 	private final ThrowingSupplier<OperatorStateBackend, Exception> backendSupplier =
 		() -> new DefaultOperatorStateBackend(

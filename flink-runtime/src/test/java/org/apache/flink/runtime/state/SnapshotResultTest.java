@@ -18,13 +18,14 @@
 
 package org.apache.flink.runtime.state;
 
+import org.apache.flink.util.TestLogger;
 import org.junit.Assert;
 import org.junit.Test;
 
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 
-public class SnapshotResultTest {
+public class SnapshotResultTest extends TestLogger {
 
 	@Test
 	public void discardState() throws Exception {
@@ -35,7 +36,7 @@ public class SnapshotResultTest {
 	}
 
 	@Test
-	public void getStateSize() throws Exception {
+	public void getStateSize() {
 		long size = 42L;
 
 		SnapshotResult<StateObject> result = new SnapshotResult<>(
@@ -55,7 +56,7 @@ public class SnapshotResultTest {
 		}
 
 		@Override
-		public void discardState() throws Exception {
+		public void discardState() {
 		}
 
 		@Override

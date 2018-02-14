@@ -20,7 +20,7 @@ package org.apache.flink.runtime.checkpoint;
 
 import org.apache.flink.runtime.state.StateObject;
 import org.apache.flink.util.MethodForwardingTestUtil;
-
+import org.apache.flink.util.TestLogger;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -34,7 +34,7 @@ import static org.mockito.Mockito.mock;
 /**
  * Tests for {@link StateObjectCollection}.
  */
-public class StateObjectCollectionTest {
+public class StateObjectCollectionTest extends TestLogger {
 
 	@Test
 	public void testEmptyCollection() {

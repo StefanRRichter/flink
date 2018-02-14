@@ -45,14 +45,13 @@ import org.apache.flink.runtime.state.TaskStateManagerImpl;
 import org.apache.flink.runtime.state.TestTaskStateManager;
 import org.apache.flink.runtime.taskmanager.TestCheckpointResponder;
 import org.apache.flink.streaming.api.operators.OperatorSnapshotFutures;
-
+import org.apache.flink.util.TestLogger;
 import org.junit.Assert;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
 
 import javax.annotation.Nonnegative;
 import javax.annotation.Nullable;
-
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.Executor;
@@ -65,14 +64,14 @@ import static org.mockito.Mockito.mock;
 /**
  * Test for forwarding of state reporting to and from {@link org.apache.flink.runtime.state.TaskStateManager}.
  */
-public class LocalStateForwardingTest {
+public class LocalStateForwardingTest extends TestLogger {
 
 	/**
 	 * This tests the forwarding of jm and tm-local state from the futures reported by the backends, through the
 	 * async checkpointing thread to the {@link org.apache.flink.runtime.state.TaskStateManager}.
 	 */
 	@Test
-	public void testReportingFromSnapshotToTaskStateManager() throws Exception {
+	public void testReportingFromSnapshotToTaskStateManager() {
 
 		TestTaskStateManager taskStateManager = new TestTaskStateManager();
 

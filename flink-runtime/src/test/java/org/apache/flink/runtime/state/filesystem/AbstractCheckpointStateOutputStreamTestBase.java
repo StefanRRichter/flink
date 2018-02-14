@@ -26,8 +26,8 @@ import org.apache.flink.core.fs.local.LocalDataOutputStream;
 import org.apache.flink.core.fs.local.LocalFileSystem;
 import org.apache.flink.core.testutils.CheckedThread;
 import org.apache.flink.core.testutils.OneShotLatch;
+import org.apache.flink.util.TestLogger;
 import org.apache.flink.util.function.FunctionWithException;
-
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
@@ -51,7 +51,7 @@ import static org.mockito.Mockito.verify;
 /**
  * Abstract base class for tests against checkpointing streams.
  */
-public abstract class AbstractCheckpointStateOutputStreamTestBase {
+public abstract class AbstractCheckpointStateOutputStreamTestBase extends TestLogger {
 
 	@Rule
 	public final TemporaryFolder tmp = new TemporaryFolder();

@@ -20,7 +20,7 @@ package org.apache.flink.runtime.state;
 
 import org.apache.flink.core.fs.FileSystem;
 import org.apache.flink.core.fs.Path;
-
+import org.apache.flink.util.TestLogger;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -32,7 +32,7 @@ import java.io.IOException;
 import java.util.Arrays;
 import java.util.UUID;
 
-public class SnapshotDirectoryTest {
+public class SnapshotDirectoryTest extends TestLogger {
 
 	private static TemporaryFolder temporaryFolder;
 

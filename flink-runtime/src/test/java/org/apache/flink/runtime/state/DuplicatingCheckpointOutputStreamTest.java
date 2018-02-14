@@ -18,17 +18,17 @@
 
 package org.apache.flink.runtime.state;
 
+import org.apache.commons.io.IOUtils;
 import org.apache.flink.core.fs.FSDataInputStream;
 import org.apache.flink.runtime.testutils.CommonTestUtils;
-
-import org.apache.commons.io.IOUtils;
+import org.apache.flink.util.TestLogger;
 import org.junit.Assert;
 import org.junit.Test;
 
 import java.io.IOException;
 import java.util.Random;
 
-public class DuplicatingCheckpointOutputStreamTest {
+public class DuplicatingCheckpointOutputStreamTest extends TestLogger {
 
 	/**
 	 * Test that all writes are duplicated to both streams and that the state reflects what was written.

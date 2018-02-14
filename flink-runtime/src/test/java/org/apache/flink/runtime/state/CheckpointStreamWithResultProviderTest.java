@@ -24,7 +24,7 @@ import org.apache.flink.runtime.clusterframework.types.AllocationID;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.runtime.state.memory.MemCheckpointStreamFactory;
 import org.apache.flink.util.MethodForwardingTestUtil;
-
+import org.apache.flink.util.TestLogger;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -35,7 +35,7 @@ import java.io.Closeable;
 import java.io.File;
 import java.io.IOException;
 
-public class CheckpointStreamWithResultProviderTest {
+public class CheckpointStreamWithResultProviderTest extends TestLogger {
 
 	private static TemporaryFolder temporaryFolder;
 

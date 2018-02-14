@@ -25,6 +25,7 @@ import org.apache.flink.runtime.state.OperatorStreamStateHandle;
 import org.apache.flink.runtime.state.StateObject;
 import org.apache.flink.util.Preconditions;
 
+import org.apache.flink.util.TestLogger;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -40,7 +41,7 @@ import static org.apache.flink.runtime.checkpoint.StateHandleDummyUtil.createNew
 import static org.apache.flink.runtime.checkpoint.StateHandleDummyUtil.createNewOperatorStateHandle;
 import static org.apache.flink.runtime.checkpoint.StateHandleDummyUtil.deepDummyCopy;
 
-public class PrioritizedOperatorSubtaskStateTest {
+public class PrioritizedOperatorSubtaskStateTest extends TestLogger {
 
 	private final Random random = new Random(0x42);
 

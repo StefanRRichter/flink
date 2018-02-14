@@ -34,7 +34,7 @@ import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.runtime.jobgraph.OperatorID;
 import org.apache.flink.runtime.taskmanager.CheckpointResponder;
 import org.apache.flink.runtime.taskmanager.TestCheckpointResponder;
-
+import org.apache.flink.util.TestLogger;
 import org.junit.Assert;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
@@ -44,7 +44,7 @@ import java.io.IOException;
 import java.util.Iterator;
 import java.util.concurrent.Executor;
 
-public class TaskStateManagerImplTest {
+public class TaskStateManagerImplTest extends TestLogger {
 
 	/**
 	 * Test reporting and retrieving prioritized local and remote state.

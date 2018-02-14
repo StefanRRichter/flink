@@ -22,7 +22,7 @@ import org.apache.flink.api.common.JobID;
 import org.apache.flink.core.fs.Path;
 import org.apache.flink.runtime.clusterframework.types.AllocationID;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
-
+import org.apache.flink.util.TestLogger;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -35,7 +35,7 @@ import java.io.IOException;
 /**
  * Tests for {@link LocalRecoveryDirectoryProvider}.
  */
-public class LocalRecoveryDirectoryProviderImplTest {
+public class LocalRecoveryDirectoryProviderImplTest extends TestLogger {
 
 	private static final JobID JOB_ID = new JobID();
 	private static final AllocationID ALLOCATION_ID = new AllocationID();

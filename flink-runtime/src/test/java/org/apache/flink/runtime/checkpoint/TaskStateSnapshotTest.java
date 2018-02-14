@@ -20,7 +20,7 @@ package org.apache.flink.runtime.checkpoint;
 
 import org.apache.flink.runtime.jobgraph.OperatorID;
 import org.apache.flink.runtime.state.OperatorStateHandle;
-
+import org.apache.flink.util.TestLogger;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -29,10 +29,10 @@ import java.util.Random;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 
-public class TaskStateSnapshotTest {
+public class TaskStateSnapshotTest extends TestLogger {
 
 	@Test
-	public void putGetSubtaskStateByOperatorID() throws Exception {
+	public void putGetSubtaskStateByOperatorID() {
 		TaskStateSnapshot taskStateSnapshot = new TaskStateSnapshot();
 
 		OperatorID operatorID_1 = new OperatorID();
@@ -52,7 +52,7 @@ public class TaskStateSnapshotTest {
 	}
 
 	@Test
-	public void hasState() throws Exception {
+	public void hasState() {
 		Random random = new Random(0x42);
 		TaskStateSnapshot taskStateSnapshot = new TaskStateSnapshot();
 		Assert.assertFalse(taskStateSnapshot.hasState());
@@ -93,7 +93,7 @@ public class TaskStateSnapshotTest {
 	}
 
 	@Test
-	public void getStateSize() throws Exception {
+	public void getStateSize() {
 		Random random = new Random(0x42);
 		TaskStateSnapshot taskStateSnapshot = new TaskStateSnapshot();
 		Assert.assertEquals(0, taskStateSnapshot.getStateSize());
