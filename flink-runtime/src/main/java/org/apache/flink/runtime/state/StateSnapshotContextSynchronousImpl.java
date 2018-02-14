@@ -123,7 +123,7 @@ public class StateSnapshotContextSynchronousImpl implements StateSnapshotContext
 
 	private <T extends StateObject> RunnableFuture<SnapshotResult<T>> toDoneFutureOfSnapshotResult(T handle) {
 		SnapshotResult<T> snapshotResult = new SnapshotResult<>(handle, null);
-		return new DoneFuture<>(snapshotResult);
+		return DoneFuture.of(snapshotResult);
 	}
 
 	private <T extends StreamStateHandle> T closeAndUnregisterStreamToObtainStateHandle(

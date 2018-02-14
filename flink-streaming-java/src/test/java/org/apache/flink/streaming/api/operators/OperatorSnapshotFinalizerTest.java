@@ -114,7 +114,7 @@ public class OperatorSnapshotFinalizerTest extends TestLogger {
 
 		private boolean done;
 
-		public PseudoNotDoneFuture(T payload) {
+		PseudoNotDoneFuture(T payload) {
 			super(payload);
 			this.done = false;
 		}

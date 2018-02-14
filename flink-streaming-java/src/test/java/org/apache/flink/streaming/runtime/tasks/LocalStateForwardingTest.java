@@ -236,7 +236,6 @@ public class LocalStateForwardingTest extends TestLogger {
 	}
 
 	private static <T extends StateObject> RunnableFuture<SnapshotResult<T>> createSnapshotResult(Class<T> clazz) {
-		return new DoneFuture<>(
-			new SnapshotResult<>(mock(clazz), mock(clazz)));
+		return DoneFuture.of(new SnapshotResult<>(mock(clazz), mock(clazz)));
 	}
 }

@@ -17,6 +17,7 @@
  */
 package org.apache.flink.runtime.state;
 
+import javax.annotation.Nullable;
 import java.util.concurrent.Future;
 import java.util.concurrent.RunnableFuture;
 import java.util.concurrent.TimeUnit;
@@ -31,9 +32,10 @@ public class DoneFuture<T> implements RunnableFuture<T> {
 
 	private static final DoneFuture<?> NULL_FUTURE = new DoneFuture<>(null);
 
+	@Nullable
 	private final T payload;
 
-	public DoneFuture(T payload) {
+	protected DoneFuture(@Nullable T payload) {
 		this.payload = payload;
 	}
 
@@ -72,5 +74,9 @@ public class DoneFuture<T> implements RunnableFuture<T> {
 	@SuppressWarnings("unchecked")
 	public static <T> DoneFuture<T> nullValue() {
 		return (DoneFuture<T>) NULL_FUTURE;
+	}
+
+	public static <T> DoneFuture<T> of(@Nullable T result) {
+		return new DoneFuture<>(result);
 	}
 }
