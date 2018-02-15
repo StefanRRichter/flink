@@ -24,12 +24,14 @@ import org.apache.flink.runtime.state.OperatorStateHandle;
 import org.apache.flink.runtime.state.OperatorStreamStateHandle;
 import org.apache.flink.runtime.state.SnapshotResult;
 import org.apache.flink.util.TestLogger;
+
 import org.junit.Test;
 
 import java.util.concurrent.RunnableFuture;
 
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.powermock.api.mockito.PowerMockito.spy;
 
 /**
  * Tests for {@link OperatorSnapshotFutures}.
@@ -50,25 +52,25 @@ public class OperatorSnapshotFuturesTest extends TestLogger {
 		SnapshotResult<KeyedStateHandle> keyedStateManagedResult =
 			new SnapshotResult<>(keyedManagedStateHandle, null);
 		RunnableFuture<SnapshotResult<KeyedStateHandle>> keyedStateManagedFuture =
-			DoneFuture.of(keyedStateManagedResult);
+			spy(DoneFuture.of(keyedStateManagedResult));
 
 		KeyedStateHandle keyedRawStateHandle = mock(KeyedStateHandle.class);
 		SnapshotResult<KeyedStateHandle> keyedStateRawResult =
 			new SnapshotResult<>(keyedRawStateHandle, null);
 		RunnableFuture<SnapshotResult<KeyedStateHandle>> keyedStateRawFuture =
-			DoneFuture.of(keyedStateRawResult);
+			spy(DoneFuture.of(keyedStateRawResult));
 
 		OperatorStateHandle operatorManagedStateHandle = mock(OperatorStreamStateHandle.class);
 		SnapshotResult<OperatorStateHandle> operatorStateManagedResult =
 			new SnapshotResult<>(operatorManagedStateHandle, null);
 		RunnableFuture<SnapshotResult<OperatorStateHandle>> operatorStateManagedFuture =
-			DoneFuture.of(operatorStateManagedResult);
+			spy(DoneFuture.of(operatorStateManagedResult));
 
 		OperatorStateHandle operatorRawStateHandle = mock(OperatorStreamStateHandle.class);
 		SnapshotResult<OperatorStateHandle> operatorStateRawResult =
 			new SnapshotResult<>(operatorRawStateHandle, null);
 		RunnableFuture<SnapshotResult<OperatorStateHandle>> operatorStateRawFuture =
-			DoneFuture.of(operatorStateRawResult);
+			spy(DoneFuture.of(operatorStateRawResult));
 
 		operatorSnapshotResult = new OperatorSnapshotFutures(
 			keyedStateManagedFuture,

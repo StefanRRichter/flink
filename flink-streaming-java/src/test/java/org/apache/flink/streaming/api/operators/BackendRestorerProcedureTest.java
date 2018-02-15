@@ -34,6 +34,7 @@ import org.apache.flink.runtime.state.memory.MemCheckpointStreamFactory;
 import org.apache.flink.runtime.util.BlockingFSDataInputStream;
 import org.apache.flink.util.TestLogger;
 import org.apache.flink.util.ThrowingSupplier;
+
 import org.junit.Assert;
 import org.junit.Test;
 
