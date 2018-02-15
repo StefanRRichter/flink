@@ -82,6 +82,9 @@ import org.apache.flink.util.TestLogger;
 import org.junit.Assert;
 import org.junit.Test;
 
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
+
 import java.io.IOException;
 import java.util.Collections;
 import java.util.concurrent.FutureTask;
@@ -361,6 +364,7 @@ public class TaskCheckpointingBehaviourTest extends TestLogger {
 		private final Object lock = new Object();
 		private volatile boolean closed;
 
+		@Nullable
 		@Override
 		public StreamStateHandle closeAndGetHandle() throws IOException {
 			throw new UnsupportedOperationException();

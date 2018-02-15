@@ -23,6 +23,9 @@ import org.apache.flink.runtime.state.CheckpointStreamFactory;
 import org.apache.flink.runtime.state.CheckpointedStateScope;
 import org.apache.flink.runtime.state.StreamStateHandle;
 
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
+
 import java.io.IOException;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -115,6 +118,7 @@ public class MemCheckpointStreamFactory implements CheckpointStreamFactory {
 			}
 		}
 
+		@Nullable
 		@Override
 		public StreamStateHandle closeAndGetHandle() throws IOException {
 			if (isEmpty) {

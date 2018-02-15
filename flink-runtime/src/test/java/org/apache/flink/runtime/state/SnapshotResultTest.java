@@ -29,7 +29,7 @@ public class SnapshotResultTest extends TestLogger {
 
 	@Test
 	public void discardState() throws Exception {
-		SnapshotResult<StateObject> result = new SnapshotResult<>(mock(StateObject.class), mock(StateObject.class));
+		SnapshotResult<StateObject> result = SnapshotResult.withLocalState(mock(StateObject.class), mock(StateObject.class));
 		result.discardState();
 		verify(result.getJobManagerOwnedSnapshot()).discardState();
 		verify(result.getTaskLocalSnapshot()).discardState();
@@ -39,7 +39,7 @@ public class SnapshotResultTest extends TestLogger {
 	public void getStateSize() {
 		long size = 42L;
 
-		SnapshotResult<StateObject> result = new SnapshotResult<>(
+		SnapshotResult<StateObject> result = SnapshotResult.withLocalState(
 			new DummyStateObject(size),
 			new DummyStateObject(size));
 		Assert.assertEquals(size, result.getStateSize());

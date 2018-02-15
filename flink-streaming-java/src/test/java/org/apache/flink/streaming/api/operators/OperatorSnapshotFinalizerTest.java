@@ -52,19 +52,19 @@ public class OperatorSnapshotFinalizerTest extends TestLogger {
 		OperatorStateHandle operatorTemplate =
 			StateHandleDummyUtil.createNewOperatorStateHandle(2, random);
 
-		SnapshotResult<KeyedStateHandle> snapKeyMan = new SnapshotResult<>(
+		SnapshotResult<KeyedStateHandle> snapKeyMan = SnapshotResult.withLocalState(
 			StateHandleDummyUtil.deepDummyCopy(keyedTemplate),
 			StateHandleDummyUtil.deepDummyCopy(keyedTemplate));
 
-		SnapshotResult<KeyedStateHandle> snapKeyRaw = new SnapshotResult<>(
+		SnapshotResult<KeyedStateHandle> snapKeyRaw = SnapshotResult.withLocalState(
 			StateHandleDummyUtil.deepDummyCopy(keyedTemplate),
 			StateHandleDummyUtil.deepDummyCopy(keyedTemplate));
 
-		SnapshotResult<OperatorStateHandle> snapOpMan = new SnapshotResult<>(
+		SnapshotResult<OperatorStateHandle> snapOpMan = SnapshotResult.withLocalState(
 			StateHandleDummyUtil.deepDummyCopy(operatorTemplate),
 			StateHandleDummyUtil.deepDummyCopy(operatorTemplate));
 
-		SnapshotResult<OperatorStateHandle> snapOpRaw = new SnapshotResult<>(
+		SnapshotResult<OperatorStateHandle> snapOpRaw = SnapshotResult.withLocalState(
 			StateHandleDummyUtil.deepDummyCopy(operatorTemplate),
 			StateHandleDummyUtil.deepDummyCopy(operatorTemplate));
 
@@ -104,11 +104,7 @@ public class OperatorSnapshotFinalizerTest extends TestLogger {
 			return actual.isEmpty();
 		}
 
-		if (actual.size() != 1) {
-			return false;
-		}
-
-		return expected == actual.iterator().next();
+		return actual.size() == 1 && expected == actual.iterator().next();
 	}
 
 	static class PseudoNotDoneFuture<T> extends DoneFuture<T> {

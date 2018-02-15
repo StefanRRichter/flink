@@ -19,6 +19,9 @@ package org.apache.flink.runtime.state;
 
 import org.apache.flink.util.ExceptionUtils;
 
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
+
 /**
  * This class contains the combined results from the snapshot of a state backend:
  * <ul>
@@ -51,7 +54,7 @@ public class SnapshotResult<T extends StateObject> implements StateObject {
 	 * @param taskLocalSnapshot Snapshot for report to local state manager. This is optional and requires
 	 *                             jobManagerOwnedSnapshot to be not null if this is not also null.
 	 */
-	public SnapshotResult(T jobManagerOwnedSnapshot, T taskLocalSnapshot) {
+	private SnapshotResult(T jobManagerOwnedSnapshot, T taskLocalSnapshot) {
 
 		if (jobManagerOwnedSnapshot == null && taskLocalSnapshot != null) {
 			throw new IllegalStateException("Cannot report local state snapshot without corresponding remote state!");
@@ -103,5 +106,15 @@ public class SnapshotResult<T extends StateObject> implements StateObject {
 	@SuppressWarnings("unchecked")
 	public static <T extends StateObject> SnapshotResult<T> empty() {
 		return (SnapshotResult<T>) EMPTY;
+	}
+
+	public static <T extends StateObject> SnapshotResult<T> of(@Nullable T jobManagerState) {
+		return jobManagerState != null ? new SnapshotResult<>(jobManagerState, null) : empty();
+	}
+
+	public static <T extends StateObject> SnapshotResult<T> withLocalState(
+		@Nonnull T jobManagerState,
+		@Nonnull T localState) {
+		return new SnapshotResult<>(jobManagerState, localState);
 	}
 }

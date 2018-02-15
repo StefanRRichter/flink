@@ -25,6 +25,9 @@ import org.apache.flink.util.TestLogger;
 import org.junit.Assert;
 import org.junit.Test;
 
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
+
 import java.io.IOException;
 import java.util.Random;
 
@@ -264,6 +267,7 @@ public class DuplicatingCheckpointOutputStreamTest extends TestLogger {
 
 		private boolean closed = false;
 
+		@Nullable
 		@Override
 		public StreamStateHandle closeAndGetHandle() throws IOException {
 			throw new IOException();

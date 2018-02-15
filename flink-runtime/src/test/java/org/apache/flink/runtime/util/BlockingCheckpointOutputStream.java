@@ -177,6 +177,7 @@ public class BlockingCheckpointOutputStream extends CheckpointStreamFactory.Chec
 		}
 	}
 
+	@Nullable
 	@Override
 	public StreamStateHandle closeAndGetHandle() throws IOException {
 

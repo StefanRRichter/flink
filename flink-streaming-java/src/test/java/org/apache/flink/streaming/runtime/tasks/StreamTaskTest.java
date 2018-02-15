@@ -531,10 +531,10 @@ public class StreamTaskTest extends TestLogger {
 		OperatorStateHandle rawOperatorStateHandle = mock(OperatorStreamStateHandle.class);
 
 		OperatorSnapshotFutures operatorSnapshotResult = new OperatorSnapshotFutures(
-			DoneFuture.of(new SnapshotResult<>(managedKeyedStateHandle, null)),
-			DoneFuture.of(new SnapshotResult<>(rawKeyedStateHandle, null)),
-			DoneFuture.of(new SnapshotResult<>(managedOperatorStateHandle, null)),
-			DoneFuture.of(new SnapshotResult<>(rawOperatorStateHandle, null)));
+			DoneFuture.of(SnapshotResult.of(managedKeyedStateHandle)),
+			DoneFuture.of(SnapshotResult.of(rawKeyedStateHandle)),
+			DoneFuture.of(SnapshotResult.of(managedOperatorStateHandle)),
+			DoneFuture.of(SnapshotResult.of(rawOperatorStateHandle)));
 
 		when(streamOperator.snapshotState(anyLong(), anyLong(), any(CheckpointOptions.class), any(CheckpointStreamFactory.class))).thenReturn(operatorSnapshotResult);
 
@@ -636,10 +636,10 @@ public class StreamTaskTest extends TestLogger {
 		OperatorStateHandle rawOperatorStateHandle = mock(OperatorStreamStateHandle.class);
 
 		OperatorSnapshotFutures operatorSnapshotResult = new OperatorSnapshotFutures(
-			DoneFuture.of(new SnapshotResult<>(managedKeyedStateHandle, null)),
-			DoneFuture.of(new SnapshotResult<>(rawKeyedStateHandle, null)),
-			DoneFuture.of(new SnapshotResult<>(managedOperatorStateHandle, null)),
-			DoneFuture.of(new SnapshotResult<>(rawOperatorStateHandle, null)));
+			DoneFuture.of(SnapshotResult.of(managedKeyedStateHandle)),
+			DoneFuture.of(SnapshotResult.of(rawKeyedStateHandle)),
+			DoneFuture.of(SnapshotResult.of(managedOperatorStateHandle)),
+			DoneFuture.of(SnapshotResult.of(rawOperatorStateHandle)));
 
 		when(streamOperator.snapshotState(anyLong(), anyLong(), any(CheckpointOptions.class), any(CheckpointStreamFactory.class))).thenReturn(operatorSnapshotResult);
 

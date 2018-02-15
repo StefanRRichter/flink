@@ -22,6 +22,8 @@ import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.util.ExceptionUtils;
 import org.apache.flink.util.Preconditions;
 
+import javax.annotation.Nullable;
+
 import java.io.IOException;
 
 /**
@@ -245,6 +247,7 @@ public class DuplicatingCheckpointOutputStream extends CheckpointStreamFactory.C
 		secondaryStreamException = Preconditions.checkNotNull(ex);
 	}
 
+	@Nullable
 	@Override
 	public StreamStateHandle closeAndGetHandle() throws IOException {
 		return closeAndGetPrimaryHandle();

@@ -29,6 +29,8 @@ import org.apache.flink.runtime.state.memory.ByteStreamStateHandle;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.annotation.Nullable;
+
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.UUID;
@@ -277,6 +279,7 @@ public class FsCheckpointStreamFactory implements CheckpointStreamFactory {
 			}
 		}
 
+		@Nullable
 		@Override
 		public StreamStateHandle closeAndGetHandle() throws IOException {
 			// check if there was nothing ever written

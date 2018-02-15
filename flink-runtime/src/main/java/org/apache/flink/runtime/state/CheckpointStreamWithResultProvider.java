@@ -21,12 +21,14 @@ package org.apache.flink.runtime.state;
 import org.apache.flink.core.fs.Path;
 import org.apache.flink.runtime.state.filesystem.FileBasedStateOutputStream;
 import org.apache.flink.util.ExceptionUtils;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.annotation.Nonnegative;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
+
 import java.io.Closeable;
 import java.io.File;
 import java.io.IOException;
@@ -71,7 +73,7 @@ public interface CheckpointStreamWithResultProvider extends Closeable {
 		@Nonnull
 		@Override
 		public SnapshotResult<StreamStateHandle> closeAndFinalizeCheckpointStreamResult() throws IOException {
-			return new SnapshotResult<>(outputStream.closeAndGetHandle(), null);
+			return SnapshotResult.of(outputStream.closeAndGetHandle());
 		}
 
 		@Nonnull
@@ -122,10 +124,14 @@ public interface CheckpointStreamWithResultProvider extends Closeable {
 			}
 
 			if (primaryStreamStateHandle != null) {
-				return new SnapshotResult<>(primaryStreamStateHandle, secondaryStreamStateHandle);
+				if (secondaryStreamStateHandle != null) {
+					return SnapshotResult.withLocalState(primaryStreamStateHandle, secondaryStreamStateHandle);
+				} else {
+					return SnapshotResult.of(primaryStreamStateHandle);
+				}
+			} else {
+				return SnapshotResult.empty();
 			}
-
-			return SnapshotResult.empty();
 		}
 
 		@Nonnull
@@ -182,17 +188,24 @@ public interface CheckpointStreamWithResultProvider extends Closeable {
 		@Nonnull SnapshotResult<StreamStateHandle> snapshotResult,
 		@Nonnull KeyGroupRangeOffsets keyGroupRangeOffsets) {
 
-		return new SnapshotResult<>(
-			fromStateHandlePlusKeyGroupOffsets(snapshotResult.getJobManagerOwnedSnapshot(), keyGroupRangeOffsets),
-			fromStateHandlePlusKeyGroupOffsets(snapshotResult.getTaskLocalSnapshot(), keyGroupRangeOffsets)
-		);
-	}
+		StreamStateHandle jobManagerOwnedSnapshot = snapshotResult.getJobManagerOwnedSnapshot();
 
-	@Nullable
-	static KeyedStateHandle fromStateHandlePlusKeyGroupOffsets(
-		@Nullable StreamStateHandle streamStateHandle,
-		@Nonnull KeyGroupRangeOffsets keyGroupRangeOffsets) {
+		if (jobManagerOwnedSnapshot != null) {
 
-		return streamStateHandle != null ? new KeyGroupsStateHandle(keyGroupRangeOffsets, streamStateHandle) : null;
+			KeyedStateHandle jmKeyedState = new KeyGroupsStateHandle(keyGroupRangeOffsets, jobManagerOwnedSnapshot);
+			StreamStateHandle taskLocalSnapshot = snapshotResult.getTaskLocalSnapshot();
+
+			if (taskLocalSnapshot != null) {
+
+				KeyedStateHandle localKeyedState = new KeyGroupsStateHandle(keyGroupRangeOffsets, taskLocalSnapshot);
+				return SnapshotResult.withLocalState(jmKeyedState, localKeyedState);
+			} else {
+
+				return SnapshotResult.of(jmKeyedState);
+			}
+		} else {
+
+			return SnapshotResult.empty();
+		}
 	}
 }

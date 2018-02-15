@@ -103,7 +103,7 @@ public class SnapshotDirectory {
 	 * @throws IOException if the state of this snapshot directory object is different from "ongoing".
 	 */
 	public DirectoryStateHandle completeSnapshotAndGetHandle() throws IOException {
-		if (state.compareAndSet(State.ONGOING, State.COMPLETED)) {
+		if (State.COMPLETED.equals(state.get()) || state.compareAndSet(State.ONGOING, State.COMPLETED)) {
 			return new DirectoryStateHandle(directory, fileSystem);
 		} else {
 			throw new IOException("Expected state " + State.ONGOING + " but found state " + state.get());

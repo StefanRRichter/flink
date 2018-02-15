@@ -20,6 +20,8 @@ package org.apache.flink.runtime.state;
 
 import org.apache.flink.core.fs.FSDataOutputStream;
 
+import javax.annotation.Nullable;
+
 import java.io.IOException;
 import java.io.OutputStream;
 
@@ -69,6 +71,7 @@ public interface CheckpointStreamFactory {
 		 * @return A state handle that can create an input stream producing the data written to this stream.
 		 * @throws IOException Thrown, if the stream cannot be closed.
 		 */
+		@Nullable
 		public abstract StreamStateHandle closeAndGetHandle() throws IOException;
 
 		/**

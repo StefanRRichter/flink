@@ -82,6 +82,7 @@ import org.apache.flink.runtime.state.internal.InternalListState;
 import org.apache.flink.runtime.state.internal.InternalMapState;
 import org.apache.flink.runtime.state.internal.InternalReducingState;
 import org.apache.flink.runtime.state.internal.InternalValueState;
+import org.apache.flink.util.ExceptionUtils;
 import org.apache.flink.util.FileUtils;
 import org.apache.flink.util.FlinkRuntimeException;
 import org.apache.flink.util.IOUtils;
@@ -89,6 +90,7 @@ import org.apache.flink.util.Preconditions;
 import org.apache.flink.util.ResourceGuard;
 import org.apache.flink.util.StateMigrationException;
 import org.apache.flink.util.ThrowingSupplier;
+
 import org.rocksdb.Checkpoint;
 import org.rocksdb.ColumnFamilyDescriptor;
 import org.rocksdb.ColumnFamilyHandle;
@@ -104,6 +106,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.annotation.Nonnull;
+
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
@@ -2291,7 +2294,7 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 				stateBackend.materializedSstFiles.put(checkpointId, sstFiles.keySet());
 			}
 
-			IncrementalKeyedStateHandle incrementalKeyedStateHandle = new IncrementalKeyedStateHandle(
+			IncrementalKeyedStateHandle jmIncrementalKeyedStateHandle = new IncrementalKeyedStateHandle(
 				stateBackend.backendUID,
 				stateBackend.keyGroupRange,
 				checkpointId,
@@ -2299,20 +2302,39 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 				miscFiles,
 				metaStateHandle.getJobManagerOwnedSnapshot());
 
-			DirectoryStateHandle directoryStateHandle = localBackupDirectory.completeSnapshotAndGetHandle();
 			StreamStateHandle taskLocalSnapshotMetaDataStateHandle = metaStateHandle.getTaskLocalSnapshot();
-			IncrementalLocalKeyedStateHandle directoryKeyedStateHandle =
-				directoryStateHandle != null && taskLocalSnapshotMetaDataStateHandle != null ?
+			DirectoryStateHandle directoryStateHandle = null;
+
+			try {
+
+				directoryStateHandle = localBackupDirectory.completeSnapshotAndGetHandle();
+			} catch (IOException ex) {
+
+				Exception collector = ex;
+
+				try {
+					taskLocalSnapshotMetaDataStateHandle.discardState();
+				} catch (Exception discardEx) {
+					collector = ExceptionUtils.firstOrSuppressed(discardEx, collector);
+				}
+
+				LOG.warn("Problem with local state snapshot.", collector);
+			}
+
+			if (directoryStateHandle != null && taskLocalSnapshotMetaDataStateHandle != null) {
+
+				IncrementalLocalKeyedStateHandle localDirKeyedStateHandle =
 					new IncrementalLocalKeyedStateHandle(
 						stateBackend.backendUID,
 						checkpointId,
 						directoryStateHandle,
 						stateBackend.keyGroupRange,
 						taskLocalSnapshotMetaDataStateHandle,
-						sstFiles.keySet()) :
-					null;
-
-			return new SnapshotResult<>(incrementalKeyedStateHandle, directoryKeyedStateHandle);
+						sstFiles.keySet());
+				return SnapshotResult.withLocalState(jmIncrementalKeyedStateHandle, localDirKeyedStateHandle);
+			} else {
+				return SnapshotResult.of(jmIncrementalKeyedStateHandle);
+			}
 		}
 
 		void stop() {

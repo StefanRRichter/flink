@@ -60,7 +60,7 @@ public class TaskLocalStateStoreImpl implements TaskLocalStateStore {
 	static final int MAX_RETAINED_SNAPSHOTS = 5;
 
 	/** Dummy value to use instead of null to satisfy {@link ConcurrentHashMap}. */
-	private final TaskStateSnapshot NULL_DUMMY = new TaskStateSnapshot();
+	private final TaskStateSnapshot NULL_DUMMY = new TaskStateSnapshot(0);
 
 	/** JobID from the owning subtask. */
 	@Nonnull

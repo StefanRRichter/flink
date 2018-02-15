@@ -24,6 +24,7 @@ import org.apache.flink.util.ExceptionUtils;
 import org.apache.flink.util.Preconditions;
 
 import javax.annotation.Nonnull;
+
 import java.io.Closeable;
 import java.io.IOException;
 import java.util.concurrent.RunnableFuture;
@@ -32,8 +33,11 @@ import java.util.concurrent.RunnableFuture;
  * This class is a default implementation for StateSnapshotContext.
  */
 public class StateSnapshotContextSynchronousImpl implements StateSnapshotContext, Closeable {
-	
+
+	/** Checkpoint id of the snapshot. */
 	private final long checkpointId;
+
+	/** Checkpoint timestamp of the snapshot. */
 	private final long checkpointTimestamp;
 	
 	/** Factory for he checkpointing stream */
@@ -48,7 +52,10 @@ public class StateSnapshotContextSynchronousImpl implements StateSnapshotContext
 	 */
 	private final CloseableRegistry closableRegistry;
 
+	/** Output stream for the raw keyed state. */
 	private KeyedStateCheckpointOutputStream keyedStateCheckpointOutputStream;
+
+	/** Output stream for the raw operator state. */
 	private OperatorStateCheckpointOutputStream operatorStateCheckpointOutputStream;
 
 	@VisibleForTesting
@@ -125,7 +132,7 @@ public class StateSnapshotContextSynchronousImpl implements StateSnapshotContext
 	}
 
 	private <T extends StateObject> RunnableFuture<SnapshotResult<T>> toDoneFutureOfSnapshotResult(T handle) {
-		SnapshotResult<T> snapshotResult = new SnapshotResult<>(handle, null);
+		SnapshotResult<T> snapshotResult = SnapshotResult.of(handle);
 		return DoneFuture.of(snapshotResult);
 	}
 
@@ -159,9 +166,7 @@ public class StateSnapshotContextSynchronousImpl implements StateSnapshotContext
 			try {
 				closeAndUnregisterStream(keyedStateCheckpointOutputStream);
 			} catch (IOException e) {
-				exception = ExceptionUtils.firstOrSuppressed(
-					new IOException("Could not close the raw keyed state checkpoint output stream.", e),
-					exception);
+				exception = new IOException("Could not close the raw keyed state checkpoint output stream.", e);
 			}
 		}
 
