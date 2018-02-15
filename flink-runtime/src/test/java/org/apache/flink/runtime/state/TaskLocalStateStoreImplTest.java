@@ -103,7 +103,7 @@ public class TaskLocalStateStoreImplTest {
 	@Test
 	public void storeAndRetrieve() throws Exception {
 
-		final int chkCount = TaskLocalStateStoreImpl.MAX_RETAINED_SNAPSHOTS;
+		final int chkCount = 3;
 
 		for (int i = 0; i < chkCount; ++i) {
 			Assert.assertNull(taskLocalStateStore.retrieveLocalState(i));
@@ -117,27 +117,12 @@ public class TaskLocalStateStoreImplTest {
 	}
 
 	/**
-	 * Tests pruning for a too long history of unconfirmed checkpoints.
-	 */
-	@Test
-	public void maxRetainedCheckpoints() throws Exception {
-
-		final int chkCount = 3 * TaskLocalStateStoreImpl.MAX_RETAINED_SNAPSHOTS;
-		final int lastRetained = chkCount - TaskLocalStateStoreImpl.MAX_RETAINED_SNAPSHOTS;
-		List<TaskStateSnapshot> taskStateSnapshots = storeStates(chkCount);
-		checkPrunedAndDiscarded(taskStateSnapshots, 0, lastRetained);
-		checkStoredAsExpected(taskStateSnapshots, lastRetained, chkCount);
-	}
-
-	/**
 	 * Tests pruning of previous checkpoints if a new checkpoint is confirmed.
 	 */
 	@Test
 	public void confirmCheckpoint() throws Exception {
 
-		Assert.assertTrue(TaskLocalStateStoreImpl.MAX_RETAINED_SNAPSHOTS > 3);
-
-		final int chkCount = TaskLocalStateStoreImpl.MAX_RETAINED_SNAPSHOTS;
+		final int chkCount = 3;
 		final int confirmed = chkCount - 1;
 		List<TaskStateSnapshot> taskStateSnapshots = storeStates(chkCount);
 		taskLocalStateStore.confirmCheckpoint(confirmed);
@@ -150,9 +135,7 @@ public class TaskLocalStateStoreImplTest {
 	 */
 	@Test
 	public void dispose() throws Exception {
-		Assert.assertTrue(TaskLocalStateStoreImpl.MAX_RETAINED_SNAPSHOTS > 3);
-
-		final int chkCount = TaskLocalStateStoreImpl.MAX_RETAINED_SNAPSHOTS;
+		final int chkCount = 3;
 		final int confirmed = chkCount - 1;
 		List<TaskStateSnapshot> taskStateSnapshots = storeStates(chkCount);
 		taskLocalStateStore.confirmCheckpoint(confirmed);

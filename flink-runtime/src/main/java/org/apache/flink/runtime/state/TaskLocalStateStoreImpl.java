@@ -18,7 +18,6 @@
 
 package org.apache.flink.runtime.state;
 
-import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.core.fs.FileSystem;
 import org.apache.flink.core.fs.Path;
@@ -54,10 +53,6 @@ public class TaskLocalStateStoreImpl implements TaskLocalStateStore {
 
 	/** Logger for this class. */
 	private static final Logger LOG = LoggerFactory.getLogger(TaskLocalStateStoreImpl.class);
-
-	/** Maximum number of retained snapshots. */
-	@VisibleForTesting
-	static final int MAX_RETAINED_SNAPSHOTS = 5;
 
 	/** Dummy value to use instead of null to satisfy {@link ConcurrentHashMap}. */
 	private final TaskStateSnapshot NULL_DUMMY = new TaskStateSnapshot(0);
@@ -130,7 +125,7 @@ public class TaskLocalStateStoreImpl implements TaskLocalStateStore {
 		LOG.info("Storing local state for checkpoint {}.", checkpointId);
 		LOG.debug("Local state for checkpoint {} is {}.", checkpointId, localState);
 
-		Map<Long, TaskStateSnapshot> toDiscard = new HashMap<>(MAX_RETAINED_SNAPSHOTS);
+		Map<Long, TaskStateSnapshot> toDiscard = new HashMap<>(16);
 
 		synchronized (lock) {
 			if (discarded) {
@@ -142,14 +137,6 @@ public class TaskLocalStateStoreImpl implements TaskLocalStateStore {
 
 				if (previous != null) {
 					toDiscard.put(checkpointId, previous);
-				}
-
-				// remove from history.
-				while (storedTaskStateByCheckpointID.size() > MAX_RETAINED_SNAPSHOTS) {
-					Long removeCheckpointID = storedTaskStateByCheckpointID.firstKey();
-					TaskStateSnapshot snapshot =
-						storedTaskStateByCheckpointID.remove(removeCheckpointID);
-					toDiscard.put(removeCheckpointID, snapshot);
 				}
 			}
 		}
@@ -177,7 +164,7 @@ public class TaskLocalStateStoreImpl implements TaskLocalStateStore {
 
 		LOG.debug("Received confirmation for checkpoint {}. Starting to prune history.", confirmedCheckpointId);
 
-		final List<Map.Entry<Long, TaskStateSnapshot>> toRemove = new ArrayList<>(MAX_RETAINED_SNAPSHOTS);
+		final List<Map.Entry<Long, TaskStateSnapshot>> toRemove = new ArrayList<>();
 
 		synchronized (lock) {
 
