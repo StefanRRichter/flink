@@ -275,7 +275,9 @@ public class StreamTaskStateInitializerImpl implements StreamTaskStateInitialize
 
 			Collection<OperatorStateHandle> rawOperatorState = restoreStateAlternatives.next();
 			// TODO currently this does not support local state recovery, so we expect there is only one handle.
-			Preconditions.checkState(!restoreStateAlternatives.hasNext());
+			Preconditions.checkState(
+				!restoreStateAlternatives.hasNext(),
+				"Local recovery is currently not implemented for raw operator state, but found state alternative.");
 
 			if (rawOperatorState != null) {
 
@@ -306,7 +308,9 @@ public class StreamTaskStateInitializerImpl implements StreamTaskStateInitialize
 			Collection<KeyedStateHandle> rawKeyedState = restoreStateAlternatives.next();
 
 			// TODO currently this does not support local state recovery, so we expect there is only one handle.
-			Preconditions.checkState(!restoreStateAlternatives.hasNext());
+			Preconditions.checkState(
+				!restoreStateAlternatives.hasNext(),
+				"Local recovery is currently not implemented for raw keyed state, but found state alternative.");
 
 			if (rawKeyedState != null) {
 				Collection<KeyGroupsStateHandle> keyGroupsStateHandles = transform(rawKeyedState);

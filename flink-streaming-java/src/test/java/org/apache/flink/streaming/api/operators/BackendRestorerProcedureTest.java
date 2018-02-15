@@ -32,13 +32,13 @@ import org.apache.flink.runtime.state.OperatorStateHandle;
 import org.apache.flink.runtime.state.SnapshotResult;
 import org.apache.flink.runtime.state.memory.MemCheckpointStreamFactory;
 import org.apache.flink.runtime.util.BlockingFSDataInputStream;
+import org.apache.flink.util.FlinkException;
 import org.apache.flink.util.TestLogger;
-import org.apache.flink.util.ThrowingSupplier;
+import org.apache.flink.util.function.SupplierWithException;
 
 import org.junit.Assert;
 import org.junit.Test;
 
-import java.io.IOException;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Iterator;
@@ -57,7 +57,7 @@ import static org.powermock.api.mockito.PowerMockito.when;
  */
 public class BackendRestorerProcedureTest extends TestLogger {
 
-	private final ThrowingSupplier<OperatorStateBackend, Exception> backendSupplier =
+	private final SupplierWithException<OperatorStateBackend, Exception> backendSupplier =
 		() -> new DefaultOperatorStateBackend(
 			getClass().getClassLoader(),
 			new ExecutionConfig(),
@@ -201,7 +201,6 @@ public class BackendRestorerProcedureTest extends TestLogger {
 		restoreThread.join();
 
 		Exception exception = exceptionReference.get();
-		Assert.assertTrue(exception instanceof IOException);
-		Assert.assertTrue(exception.getMessage().contains("Stream closed."));
+		Assert.assertTrue(exception instanceof FlinkException);
 	}
 }

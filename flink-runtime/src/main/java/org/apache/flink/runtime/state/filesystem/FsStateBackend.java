@@ -453,7 +453,7 @@ public class FsStateBackend extends AbstractFileStateBackend implements Configur
 			TypeSerializer<K> keySerializer,
 			int numberOfKeyGroups,
 			KeyGroupRange keyGroupRange,
-			TaskKvStateRegistry kvStateRegistry) throws IOException {
+			TaskKvStateRegistry kvStateRegistry) {
 
 		TaskStateManager taskStateManager = env.getTaskStateManager();
 		LocalRecoveryConfig localRecoveryConfig = taskStateManager.createLocalRecoveryConfig();
@@ -472,7 +472,7 @@ public class FsStateBackend extends AbstractFileStateBackend implements Configur
 	@Override
 	public OperatorStateBackend createOperatorStateBackend(
 		Environment env,
-		String operatorIdentifier) throws Exception {
+		String operatorIdentifier) {
 
 		return new DefaultOperatorStateBackend(
 			env.getUserClassLoader(),

@@ -18,14 +18,14 @@
 
 package org.apache.flink.runtime.state;
 
-import org.apache.commons.io.IOUtils;
 import org.apache.flink.core.fs.FSDataInputStream;
 import org.apache.flink.runtime.testutils.CommonTestUtils;
 import org.apache.flink.util.TestLogger;
+
+import org.apache.commons.io.IOUtils;
 import org.junit.Assert;
 import org.junit.Test;
 
-import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
 import java.io.IOException;

@@ -190,7 +190,7 @@ public class TaskStateManagerImplTest extends TestLogger {
 			File[] allocBaseDirs = new File[]{tmpFolder.newFolder(), tmpFolder.newFolder(), tmpFolder.newFolder()};
 
 			LocalRecoveryDirectoryProviderImpl directoryProvider =
-				new LocalRecoveryDirectoryProviderImpl(allocBaseDirs, jobID, allocationID, jobVertexID, 0);
+				new LocalRecoveryDirectoryProviderImpl(allocBaseDirs, jobID, jobVertexID, 0);
 
 			LocalRecoveryConfig localRecoveryConfig =
 				new LocalRecoveryConfig(LocalRecoveryConfig.LocalRecoveryMode.ENABLE_FILE_BASED, directoryProvider);

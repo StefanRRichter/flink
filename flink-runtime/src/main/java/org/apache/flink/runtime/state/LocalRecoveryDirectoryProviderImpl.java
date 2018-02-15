@@ -20,8 +20,6 @@ package org.apache.flink.runtime.state;
 
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.JobID;
-import org.apache.flink.core.fs.Path;
-import org.apache.flink.runtime.clusterframework.types.AllocationID;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.util.Preconditions;
 
@@ -32,6 +30,7 @@ import javax.annotation.Nonnegative;
 import javax.annotation.Nonnull;
 
 import java.io.File;
+import java.nio.file.Paths;
 import java.util.Arrays;
 
 /**
@@ -53,10 +52,6 @@ public class LocalRecoveryDirectoryProviderImpl implements LocalRecoveryDirector
 	@Nonnull
 	private final JobID jobID;
 
-	/** AllocationID of the owning slot. */
-	@Nonnull
-	private final AllocationID allocationID;
-
 	/** JobVertexID of the owning task. */
 	@Nonnull
 	private final JobVertexID jobVertexID;
@@ -68,23 +63,20 @@ public class LocalRecoveryDirectoryProviderImpl implements LocalRecoveryDirector
 	public LocalRecoveryDirectoryProviderImpl(
 		File allocationBaseDir,
 		@Nonnull JobID jobID,
-		@Nonnull AllocationID allocationID,
 		@Nonnull JobVertexID jobVertexID,
 		@Nonnegative int subtaskIndex) {
-		this(new File[]{allocationBaseDir}, jobID, allocationID, jobVertexID, subtaskIndex);
+		this(new File[]{allocationBaseDir}, jobID, jobVertexID, subtaskIndex);
 	}
 
 	public LocalRecoveryDirectoryProviderImpl(
 		@Nonnull File[] allocationBaseDirs,
 		@Nonnull JobID jobID,
-		@Nonnull AllocationID allocationID,
 		@Nonnull JobVertexID jobVertexID,
 		@Nonnegative int subtaskIndex) {
 
 		Preconditions.checkArgument(allocationBaseDirs.length > 0);
 		this.allocationBaseDirs = allocationBaseDirs;
 		this.jobID = jobID;
-		this.allocationID = allocationID;
 		this.jobVertexID = jobVertexID;
 		this.subtaskIndex = subtaskIndex;
 
@@ -129,20 +121,14 @@ public class LocalRecoveryDirectoryProviderImpl implements LocalRecoveryDirector
 		return "LocalRecoveryDirectoryProvider{" +
 			"rootDirectories=" + Arrays.toString(allocationBaseDirs) +
 			", jobID=" + jobID +
-			", allocationID=" + allocationID +
 			", jobVertexID=" + jobVertexID +
 			", subtaskIndex=" + subtaskIndex +
 			'}';
 	}
 
 	@VisibleForTesting
-	String allocationSubDirString() {
-		return "aid_" + allocationID;
-	}
-
-	@VisibleForTesting
 	String subtaskDirString() {
-		return "jid_" + jobID + Path.SEPARATOR + "vtx_" + jobVertexID + "_sti_" + subtaskIndex;
+		return Paths.get("jid_" + jobID, "vtx_" + jobVertexID + "_sti_" + subtaskIndex).toString();
 	}
 
 	@VisibleForTesting

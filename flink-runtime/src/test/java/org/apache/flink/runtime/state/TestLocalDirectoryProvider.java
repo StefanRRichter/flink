@@ -19,7 +19,6 @@
 package org.apache.flink.runtime.state;
 
 import org.apache.flink.api.common.JobID;
-import org.apache.flink.runtime.clusterframework.types.AllocationID;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 
 import java.io.File;
@@ -33,7 +32,6 @@ public class TestLocalDirectoryProvider extends LocalRecoveryDirectoryProviderIm
 		super(
 			new File(System.getProperty("java.io.tmpdir")),
 			new JobID(),
-			new AllocationID(),
 			new JobVertexID(),
 			0);
 	}

@@ -20,12 +20,12 @@ package org.apache.flink.runtime.state;
 
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.core.fs.Path;
-import org.apache.flink.runtime.clusterframework.types.AllocationID;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.util.TestLogger;
-import org.junit.After;
+
 import org.junit.Assert;
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
 
@@ -38,48 +38,41 @@ import java.io.IOException;
 public class LocalRecoveryDirectoryProviderImplTest extends TestLogger {
 
 	private static final JobID JOB_ID = new JobID();
-	private static final AllocationID ALLOCATION_ID = new AllocationID();
 	private static final JobVertexID JOB_VERTEX_ID = new JobVertexID();
 	private static final int SUBTASK_INDEX = 0;
 
-	private TemporaryFolder tmpFolder;
+	@Rule
+	public TemporaryFolder tmpFolder = new TemporaryFolder();
+
 	private LocalRecoveryDirectoryProviderImpl directoryProvider;
 	private File[] allocBaseFolders;
 
 	@Before
 	public void setup() throws IOException {
-		this.tmpFolder = new TemporaryFolder();
-		this.tmpFolder.create();
 		this.allocBaseFolders = new File[]{tmpFolder.newFolder(), tmpFolder.newFolder(), tmpFolder.newFolder()};
 		this.directoryProvider = new LocalRecoveryDirectoryProviderImpl(
 			allocBaseFolders,
 			JOB_ID,
-			ALLOCATION_ID,
 			JOB_VERTEX_ID,
 			SUBTASK_INDEX);
 	}
 
-	@After
-	public void tearDown() {
-		this.tmpFolder.delete();
-	}
-
 	@Test
-	public void allocationBaseDir() throws Exception {
+	public void allocationBaseDir() {
 		for (int i = 0; i < 10; ++i) {
 			Assert.assertEquals(allocBaseFolders[i % allocBaseFolders.length], directoryProvider.allocationBaseDirectory(i));
 		}
 	}
 
 	@Test
-	public void selectAllocationBaseDir() throws Exception {
+	public void selectAllocationBaseDir() {
 		for (int i = 0; i < allocBaseFolders.length; ++i) {
 			Assert.assertEquals(allocBaseFolders[i], directoryProvider.selectAllocationBaseDirectory(i));
 		}
 	}
 
 	@Test
-	public void allocationBaseDirectoriesCount() throws Exception {
+	public void allocationBaseDirectoriesCount() {
 		Assert.assertEquals(allocBaseFolders.length, directoryProvider.allocationBaseDirsCount());
 	}
 
@@ -107,9 +100,6 @@ public class LocalRecoveryDirectoryProviderImplTest extends TestLogger {
 
 	@Test
 	public void testPathStringConstants() {
-		Assert.assertEquals(
-			directoryProvider.allocationSubDirString(),
-			"aid_" + ALLOCATION_ID);
 
 		Assert.assertEquals(
 			directoryProvider.subtaskDirString(),
@@ -124,7 +114,7 @@ public class LocalRecoveryDirectoryProviderImplTest extends TestLogger {
 	@Test
 	public void testPreconditionsNotNullFiles() {
 		try {
-			new LocalRecoveryDirectoryProviderImpl(new File[]{null}, JOB_ID, ALLOCATION_ID, JOB_VERTEX_ID, SUBTASK_INDEX);
+			new LocalRecoveryDirectoryProviderImpl(new File[]{null}, JOB_ID, JOB_VERTEX_ID, SUBTASK_INDEX);
 			Assert.fail();
 		} catch (NullPointerException ignore) {
 		}

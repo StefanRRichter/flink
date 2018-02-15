@@ -36,9 +36,6 @@ import java.io.IOException;
  */
 public class DuplicatingCheckpointOutputStream extends CheckpointStreamFactory.CheckpointStateOutputStream {
 
-	/** Flag if the positional alignment of both streams is checked after each operation. */
-	private static final boolean STRICT_ALIGNMENT_CHECKS = false;
-
 	/** Default buffer size of 8KB. */
 	private static final int DEFAULT_BUFFER_SIZER = 8 * 1024;
 
@@ -217,10 +214,6 @@ public class DuplicatingCheckpointOutputStream extends CheckpointStreamFactory.C
 	}
 
 	private void writeThroughInternal(byte[] b, int off, int len) throws IOException {
-
-		if (STRICT_ALIGNMENT_CHECKS) {
-			checkForAlignedStreamPositions();
-		}
 
 		primaryOutputStream.write(b, off, len);
 

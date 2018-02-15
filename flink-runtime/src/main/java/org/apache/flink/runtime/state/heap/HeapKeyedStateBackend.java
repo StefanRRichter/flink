@@ -18,8 +18,6 @@
 
 package org.apache.flink.runtime.state.heap;
 
-import org.apache.commons.collections.map.HashedMap;
-import org.apache.commons.io.IOUtils;
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.ExecutionConfig;
 import org.apache.flink.api.common.state.AggregatingStateDescriptor;
@@ -53,7 +51,6 @@ import org.apache.flink.runtime.state.KeyGroupsStateHandle;
 import org.apache.flink.runtime.state.KeyedBackendSerializationProxy;
 import org.apache.flink.runtime.state.KeyedStateHandle;
 import org.apache.flink.runtime.state.LocalRecoveryConfig;
-import org.apache.flink.runtime.state.LocalRecoveryDirectoryProvider;
 import org.apache.flink.runtime.state.RegisteredKeyedBackendStateMetaInfo;
 import org.apache.flink.runtime.state.SnappyStreamCompressionDecorator;
 import org.apache.flink.runtime.state.SnapshotResult;
@@ -69,11 +66,15 @@ import org.apache.flink.runtime.state.internal.InternalReducingState;
 import org.apache.flink.runtime.state.internal.InternalValueState;
 import org.apache.flink.util.Preconditions;
 import org.apache.flink.util.StateMigrationException;
-import org.apache.flink.util.ThrowingSupplier;
+import org.apache.flink.util.function.SupplierWithException;
+
+import org.apache.commons.collections.map.HashedMap;
+import org.apache.commons.io.IOUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.annotation.Nonnull;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -617,17 +618,20 @@ public class HeapKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 					metaInfoSnapshots,
 					!Objects.equals(UncompressedStreamCompressionDecorator.INSTANCE, keyGroupCompressionDecorator));
 
-			LocalRecoveryDirectoryProvider directoryProvider =
-				LocalRecoveryConfig.LocalRecoveryMode.ENABLE_FILE_BASED.equals(localRecoveryConfig.getLocalRecoveryMode()) ?
-					localRecoveryConfig.getLocalStateDirectoryProvider() :
-					null;
+			final SupplierWithException<CheckpointStreamWithResultProvider, Exception> checkpointStreamSupplier =
 
-			final ThrowingSupplier<CheckpointStreamWithResultProvider, Exception> checkpointStreamSupplier =
-				() -> new CheckpointStreamWithResultProvider.Factory().create(
-					checkpointId,
-					CheckpointedStateScope.EXCLUSIVE,
-					primaryStreamFactory,
-					directoryProvider);
+				LocalRecoveryConfig.LocalRecoveryMode.ENABLE_FILE_BASED.equals(
+					localRecoveryConfig.getLocalRecoveryMode()) ?
+
+					() -> CheckpointStreamWithResultProvider.createDuplicatingStream(
+						checkpointId,
+						CheckpointedStateScope.EXCLUSIVE,
+						primaryStreamFactory,
+						localRecoveryConfig.getLocalStateDirectoryProvider()) :
+
+					() -> CheckpointStreamWithResultProvider.createSimpleStream(
+						CheckpointedStateScope.EXCLUSIVE,
+						primaryStreamFactory);
 
 			//--------------------------------------------------- this becomes the end of sync part
 

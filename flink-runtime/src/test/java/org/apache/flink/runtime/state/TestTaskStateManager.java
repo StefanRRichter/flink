@@ -138,25 +138,28 @@ public class TestTaskStateManager implements TaskStateManager {
 		TaskStateSnapshot tmTaskStateSnapshot = getLastTaskManagerTaskStateSnapshot();
 
 		if (jmTaskStateSnapshot == null) {
+
 			return PrioritizedOperatorSubtaskState.emptyNotRestored();
-		}
+		} else {
 
-		OperatorSubtaskState jmOpState = jmTaskStateSnapshot.getSubtaskStateByOperatorID(operatorID);
+			OperatorSubtaskState jmOpState = jmTaskStateSnapshot.getSubtaskStateByOperatorID(operatorID);
 
-		if (jmOpState == null) {
-			return PrioritizedOperatorSubtaskState.emptyNotRestored();
-		}
+			if (jmOpState == null) {
 
-		List<OperatorSubtaskState> tmStateCollection = Collections.emptyList();
+				return PrioritizedOperatorSubtaskState.emptyNotRestored();
+			} else {
 
-		if (tmTaskStateSnapshot != null) {
-			OperatorSubtaskState tmOpState = tmTaskStateSnapshot.getSubtaskStateByOperatorID(operatorID);
-			if (tmOpState != null) {
-				tmStateCollection = Collections.singletonList(tmOpState);
+				List<OperatorSubtaskState> tmStateCollection = Collections.emptyList();
+
+				if (tmTaskStateSnapshot != null) {
+					OperatorSubtaskState tmOpState = tmTaskStateSnapshot.getSubtaskStateByOperatorID(operatorID);
+					if (tmOpState != null) {
+						tmStateCollection = Collections.singletonList(tmOpState);
+					}
+				}
+				return new PrioritizedOperatorSubtaskState(jmOpState, tmStateCollection);
 			}
 		}
-
-		return new PrioritizedOperatorSubtaskState(jmOpState, tmStateCollection);
 	}
 
 	@Nonnull

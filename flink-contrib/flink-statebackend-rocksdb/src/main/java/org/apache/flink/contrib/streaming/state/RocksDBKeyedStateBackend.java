@@ -89,7 +89,7 @@ import org.apache.flink.util.IOUtils;
 import org.apache.flink.util.Preconditions;
 import org.apache.flink.util.ResourceGuard;
 import org.apache.flink.util.StateMigrationException;
-import org.apache.flink.util.ThrowingSupplier;
+import org.apache.flink.util.function.SupplierWithException;
 
 import org.rocksdb.Checkpoint;
 import org.rocksdb.ColumnFamilyDescriptor;
@@ -402,7 +402,7 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 
 	@Override
 	public void restore(Collection<KeyedStateHandle> restoreState) throws Exception {
-		LOG.info("Initializing RocksDB keyed state backend from snapshot.");
+		LOG.info("Initializing RocksDB keyed state backend.");
 
 		if (LOG.isDebugEnabled()) {
 			LOG.debug("Restoring snapshot from state handles: {}.", restoreState);
@@ -1571,17 +1571,21 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 				return DoneFuture.of(SnapshotResult.empty());
 			}
 
-			LocalRecoveryDirectoryProvider directoryProvider =
-				isWithLocalRecovery(checkpointOptions.getCheckpointType(), localRecoveryConfig.getLocalRecoveryMode()) ?
-					localRecoveryConfig.getLocalStateDirectoryProvider() :
-					null;
+			final SupplierWithException<CheckpointStreamWithResultProvider, Exception> supplier =
 
-			final ThrowingSupplier<CheckpointStreamWithResultProvider, Exception> supplier =
-				() -> new CheckpointStreamWithResultProvider.Factory().create(
-					checkpointId,
-					CheckpointedStateScope.EXCLUSIVE,
-					primaryStreamFactory,
-					directoryProvider);
+				isWithLocalRecovery(
+					checkpointOptions.getCheckpointType(),
+					localRecoveryConfig.getLocalRecoveryMode()) ?
+
+					() -> CheckpointStreamWithResultProvider.createDuplicatingStream(
+						checkpointId,
+						CheckpointedStateScope.EXCLUSIVE,
+						primaryStreamFactory,
+						localRecoveryConfig.getLocalStateDirectoryProvider()) :
+
+					() -> CheckpointStreamWithResultProvider.createSimpleStream(
+						CheckpointedStateScope.EXCLUSIVE,
+						primaryStreamFactory);
 
 			snapshotOperation = new RocksDBFullSnapshotOperation<>(
 				RocksDBKeyedStateBackend.this,
@@ -1759,7 +1763,7 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 
 		private final RocksDBKeyedStateBackend<K> stateBackend;
 		private final KeyGroupRangeOffsets keyGroupRangeOffsets;
-		private final ThrowingSupplier<CheckpointStreamWithResultProvider, Exception> checkpointStreamSupplier;
+		private final SupplierWithException<CheckpointStreamWithResultProvider, Exception> checkpointStreamSupplier;
 		private final CloseableRegistry snapshotCloseableRegistry;
 		private final ResourceGuard.Lease dbLease;
 
@@ -1772,7 +1776,7 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 
 		RocksDBFullSnapshotOperation(
 			RocksDBKeyedStateBackend<K> stateBackend,
-			ThrowingSupplier<CheckpointStreamWithResultProvider, Exception> checkpointStreamSupplier,
+			SupplierWithException<CheckpointStreamWithResultProvider, Exception> checkpointStreamSupplier,
 			CloseableRegistry registry) throws IOException {
 
 			this.stateBackend = stateBackend;
@@ -2172,17 +2176,21 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 		private SnapshotResult<StreamStateHandle> materializeMetaData() throws Exception {
 
 			LocalRecoveryConfig localRecoveryConfig = stateBackend.localRecoveryConfig;
-			LocalRecoveryDirectoryProvider directoryProvider = LocalRecoveryConfig.LocalRecoveryMode.ENABLE_FILE_BASED
-				.equals(localRecoveryConfig.getLocalRecoveryMode()) ?
-				localRecoveryConfig.getLocalStateDirectoryProvider() :
-				null;
 
 			CheckpointStreamWithResultProvider streamWithResultProvider =
-				new CheckpointStreamWithResultProvider.Factory().create(
-					checkpointId,
-					CheckpointedStateScope.EXCLUSIVE,
-					checkpointStreamFactory,
-					directoryProvider);
+
+				LocalRecoveryConfig.LocalRecoveryMode.ENABLE_FILE_BASED
+					.equals(localRecoveryConfig.getLocalRecoveryMode()) ?
+
+					CheckpointStreamWithResultProvider.createDuplicatingStream(
+						checkpointId,
+						CheckpointedStateScope.EXCLUSIVE,
+						checkpointStreamFactory,
+						localRecoveryConfig.getLocalStateDirectoryProvider()) :
+
+					CheckpointStreamWithResultProvider.createSimpleStream(
+						CheckpointedStateScope.EXCLUSIVE,
+						checkpointStreamFactory);
 
 			try {
 				closeableRegistry.registerCloseable(streamWithResultProvider);

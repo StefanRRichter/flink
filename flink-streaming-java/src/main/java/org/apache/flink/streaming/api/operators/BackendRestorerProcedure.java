@@ -23,8 +23,9 @@ import org.apache.flink.runtime.state.Snapshotable;
 import org.apache.flink.runtime.state.StateObject;
 import org.apache.flink.util.Disposable;
 import org.apache.flink.util.ExceptionUtils;
+import org.apache.flink.util.FlinkException;
 import org.apache.flink.util.Preconditions;
-import org.apache.flink.util.ThrowingSupplier;
+import org.apache.flink.util.function.SupplierWithException;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -34,6 +35,7 @@ import javax.annotation.Nonnull;
 import java.io.Closeable;
 import java.io.IOException;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Iterator;
 
 /**
@@ -55,7 +57,7 @@ public class BackendRestorerProcedure<
 	private static final Logger LOG = LoggerFactory.getLogger(BackendRestorerProcedure.class);
 
 	/** Factory for new, fresh backends without state. */
-	private final ThrowingSupplier<T, Exception> instanceSupplier;
+	private final SupplierWithException<T, Exception> instanceSupplier;
 
 	/** This registry is used so that recovery can participate in the task lifecycle, i.e. can be canceled. */
 	private final CloseableRegistry backendCloseableRegistry;
@@ -67,7 +69,7 @@ public class BackendRestorerProcedure<
 	 * @param backendCloseableRegistry registry to allow participation in task lifecycle, e.g. react to cancel.
 	 */
 	public BackendRestorerProcedure(
-		@Nonnull ThrowingSupplier<T, Exception> instanceSupplier,
+		@Nonnull SupplierWithException<T, Exception> instanceSupplier,
 		@Nonnull CloseableRegistry backendCloseableRegistry) {
 
 		this.instanceSupplier = Preconditions.checkNotNull(instanceSupplier);
@@ -81,64 +83,64 @@ public class BackendRestorerProcedure<
 	 * @return the created (and restored) state backend.
 	 * @throws Exception if the backend could not be created or restored.
 	 */
-	public @Nonnull T createAndRestore(
-		@Nonnull Iterator<? extends Collection<S>> restoreOptions) throws Exception {
+	public @Nonnull
+	T createAndRestore(@Nonnull Iterator<? extends Collection<S>> restoreOptions) throws Exception {
 
-		Collection<S> restoreState = null;
-
-		boolean retry;
+		// This ensures that we always call the restore method even if there is no previous state
+		// (required by some backends).
+		Collection<S> attemptState = restoreOptions.hasNext() ?
+			restoreOptions.next() :
+			Collections.emptyList();
 
 		while (true) {
-
-			retry = false;
-
-			// checks if there is any state to restore or if this going to be a fresh backend...
-			if (restoreOptions.hasNext()) {
-				restoreState = restoreOptions.next();
-			}
-
-			// create a new, empty backend.
-			final T backendInstance = instanceSupplier.get();
-
 			try {
-				// register the backend with the registry to participate in task lifecycle w.r.t. cancellation.
-				backendCloseableRegistry.registerCloseable(backendInstance);
-
-				// if something goes wrong after this point, we can blame it on recovery and should retry if there are
-				// still snapshot alternatives.
-				retry = restoreOptions.hasNext();
-
-				// attempt to restore from snapshot (or null if no state was checkpointed).
-				backendInstance.restore(restoreState);
-
-				return backendInstance;
+				return attemptCreateAndRestore(attemptState);
 			} catch (Exception ex) {
+				// more attempts?
+				if (restoreOptions.hasNext()) {
 
-				// under failure, we need do close...
-				if (backendCloseableRegistry.unregisterCloseable(backendInstance)) {
-					try {
-						backendInstance.close();
-					} catch (IOException closeEx) {
-						ex = ExceptionUtils.firstOrSuppressed(closeEx, ex);
-					}
-				}
-
-				// ... and dispose, e.g. to release native resources.
-				try {
-					backendInstance.dispose();
-				} catch (Exception disposeEx) {
-					ex = ExceptionUtils.firstOrSuppressed(disposeEx, ex);
-				}
-
-				// if we see no point in a retry, this is the time to report an exception...
-				if (retry) {
-					//...otherwise we just log that there was a problem.
+					attemptState = restoreOptions.next();
 					LOG.warn("Exception while restoring backend, will retry with another snapshot replica.", ex);
 				} else {
-					// assume there is no more retry option for the problem.
-					throw ex;
+
+					throw new FlinkException("Could not restore from any of the provided restore options.", ex);
 				}
 			}
+		}
+	}
+
+	private T attemptCreateAndRestore(Collection<S> restoreState) throws Exception {
+
+		// create a new, empty backend.
+		final T backendInstance = instanceSupplier.get();
+
+		try {
+			// register the backend with the registry to participate in task lifecycle w.r.t. cancellation.
+			backendCloseableRegistry.registerCloseable(backendInstance);
+
+			// attempt to restore from snapshot (or null if no state was checkpointed).
+			backendInstance.restore(restoreState);
+
+			return backendInstance;
+		} catch (Exception ex) {
+
+			// under failure, we need do close...
+			if (backendCloseableRegistry.unregisterCloseable(backendInstance)) {
+				try {
+					backendInstance.close();
+				} catch (IOException closeEx) {
+					ex = ExceptionUtils.firstOrSuppressed(closeEx, ex);
+				}
+			}
+
+			// ... and dispose, e.g. to release native resources.
+			try {
+				backendInstance.dispose();
+			} catch (Exception disposeEx) {
+				ex = ExceptionUtils.firstOrSuppressed(disposeEx, ex);
+			}
+
+			throw ex;
 		}
 	}
 }

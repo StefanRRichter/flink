@@ -55,7 +55,7 @@ public class TaskLocalStateStoreImpl implements TaskLocalStateStore {
 	private static final Logger LOG = LoggerFactory.getLogger(TaskLocalStateStoreImpl.class);
 
 	/** Dummy value to use instead of null to satisfy {@link ConcurrentHashMap}. */
-	private final TaskStateSnapshot NULL_DUMMY = new TaskStateSnapshot(0);
+	private static final TaskStateSnapshot NULL_DUMMY = new TaskStateSnapshot(0);
 
 	/** JobID from the owning subtask. */
 	@Nonnull
@@ -87,7 +87,7 @@ public class TaskLocalStateStoreImpl implements TaskLocalStateStore {
 
 	/** Status flag if this store was already discarded. */
 	@GuardedBy("lock")
-	private boolean discarded;
+	private boolean disposed;
 
 	/** Maps checkpoint ids to local TaskStateSnapshots. */
 	@Nonnull
@@ -109,7 +109,7 @@ public class TaskLocalStateStoreImpl implements TaskLocalStateStore {
 		this.discardExecutor = discardExecutor;
 		this.lock = new Object();
 		this.storedTaskStateByCheckpointID = new TreeMap<>();
-		this.discarded = false;
+		this.disposed = false;
 		this.localRecoveryConfig = localRecoveryConfig;
 	}
 
@@ -128,7 +128,7 @@ public class TaskLocalStateStoreImpl implements TaskLocalStateStore {
 		Map<Long, TaskStateSnapshot> toDiscard = new HashMap<>(16);
 
 		synchronized (lock) {
-			if (discarded) {
+			if (disposed) {
 				// we ignore late stores and simply discard the state.
 				toDiscard.put(checkpointId, localState);
 			} else {
@@ -198,7 +198,7 @@ public class TaskLocalStateStoreImpl implements TaskLocalStateStore {
 		Collection<Map.Entry<Long, TaskStateSnapshot>> statesCopy;
 
 		synchronized (lock) {
-			discarded = true;
+			disposed = true;
 			statesCopy = new ArrayList<>(storedTaskStateByCheckpointID.entrySet());
 			storedTaskStateByCheckpointID.clear();
 		}

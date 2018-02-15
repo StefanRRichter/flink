@@ -72,7 +72,7 @@ public class TaskExecutorLocalStateStoresManager {
 	public TaskExecutorLocalStateStoresManager(
 		@Nonnull LocalRecoveryConfig.LocalRecoveryMode localRecoveryMode,
 		@Nonnull File[] localStateRootDirectories,
-		@Nonnull Executor discardExecutor) {
+		@Nonnull Executor discardExecutor) throws IOException {
 
 		this.taskStateStoresByAllocationID = new HashMap<>();
 		this.localRecoveryMode = localRecoveryMode;
@@ -85,7 +85,7 @@ public class TaskExecutorLocalStateStoresManager {
 			if (!localStateRecoveryRootDir.exists()) {
 
 				if (!localStateRecoveryRootDir.mkdirs()) {
-					throw new IllegalStateException("Could not create root directory for local recovery: " +
+					throw new IOException("Could not create root directory for local recovery: " +
 						localStateRecoveryRootDir);
 				}
 			}
@@ -133,7 +133,6 @@ public class TaskExecutorLocalStateStoresManager {
 			LocalRecoveryDirectoryProviderImpl directoryProvider = new LocalRecoveryDirectoryProviderImpl(
 				allocationBaseDirectories,
 				jobId,
-				allocationID,
 				jobVertexID,
 				subtaskIndex);
 
@@ -230,7 +229,7 @@ public class TaskExecutorLocalStateStoresManager {
 				// race, JVM is in shutdown already, we can safely ignore this
 				LOG.debug("Unable to remove shutdown hook, shutdown already in progress", e);
 			} catch (Throwable t) {
-				LOG.warn("Exception while unregistering IOManager's shutdown hook.", t);
+				LOG.warn("Exception while un-registering IOManager's shutdown hook.", t);
 			}
 		}
 	}
@@ -243,7 +242,7 @@ public class TaskExecutorLocalStateStoresManager {
 				try {
 					stateStore.dispose();
 				} catch (Exception disposeEx) {
-					LOG.warn("Exception while disposing local state store", disposeEx);
+					LOG.warn("Exception while disposing local state store " + stateStore, disposeEx);
 				}
 			}
 		}

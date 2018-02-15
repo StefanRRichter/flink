@@ -20,11 +20,11 @@ package org.apache.flink.runtime.state;
 
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.core.fs.FSDataInputStream;
-import org.apache.flink.runtime.clusterframework.types.AllocationID;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.runtime.state.memory.MemCheckpointStreamFactory;
 import org.apache.flink.util.MethodForwardingTestUtil;
 import org.apache.flink.util.TestLogger;
+
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -52,19 +52,25 @@ public class CheckpointStreamWithResultProviderTest extends TestLogger {
 
 	@Test
 	public void testFactory() throws Exception {
-		CheckpointStreamWithResultProvider.Factory factory = new CheckpointStreamWithResultProvider.Factory();
 
 		CheckpointStreamFactory primaryFactory = createCheckpointStreamFactory();
 		try (
 			CheckpointStreamWithResultProvider primaryOnly =
-				factory.create(42L, CheckpointedStateScope.EXCLUSIVE, primaryFactory, null)) {
+				CheckpointStreamWithResultProvider.createSimpleStream(
+					CheckpointedStateScope.EXCLUSIVE,
+					primaryFactory)) {
+
 			Assert.assertTrue(primaryOnly instanceof CheckpointStreamWithResultProvider.PrimaryStreamOnly);
 		}
 
 		LocalRecoveryDirectoryProvider directoryProvider = createLocalRecoveryDirectoryProvider();
 		try (
 			CheckpointStreamWithResultProvider primaryAndSecondary =
-				factory.create(42L, CheckpointedStateScope.EXCLUSIVE, primaryFactory, directoryProvider)) {
+				CheckpointStreamWithResultProvider.createDuplicatingStream(
+					42L,
+					CheckpointedStateScope.EXCLUSIVE,
+					primaryFactory,
+					directoryProvider)) {
 
 			Assert.assertTrue(primaryAndSecondary instanceof CheckpointStreamWithResultProvider.PrimaryAndSecondaryStream);
 		}
@@ -72,11 +78,10 @@ public class CheckpointStreamWithResultProviderTest extends TestLogger {
 
 	@Test
 	public void testCloseAndFinalizeCheckpointStreamResultPrimaryOnly() throws Exception {
-		CheckpointStreamWithResultProvider.Factory factory = new CheckpointStreamWithResultProvider.Factory();
 		CheckpointStreamFactory primaryFactory = createCheckpointStreamFactory();
 
 		CheckpointStreamWithResultProvider resultProvider =
-			factory.create(42L, CheckpointedStateScope.EXCLUSIVE, primaryFactory, null);
+			CheckpointStreamWithResultProvider.createSimpleStream(CheckpointedStateScope.EXCLUSIVE, primaryFactory);
 
 		SnapshotResult<StreamStateHandle> result = writeCheckpointTestData(resultProvider);
 
@@ -91,12 +96,15 @@ public class CheckpointStreamWithResultProviderTest extends TestLogger {
 
 	@Test
 	public void testCloseAndFinalizeCheckpointStreamResultPrimaryAndSecondary() throws Exception {
-		CheckpointStreamWithResultProvider.Factory factory = new CheckpointStreamWithResultProvider.Factory();
 		CheckpointStreamFactory primaryFactory = createCheckpointStreamFactory();
 		LocalRecoveryDirectoryProvider directoryProvider = createLocalRecoveryDirectoryProvider();
 
 		CheckpointStreamWithResultProvider resultProvider =
-			factory.create(42L, CheckpointedStateScope.EXCLUSIVE, primaryFactory, directoryProvider);
+			CheckpointStreamWithResultProvider.createDuplicatingStream(
+				42L,
+				CheckpointedStateScope.EXCLUSIVE,
+				primaryFactory,
+				directoryProvider);
 
 		SnapshotResult<StreamStateHandle> result = writeCheckpointTestData(resultProvider);
 
@@ -124,13 +132,11 @@ public class CheckpointStreamWithResultProviderTest extends TestLogger {
 			primaryFactory.createCheckpointStateOutputStream(CheckpointedStateScope.EXCLUSIVE)));
 
 		testCloseBeforeComplete(new CheckpointStreamWithResultProvider.PrimaryAndSecondaryStream(
-			new DuplicatingCheckpointOutputStream(
 				primaryFactory.createCheckpointStateOutputStream(CheckpointedStateScope.EXCLUSIVE),
-				primaryFactory.createCheckpointStateOutputStream(CheckpointedStateScope.EXCLUSIVE))));
+				primaryFactory.createCheckpointStateOutputStream(CheckpointedStateScope.EXCLUSIVE)));
 		testCompleteBeforeClose(new CheckpointStreamWithResultProvider.PrimaryAndSecondaryStream(
-			new DuplicatingCheckpointOutputStream(
 				primaryFactory.createCheckpointStateOutputStream(CheckpointedStateScope.EXCLUSIVE),
-				primaryFactory.createCheckpointStateOutputStream(CheckpointedStateScope.EXCLUSIVE))));
+				primaryFactory.createCheckpointStateOutputStream(CheckpointedStateScope.EXCLUSIVE)));
 	}
 
 	@Test
@@ -197,9 +203,8 @@ public class CheckpointStreamWithResultProviderTest extends TestLogger {
 	private LocalRecoveryDirectoryProvider createLocalRecoveryDirectoryProvider() throws IOException {
 		File localStateDir = temporaryFolder.newFolder();
 		JobID jobID = new JobID();
-		AllocationID allocationID = new AllocationID();
 		JobVertexID jobVertexID = new JobVertexID();
 		int subtaskIdx = 0;
-		return new LocalRecoveryDirectoryProviderImpl(localStateDir, jobID, allocationID, jobVertexID, subtaskIdx);
+		return new LocalRecoveryDirectoryProviderImpl(localStateDir, jobID, jobVertexID, subtaskIdx);
 	}
 }

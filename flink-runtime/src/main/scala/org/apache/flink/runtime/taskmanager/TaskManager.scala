@@ -120,17 +120,16 @@ import scala.language.postfixOps
  *      requires a clean JVM.
  */
 class TaskManager(
-                   protected val config: TaskManagerConfiguration,
-                   protected val resourceID: ResourceID,
-                   protected val location: TaskManagerLocation,
-                   protected val memoryManager: MemoryManager,
-                   protected val ioManager: IOManager,
-                   protected val network: NetworkEnvironment,
-                   protected val taskManagerLocalStateStoresManager:
-                   TaskExecutorLocalStateStoresManager,
-                   protected val numberOfSlots: Int,
-                   protected val highAvailabilityServices: HighAvailabilityServices,
-                   protected val taskManagerMetricGroup: TaskManagerMetricGroup)
+    protected val config: TaskManagerConfiguration,
+    protected val resourceID: ResourceID,
+    protected val location: TaskManagerLocation,
+    protected val memoryManager: MemoryManager,
+    protected val ioManager: IOManager,
+    protected val network: NetworkEnvironment,
+    protected val taskManagerLocalStateStoresManager: TaskExecutorLocalStateStoresManager,
+    protected val numberOfSlots: Int,
+    protected val highAvailabilityServices: HighAvailabilityServices,
+    protected val taskManagerMetricGroup: TaskManagerMetricGroup)
   extends FlinkActor
   with LeaderSessionMessageFilter // Mixin order is important: We want to filter after logging
   with LogMessages // Mixin order is important: first we want to support message logging
@@ -1214,7 +1213,7 @@ class TaskManager(
         taskInformation.getJobVertexId,
         tdd.getSubtaskIndex)
 
-      val taskLocalStateManager = new TaskStateManagerImpl(
+      val taskStateManager = new TaskStateManagerImpl(
         jobID,
         tdd.getExecutionAttemptId,
         taskLocalStateStore,
@@ -1235,7 +1234,7 @@ class TaskManager(
         ioManager,
         network,
         bcVarManager,
-        taskLocalStateManager,
+        taskStateManager,
         taskManagerConnection,
         inputSplitProvider,
         checkpointResponder,

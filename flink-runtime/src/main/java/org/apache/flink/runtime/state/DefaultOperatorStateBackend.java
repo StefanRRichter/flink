@@ -475,7 +475,7 @@ public class DefaultOperatorStateBackend implements OperatorStateBackend {
 
 	public void restore(Collection<OperatorStateHandle> restoreSnapshots) throws Exception {
 
-		if (null == restoreSnapshots) {
+		if (null == restoreSnapshots || restoreSnapshots.isEmpty()) {
 			return;
 		}
 

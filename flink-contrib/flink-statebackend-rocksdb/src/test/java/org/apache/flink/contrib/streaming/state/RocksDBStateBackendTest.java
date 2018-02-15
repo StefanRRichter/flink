@@ -478,45 +478,6 @@ public class RocksDBStateBackendTest extends StateBackendTestBase<RocksDBStateBa
 		}
 	}
 
-	@Test
-	public void testLocalRecoveryConfigurationForwarding() throws Exception {
-
-//		RocksDBStateBackend stateBackend = getStateBackend();
-//		Assert.assertEquals(RocksDBStateBackend.LocalRecoveryMode.DISABLED, stateBackend.getLocalRecoveryMode());
-//		stateBackend.setLocalRecoveryMode(RocksDBStateBackend.LocalRecoveryMode.ENABLE_FILE_BASED);
-//		Assert.assertEquals(RocksDBStateBackend.LocalRecoveryMode.ENABLE_FILE_BASED, stateBackend.getLocalRecoveryMode());
-//
-//		DummyEnvironment environment = new DummyEnvironment();
-//		File tmpDir = tempFolder.newFolder();
-//		TestTaskStateManager taskStateManager = new TestTaskStateManager();
-//		taskStateManager.setLocalRecoveryDirectoryProvider(tmpDir);
-//		environment.setTaskStateManager(taskStateManager);
-//
-//		RocksDBKeyedStateBackend<Integer> keyedBackend =
-//			(RocksDBKeyedStateBackend<Integer>) stateBackend.createKeyedStateBackend(
-//				environment,
-//				new JobID(),
-//				"test",
-//				IntSerializer.INSTANCE,
-//				1,
-//				new KeyGroupRange(0, 0),
-//				null);
-//
-//		try {
-//			RocksDBStateBackend.LocalRecoveryConfig localRecoveryConfig = keyedBackend.getLocalRecoveryConfig();
-//			Assert.assertEquals(
-//				RocksDBStateBackend.LocalRecoveryMode.ENABLE_FILE_BASED,
-//				localRecoveryConfig.getLocalRecoveryMode());
-//
-//			Assert.assertEquals(
-//				tmpDir,
-//				localRecoveryConfig.getLocalStateDirectory());
-//		} finally {
-//			IOUtils.closeQuietly(keyedBackend);
-//			keyedBackend.dispose();
-//		}
-	}
-
 	private void checkRemove(IncrementalKeyedStateHandle remove, SharedStateRegistry registry) throws Exception {
 		for (StateHandleID id : remove.getSharedState().keySet()) {
 			verify(registry, times(0)).unregisterReference(

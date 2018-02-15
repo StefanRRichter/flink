@@ -174,7 +174,6 @@ public class LocalStateForwardingTest extends TestLogger {
 		LocalRecoveryDirectoryProviderImpl directoryProvider = new LocalRecoveryDirectoryProviderImpl(
 			temporaryFolder.newFolder(),
 			jobID,
-			allocationID,
 			jobVertexID,
 			subtaskIdx);
 

@@ -27,7 +27,6 @@ import org.slf4j.LoggerFactory;
 
 import javax.annotation.Nonnegative;
 import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
 
 import java.io.Closeable;
 import java.io.File;
@@ -39,6 +38,8 @@ import java.util.UUID;
  * This abstracts from different ways that a result is obtained from checkpoint output streams.
  */
 public interface CheckpointStreamWithResultProvider extends Closeable {
+
+	Logger LOG = LoggerFactory.getLogger(CheckpointStreamWithResultProvider.class);
 
 	/**
 	 * Closes the stream ans returns a snapshot result with the stream handle(s).
@@ -94,7 +95,13 @@ public interface CheckpointStreamWithResultProvider extends Closeable {
 		@Nonnull
 		private final DuplicatingCheckpointOutputStream outputStream;
 
-		public PrimaryAndSecondaryStream(@Nonnull DuplicatingCheckpointOutputStream outputStream) {
+		public PrimaryAndSecondaryStream(
+			@Nonnull CheckpointStreamFactory.CheckpointStateOutputStream primaryOut,
+			CheckpointStreamFactory.CheckpointStateOutputStream secondaryOut) throws IOException {
+			this(new DuplicatingCheckpointOutputStream(primaryOut, secondaryOut));
+		}
+
+		PrimaryAndSecondaryStream(@Nonnull DuplicatingCheckpointOutputStream outputStream) {
 			this.outputStream = outputStream;
 		}
 
@@ -141,42 +148,45 @@ public interface CheckpointStreamWithResultProvider extends Closeable {
 		}
 	}
 
-	class Factory {
+	@Nonnull
+	static CheckpointStreamWithResultProvider createSimpleStream(
+		@Nonnull CheckpointedStateScope checkpointedStateScope,
+		@Nonnull CheckpointStreamFactory primaryStreamFactory) throws IOException {
 
-		private static final Logger LOG = LoggerFactory.getLogger(PrimaryAndSecondaryStream.class);
+		CheckpointStreamFactory.CheckpointStateOutputStream primaryOut =
+			primaryStreamFactory.createCheckpointStateOutputStream(checkpointedStateScope);
 
-		@Nonnull
-		public CheckpointStreamWithResultProvider create(
-			@Nonnegative long checkpointId,
-			@Nonnull CheckpointedStateScope checkpointedStateScope,
-			@Nonnull CheckpointStreamFactory primaryStreamFactory,
-			@Nullable LocalRecoveryDirectoryProvider secondaryStreamDirProvider) throws IOException {
-
-			CheckpointStreamFactory.CheckpointStateOutputStream primaryOut =
-				primaryStreamFactory.createCheckpointStateOutputStream(checkpointedStateScope);
-
-			CheckpointStreamFactory.CheckpointStateOutputStream secondaryOut;
-
-			if (secondaryStreamDirProvider != null) {
-				try {
-					File outFile = new File(
-						secondaryStreamDirProvider.subtaskSpecificCheckpointDirectory(checkpointId),
-						String.valueOf(UUID.randomUUID()));
-					Path outPath = new Path(outFile.toURI());
-					secondaryOut = new FileBasedStateOutputStream(outPath.getFileSystem(), outPath);
-					final DuplicatingCheckpointOutputStream effectiveOutStream =
-						new DuplicatingCheckpointOutputStream(primaryOut, secondaryOut);
-
-					return new CheckpointStreamWithResultProvider.PrimaryAndSecondaryStream(effectiveOutStream);
-				} catch (IOException secondaryEx) {
-					LOG.warn("Exception when opening secondary/local checkpoint output stream. " +
-						"Continue only with the primary stream.", secondaryEx);
-				}
-			}
-
-			return new CheckpointStreamWithResultProvider.PrimaryStreamOnly(primaryOut);
-		}
+		return new CheckpointStreamWithResultProvider.PrimaryStreamOnly(primaryOut);
 	}
+
+	@Nonnull
+	static CheckpointStreamWithResultProvider createDuplicatingStream(
+		@Nonnegative long checkpointId,
+		@Nonnull CheckpointedStateScope checkpointedStateScope,
+		@Nonnull CheckpointStreamFactory primaryStreamFactory,
+		@Nonnull LocalRecoveryDirectoryProvider secondaryStreamDirProvider) throws IOException {
+
+		CheckpointStreamFactory.CheckpointStateOutputStream primaryOut =
+			primaryStreamFactory.createCheckpointStateOutputStream(checkpointedStateScope);
+
+		try {
+			File outFile = new File(
+				secondaryStreamDirProvider.subtaskSpecificCheckpointDirectory(checkpointId),
+				String.valueOf(UUID.randomUUID()));
+			Path outPath = new Path(outFile.toURI());
+
+			CheckpointStreamFactory.CheckpointStateOutputStream secondaryOut =
+				new FileBasedStateOutputStream(outPath.getFileSystem(), outPath);
+
+			return new CheckpointStreamWithResultProvider.PrimaryAndSecondaryStream(primaryOut, secondaryOut);
+		} catch (IOException secondaryEx) {
+			LOG.warn("Exception when opening secondary/local checkpoint output stream. " +
+				"Continue only with the primary stream.", secondaryEx);
+		}
+
+		return new CheckpointStreamWithResultProvider.PrimaryStreamOnly(primaryOut);
+	}
+
 
 	/**
 	 * Helper method that takes a {@link SnapshotResult<StreamStateHandle>} and a {@link KeyGroupRangeOffsets} and
