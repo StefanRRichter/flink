@@ -169,7 +169,7 @@ public class TaskExecutorLocalStateStoresManager {
 	public void releaseLocalStateForAllocationId(@Nonnull AllocationID allocationID) {
 
 		if (LOG.isDebugEnabled()) {
-			LOG.debug("releasing local state under allocation id {}.", allocationID);
+			LOG.debug("Releasing local state under allocation id {}.", allocationID);
 		}
 
 		Map<JobVertexSubtaskKey, TaskLocalStateStoreImpl> cleanupLocalStores;
