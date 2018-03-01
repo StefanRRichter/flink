@@ -62,6 +62,11 @@ public abstract class FailoverStrategy {
 	public abstract String getStrategyName();
 
 	/**
+	 * Called when the job successfully recovery from a failure. This hook can be used to reset retry-attempt counters.
+	 */
+	public void onSuccessfulRecovery() {}
+
+	/**
 	 * Tells the FailoverStrategy to register its metrics.
 	 * 
 	 * <p>The default implementation does nothing

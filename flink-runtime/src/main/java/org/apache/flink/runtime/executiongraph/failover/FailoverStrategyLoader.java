@@ -66,7 +66,7 @@ public class FailoverStrategyLoader {
 					return new RestartPipelinedRegionStrategy.Factory();
 
 				case INDIVIDUAL_RESTART_STRATEGY_NAME:
-					return new RestartIndividualStrategy.Factory();
+					return new RestartIndividualStrategy.Factory(config);
 
 				default:
 					// we could interpret the parameter as a factory class name and instantiate that

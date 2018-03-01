@@ -52,7 +52,7 @@ public class AllVerticesIteratorTest {
 			
 			ExecutionGraph eg = Mockito.mock(ExecutionGraph.class);
 			Configuration jobConf = new Configuration();
-			Mockito.when(eg.getFutureExecutor()).thenReturn(TestingUtils.directExecutionContext());
+			Mockito.when(eg.getFutureExecutor()).thenReturn(TestingUtils.defaultScheduledExecutor());
 			Mockito.when(eg.getJobConfiguration()).thenReturn(jobConf);
 
 			ExecutionJobVertex ejv1 = new ExecutionJobVertex(eg, v1, 1,

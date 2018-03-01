@@ -43,6 +43,7 @@ import org.apache.flink.runtime.checkpoint.CompletedCheckpointStore;
 import org.apache.flink.runtime.checkpoint.MasterTriggerRestoreHook;
 import org.apache.flink.runtime.concurrent.FutureUtils;
 import org.apache.flink.runtime.concurrent.FutureUtils.ConjunctFuture;
+import org.apache.flink.runtime.concurrent.ScheduledExecutor;
 import org.apache.flink.runtime.concurrent.ScheduledExecutorServiceAdapter;
 import org.apache.flink.runtime.execution.ExecutionState;
 import org.apache.flink.runtime.execution.SuppressRestartsException;
@@ -742,6 +743,15 @@ public class ExecutionGraph implements AccessExecutionGraph {
 	 */
 	public Executor getFutureExecutor() {
 		return futureExecutor;
+	}
+
+	/**
+	 * Returns the ScheduledExecutor associated with this ExecutionGraph.
+	 *
+	 * @return ScheduledExecutor associated with this ExecutionGraph
+	 */
+	public ScheduledExecutor getScheduledFutureExecutor() {
+		return new ScheduledExecutorServiceAdapter(futureExecutor);
 	}
 
 	/**
@@ -1763,7 +1773,6 @@ public class ExecutionGraph implements AccessExecutionGraph {
 		// see what this means for us. currently, the first FAILED state means -> FAILED
 		if (newExecutionState == ExecutionState.FAILED) {
 			final Throwable ex = error != null ? error : new FlinkException("Unknown Error (missing cause)");
-			long timestamp = execution.getStateTimestamp(ExecutionState.FAILED);
 
 			// by filtering out late failure calls, we can save some work in
 			// avoiding redundant local failover
@@ -1782,6 +1791,8 @@ public class ExecutionGraph implements AccessExecutionGraph {
 					failGlobal(ex);
 				}
 			}
+		} else if (newExecutionState == ExecutionState.RUNNING && execution.getAttemptNumber() > 0) {
+			failoverStrategy.onSuccessfulRecovery();
 		}
 	}
 }

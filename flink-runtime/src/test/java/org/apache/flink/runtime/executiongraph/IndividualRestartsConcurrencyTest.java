@@ -20,7 +20,6 @@ package org.apache.flink.runtime.executiongraph;
 
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.api.common.time.Time;
-import org.apache.flink.core.testutils.ManuallyTriggeredDirectExecutor;
 import org.apache.flink.runtime.checkpoint.CheckpointCoordinator;
 import org.apache.flink.runtime.checkpoint.CheckpointOptions;
 import org.apache.flink.runtime.checkpoint.CheckpointRetentionPolicy;
@@ -28,6 +27,8 @@ import org.apache.flink.runtime.checkpoint.CheckpointStatsTracker;
 import org.apache.flink.runtime.checkpoint.PendingCheckpoint;
 import org.apache.flink.runtime.checkpoint.StandaloneCheckpointIDCounter;
 import org.apache.flink.runtime.checkpoint.StandaloneCompletedCheckpointStore;
+import org.apache.flink.runtime.concurrent.ManuallyTriggeredScheduledExecutor;
+import org.apache.flink.runtime.concurrent.ScheduledExecutor;
 import org.apache.flink.runtime.deployment.TaskDeploymentDescriptor;
 import org.apache.flink.runtime.execution.ExecutionState;
 import org.apache.flink.runtime.executiongraph.failover.FailoverStrategy;
@@ -37,12 +38,12 @@ import org.apache.flink.runtime.executiongraph.restart.FixedDelayRestartStrategy
 import org.apache.flink.runtime.executiongraph.restart.NoRestartStrategy;
 import org.apache.flink.runtime.executiongraph.restart.RestartStrategy;
 import org.apache.flink.runtime.executiongraph.utils.SimpleSlotProvider;
-import org.apache.flink.runtime.jobmaster.slotpool.SlotProvider;
 import org.apache.flink.runtime.jobgraph.JobGraph;
 import org.apache.flink.runtime.jobgraph.JobStatus;
 import org.apache.flink.runtime.jobgraph.JobVertex;
 import org.apache.flink.runtime.jobgraph.tasks.CheckpointCoordinatorConfiguration;
 import org.apache.flink.runtime.jobmanager.slots.TaskManagerGateway;
+import org.apache.flink.runtime.jobmaster.slotpool.SlotProvider;
 import org.apache.flink.runtime.messages.Acknowledge;
 import org.apache.flink.runtime.messages.checkpoint.AcknowledgeCheckpoint;
 import org.apache.flink.runtime.metrics.groups.UnregisteredMetricGroups;
@@ -59,7 +60,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.Executor;
 
 import static org.apache.flink.runtime.executiongraph.ExecutionGraphTestUtils.waitUntilExecutionState;
 import static org.apache.flink.runtime.executiongraph.ExecutionGraphTestUtils.waitUntilJobStatus;
@@ -101,7 +101,7 @@ public class IndividualRestartsConcurrencyTest extends TestLogger {
 		final JobID jid = new JobID();
 		final int parallelism = 2;
 
-		final ManuallyTriggeredDirectExecutor executor = new ManuallyTriggeredDirectExecutor();
+		final ManuallyTriggeredScheduledExecutor executor = new ManuallyTriggeredScheduledExecutor();
 
 		final SimpleSlotProvider slotProvider = new SimpleSlotProvider(jid, parallelism);
 
@@ -165,7 +165,7 @@ public class IndividualRestartsConcurrencyTest extends TestLogger {
 		final JobID jid = new JobID();
 		final int parallelism = 2;
 
-		final ManuallyTriggeredDirectExecutor executor = new ManuallyTriggeredDirectExecutor();
+		final ManuallyTriggeredScheduledExecutor executor = new ManuallyTriggeredScheduledExecutor();
 
 		final SimpleSlotProvider slotProvider = new SimpleSlotProvider(jid, parallelism);
 
@@ -228,7 +228,7 @@ public class IndividualRestartsConcurrencyTest extends TestLogger {
 		final JobID jid = new JobID();
 		final int parallelism = 2;
 
-		final ManuallyTriggeredDirectExecutor executor = new ManuallyTriggeredDirectExecutor();
+		final ManuallyTriggeredScheduledExecutor executor = new ManuallyTriggeredScheduledExecutor();
 
 		final SimpleSlotProvider slotProvider = new SimpleSlotProvider(jid, parallelism);
 
@@ -305,7 +305,7 @@ public class IndividualRestartsConcurrencyTest extends TestLogger {
 		when(taskManagerGateway.cancelTask(any(ExecutionAttemptID.class), any(Time.class))).thenReturn(CompletableFuture.completedFuture(Acknowledge.get()));
 
 		final SimpleSlotProvider slotProvider = new SimpleSlotProvider(jid, parallelism, taskManagerGateway);
-		final ManuallyTriggeredDirectExecutor executor = new ManuallyTriggeredDirectExecutor();
+		final ManuallyTriggeredScheduledExecutor executor = new ManuallyTriggeredScheduledExecutor();
 
 		final CheckpointCoordinatorConfiguration checkpointCoordinatorConfiguration = new CheckpointCoordinatorConfiguration(
 			10L,
@@ -450,9 +450,9 @@ public class IndividualRestartsConcurrencyTest extends TestLogger {
 
 	private static class IndividualFailoverWithCustomExecutor implements Factory {
 
-		private final Executor executor;
+		private final ScheduledExecutor executor;
 
-		IndividualFailoverWithCustomExecutor(Executor executor) {
+		IndividualFailoverWithCustomExecutor(ScheduledExecutor executor) {
 			this.executor = executor;
 		}
 
