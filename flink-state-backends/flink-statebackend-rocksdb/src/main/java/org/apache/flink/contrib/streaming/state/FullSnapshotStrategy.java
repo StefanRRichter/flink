@@ -66,7 +66,11 @@ import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.RunnableFuture;
 
-public class FullSnapshotStrategy implements SnapshotStrategy<SnapshotResult<KeyedStateHandle>> {
+import static org.apache.flink.contrib.streaming.state.RocksDBFullSnapshotFlagUtils.END_OF_KEY_GROUP_MARK;
+import static org.apache.flink.contrib.streaming.state.RocksDBFullSnapshotFlagUtils.hasMetaDataFollowsFlag;
+import static org.apache.flink.contrib.streaming.state.RocksDBFullSnapshotFlagUtils.setMetaDataFollowsFlagInKey;
+
+public class FullSnapshotStrategy<K> implements SnapshotStrategy<SnapshotResult<KeyedStateHandle>> {
 
 	private static final Logger LOG = LoggerFactory.getLogger(FullSnapshotStrategy.class);
 
@@ -188,9 +192,6 @@ public class FullSnapshotStrategy implements SnapshotStrategy<SnapshotResult<Key
 	 */
 	@VisibleForTesting
 	static class RocksDBFullSnapshotOperation<K> {
-
-		static final int FIRST_BIT_IN_BYTE_MASK = 0x80;
-		static final int END_OF_KEY_GROUP_MARK = 0xFFFF;
 
 		private final RocksDB db;
 		private final int keyGroupPrefixBytes;
@@ -474,18 +475,6 @@ public class FullSnapshotStrategy implements SnapshotStrategy<SnapshotResult<Key
 		private void writeKeyValuePair(byte[] key, byte[] value, DataOutputView out) throws IOException {
 			BytePrimitiveArraySerializer.INSTANCE.serialize(key, out);
 			BytePrimitiveArraySerializer.INSTANCE.serialize(value, out);
-		}
-
-		static void setMetaDataFollowsFlagInKey(byte[] key) {
-			key[0] |= FIRST_BIT_IN_BYTE_MASK;
-		}
-
-		static void clearMetaDataFollowsFlag(byte[] key) {
-			key[0] &= (~RocksDBFullSnapshotOperation.FIRST_BIT_IN_BYTE_MASK);
-		}
-
-		static boolean hasMetaDataFollowsFlag(byte[] key) {
-			return 0 != (key[0] & RocksDBFullSnapshotOperation.FIRST_BIT_IN_BYTE_MASK);
 		}
 
 		private static void checkInterrupted() throws InterruptedException {

@@ -54,6 +54,10 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 
+import static org.apache.flink.contrib.streaming.state.RocksDBFullSnapshotFlagUtils.END_OF_KEY_GROUP_MARK;
+import static org.apache.flink.contrib.streaming.state.RocksDBFullSnapshotFlagUtils.clearMetaDataFollowsFlag;
+import static org.apache.flink.contrib.streaming.state.RocksDBFullSnapshotFlagUtils.hasMetaDataFollowsFlag;
+
 public class RocksDBFullRestoreOperation<K> {
 
 	private final RocksDB db;
@@ -229,14 +233,14 @@ public class RocksDBFullRestoreOperation<K> {
 					while (keyGroupHasMoreKeys) {
 						byte[] key = BytePrimitiveArraySerializer.INSTANCE.deserialize(compressedKgInputView);
 						byte[] value = BytePrimitiveArraySerializer.INSTANCE.deserialize(compressedKgInputView);
-						if (RocksDBFullSnapshotOperation.hasMetaDataFollowsFlag(key)) {
+						if (hasMetaDataFollowsFlag(key)) {
 							//clear the signal bit in the key to make it ready for insertion again
-							RocksDBFullSnapshotOperation.clearMetaDataFollowsFlag(key);
+							clearMetaDataFollowsFlag(key);
 							db.put(handle, writeOptions, key, value);
 							//TODO this could be aware of keyGroupPrefixBytes and write only one byte if possible
-							kvStateId = RocksDBFullSnapshotOperation.END_OF_KEY_GROUP_MARK
+							kvStateId = END_OF_KEY_GROUP_MARK
 								& compressedKgInputView.readShort();
-							if (RocksDBFullSnapshotOperation.END_OF_KEY_GROUP_MARK == kvStateId) {
+							if (END_OF_KEY_GROUP_MARK == kvStateId) {
 								keyGroupHasMoreKeys = false;
 							} else {
 								handle = currentStateHandleKVStateColumnFamilies.get(kvStateId);
