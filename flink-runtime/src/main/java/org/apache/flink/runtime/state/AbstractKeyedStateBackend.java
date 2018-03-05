@@ -49,6 +49,10 @@ import org.apache.flink.runtime.state.internal.InternalValueState;
 import org.apache.flink.util.IOUtils;
 import org.apache.flink.util.Preconditions;
 
+import javax.annotation.Nonnegative;
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
+
 import java.io.Closeable;
 import java.io.IOException;
 import java.util.Collection;
@@ -88,38 +92,45 @@ public abstract class AbstractKeyedStateBackend<K> implements
 	private InternalKvState lastState;
 
 	/** The number of key-groups aka max parallelism */
+	@Nonnegative
 	protected final int numberOfKeyGroups;
 
 	/** Range of key-groups for which this backend is responsible */
+	@Nonnull
 	protected final KeyGroupRange keyGroupRange;
 
 	/** KvStateRegistry helper for this task */
+	@Nullable
 	protected final TaskKvStateRegistry kvStateRegistry;
 
 	/** Registry for all opened streams, so they can be closed if the task using this backend is closed */
+	@Nonnull
 	protected CloseableRegistry cancelStreamRegistry;
 
+	@Nonnull
 	protected final ClassLoader userCodeClassLoader;
 
+	@Nullable
 	private final ExecutionConfig executionConfig;
 
 	/** Decorates the input and output streams to write key-groups compressed. */
 	protected final StreamCompressionDecorator keyGroupCompressionDecorator;
 
 	public AbstractKeyedStateBackend(
-		TaskKvStateRegistry kvStateRegistry,
-		TypeSerializer<K> keySerializer,
-		ClassLoader userCodeClassLoader,
-		int numberOfKeyGroups,
-		KeyGroupRange keyGroupRange,
-		ExecutionConfig executionConfig) {
+		@Nullable TaskKvStateRegistry kvStateRegistry,
+		@Nonnull TypeSerializer<K> keySerializer,
+		@Nonnull ClassLoader userCodeClassLoader,
+		@Nonnegative int numberOfKeyGroups,
+		@Nonnull KeyGroupRange keyGroupRange,
+		@Nonnull CloseableRegistry closeableRegistry,
+		@Nullable ExecutionConfig executionConfig) {
 
 		this.kvStateRegistry = kvStateRegistry;
 		this.keySerializer = Preconditions.checkNotNull(keySerializer);
 		this.numberOfKeyGroups = Preconditions.checkNotNull(numberOfKeyGroups);
 		this.userCodeClassLoader = Preconditions.checkNotNull(userCodeClassLoader);
 		this.keyGroupRange = Preconditions.checkNotNull(keyGroupRange);
-		this.cancelStreamRegistry = new CloseableRegistry();
+		this.cancelStreamRegistry = closeableRegistry;
 		this.keyValueStatesByName = new HashMap<>();
 		this.executionConfig = executionConfig;
 		this.keyGroupCompressionDecorator = determineStreamCompression(executionConfig);
