@@ -176,6 +176,25 @@ function s3_delete {
     https://${bucket}.s3.amazonaws.com/${s3_file}
 }
 
+function tm_watchdog {
+  expectedTm=$1
+  while true;
+  do
+    runningTm=`jps | grep -o 'TaskManagerRunner' | wc -l`;
+    count=$((expectedTm-runningTm))
+    for (( c=0; c<count; c++ ))
+     do
+       echo "Restarting a task manager...";
+       $FLINK_DIR/bin/taskmanager.sh start;
+     done
+    sleep 5;
+  done
+}
+
+function tm_all_kill {
+  kill `jps | grep "TaskManagerRunner" | cut -d " " -f 1`
+}
+
 # make sure to clean up even in case of failures
 function cleanup {
   stop_cluster

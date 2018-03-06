@@ -19,6 +19,7 @@
 package org.apache.flink.streaming.api.operators;
 
 import org.apache.flink.annotation.PublicEvolving;
+import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.accumulators.Accumulator;
 import org.apache.flink.api.common.functions.BroadcastVariableInitializer;
 import org.apache.flink.api.common.functions.util.AbstractRuntimeUDFContext;
@@ -191,4 +192,8 @@ public class StreamingRuntimeContext extends AbstractRuntimeUDFContext {
 		return streamConfig.getBufferTimeout();
 	}
 
+	@VisibleForTesting
+	public Environment getTaskEnvironment() {
+		return taskEnvironment;
+	}
 }

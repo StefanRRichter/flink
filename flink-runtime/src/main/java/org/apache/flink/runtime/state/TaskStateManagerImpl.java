@@ -163,4 +163,15 @@ public class TaskStateManagerImpl implements TaskStateManager {
 	public void notifyCheckpointComplete(long checkpointId) throws Exception {
 		localStateStore.confirmCheckpoint(checkpointId);
 	}
+
+	@Override
+	public String toString() {
+		return "TaskStateManagerImpl{" +
+			"jobId=" + jobId +
+			", executionAttemptID=" + executionAttemptID +
+			", jobManagerTaskRestore=" + jobManagerTaskRestore +
+			", localStateStore=" + localStateStore +
+			", checkpointResponder=" + checkpointResponder +
+			'}';
+	}
 }

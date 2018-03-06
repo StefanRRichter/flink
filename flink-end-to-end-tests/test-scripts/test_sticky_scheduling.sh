@@ -20,13 +20,28 @@
 
 source "$(dirname "$0")"/common.sh
 
-TEST_PROGRAM_JAR=$TEST_INFRA_DIR/../../flink-end-to-end-tests/target/ClassLoaderTestProgram.jar
+parallelism=4
+
+TEST_PROGRAM_JAR=$TEST_INFRA_DIR/../../flink-end-to-end-tests/target/flink-end-to-end-tests_2.11-1.6-SNAPSHOT.jar
 
 start_cluster
 
-$FLINK_DIR/bin/flink run -p 1 $TEST_PROGRAM_JAR --resolve-order parent-first --checkpointDir file:///Users/stefan/test-tmp --output $TEST_DATA_DIR/out/simple_out_pf
+tm_watchdog ${parallelism} &
+watchdogPid=$!
 
-QUERY_RESULT=$(curl "http://localhost:9065/jobs/overview" 2> /dev/null || true)
+#for slave in {1..4};
+#do
+#    "${FLINK_BIN_DIR}"/taskmanager.sh "start"
+#done
+
+$FLINK_DIR/bin/flink run -c org.apache.flink.streaming.tests.SimpleStatefulJob -p ${parallelism} $TEST_PROGRAM_JAR \
+--resolve-order parent-first --checkpointDir file:///Users/stefan/test-tmp --output $TEST_DATA_DIR/out/simple_out_pf \
+--numKeys 1000000 --failAfter 150000 --checkpointInterval 300 --parallelism ${parallelism}
+
+#QUERY_RESULT=$(curl "http://localhost:9065/jobs/overview" 2> /dev/null || true)
+
+kill ${watchdogPid}
+tm_all_kill
 
 #http://localhost:9065/jobs/<jobid>/vertices/<vertexid>/taskmanagers
 #http://localhost:9065/jobs/<jobid>/vertices/<vertexid>/taskmanagers
