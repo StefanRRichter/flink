@@ -66,17 +66,13 @@ import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.RunnableFuture;
 
-import static org.apache.flink.contrib.streaming.state.RocksDBFullSnapshotFlagUtils.END_OF_KEY_GROUP_MARK;
-import static org.apache.flink.contrib.streaming.state.RocksDBFullSnapshotFlagUtils.hasMetaDataFollowsFlag;
-import static org.apache.flink.contrib.streaming.state.RocksDBFullSnapshotFlagUtils.setMetaDataFollowsFlagInKey;
+import static org.apache.flink.contrib.streaming.state.RocksDBSnapshotUtil.END_OF_KEY_GROUP_MARK;
+import static org.apache.flink.contrib.streaming.state.RocksDBSnapshotUtil.hasMetaDataFollowsFlag;
+import static org.apache.flink.contrib.streaming.state.RocksDBSnapshotUtil.setMetaDataFollowsFlagInKey;
 
-public class FullSnapshotStrategy<K> implements SnapshotStrategy<SnapshotResult<KeyedStateHandle>> {
+public class FullSnapshotStrategy<K> extends SnapshotStrategyBase {
 
 	private static final Logger LOG = LoggerFactory.getLogger(FullSnapshotStrategy.class);
-
-	private final LinkedHashMap<String, Tuple2<ColumnFamilyHandle, RegisteredKeyedBackendStateMetaInfo<?, ?>>> kvStateInformation;
-	private final LocalRecoveryConfig localRecoveryConfig;
-	private final CloseableRegistry cancelStreamRegistry;
 
 	@Override
 	public RunnableFuture<SnapshotResult<KeyedStateHandle>> performSnapshot(

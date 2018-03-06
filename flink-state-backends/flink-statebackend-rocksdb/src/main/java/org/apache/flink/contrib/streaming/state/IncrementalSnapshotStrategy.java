@@ -72,7 +72,9 @@ import java.util.Set;
 import java.util.concurrent.FutureTask;
 import java.util.concurrent.RunnableFuture;
 
-public class IncrementalSnapshotStrategy implements SnapshotStrategy<SnapshotResult<KeyedStateHandle>> {
+import static org.apache.flink.contrib.streaming.state.RocksDBSnapshotUtil.SST_FILE_SUFFIX;
+
+public class IncrementalSnapshotStrategy extends SnapshotStrategyBase {
 
 	private static final Logger LOG = LoggerFactory.getLogger(IncrementalSnapshotStrategy.class);
 
@@ -136,8 +138,8 @@ public class IncrementalSnapshotStrategy implements SnapshotStrategy<SnapshotRes
 			snapshotDirectory = SnapshotDirectory.temporary(path);
 		}
 
-		final RocksDBKeyedStateBackend.RocksDBIncrementalSnapshotOperation<K> snapshotOperation =
-			new RocksDBKeyedStateBackend.RocksDBIncrementalSnapshotOperation<>(
+		final RocksDBIncrementalSnapshotOperation<K> snapshotOperation =
+			new RocksDBIncrementalSnapshotOperation<>(
 				RocksDBKeyedStateBackend.this,
 				checkpointStreamFactory,
 				snapshotDirectory,
@@ -201,6 +203,8 @@ public class IncrementalSnapshotStrategy implements SnapshotStrategy<SnapshotRes
 
 		// This lease protects from concurrent disposal of the native rocksdb instance.
 		private final ResourceGuard.Lease dbLease;
+
+		private final LocalRecoveryConfig localRecoveryConfig;
 
 		private SnapshotResult<StreamStateHandle> metaStateHandle = null;
 

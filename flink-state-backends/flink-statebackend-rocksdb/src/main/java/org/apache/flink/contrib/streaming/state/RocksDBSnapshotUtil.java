@@ -18,9 +18,13 @@
 
 package org.apache.flink.contrib.streaming.state;
 
-class RocksDBFullSnapshotFlagUtils {
+class RocksDBSnapshotUtil {
 
-	private static final int FIRST_BIT_IN_BYTE_MASK = 0x80;
+	/** File suffix of sstable files. */
+	static final String SST_FILE_SUFFIX = ".sst";
+
+	static final int FIRST_BIT_IN_BYTE_MASK = 0x80;
+	
 	static final int END_OF_KEY_GROUP_MARK = 0xFFFF;
 
 	static void setMetaDataFollowsFlagInKey(byte[] key) {
@@ -35,7 +39,7 @@ class RocksDBFullSnapshotFlagUtils {
 		return 0 != (key[0] & FIRST_BIT_IN_BYTE_MASK);
 	}
 
-	private RocksDBFullSnapshotFlagUtils() {
+	private RocksDBSnapshotUtil() {
 		throw new AssertionError();
 	}
 }

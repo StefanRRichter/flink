@@ -115,11 +115,8 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 	/** The name of the merge operator in RocksDB. Do not change except you know exactly what you do. */
 	public static final String MERGE_OPERATOR_NAME = "stringappendtest";
 
-	/** File suffix of sstable files. */
-	private static final String SST_FILE_SUFFIX = ".sst";
-
-	/** String that identifies the operator that owns this backend. */
-	private final String operatorIdentifier;
+//	/** String that identifies the operator that owns this backend. */
+//	private final String operatorIdentifier;
 
 	/** The column family options from the options factory. */
 	private final ColumnFamilyOptions columnOptions;
@@ -130,8 +127,8 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 	/** Path where this configured instance stores its data directory. */
 	private final File instanceBasePath;
 
-	/** Path where this configured instance stores its RocksDB database. */
-	private final File instanceRocksDBPath;
+//	/** Path where this configured instance stores its RocksDB database. */
+//	private final File instanceRocksDBPath;
 
 	/**
 	 * Protects access to RocksDB in other threads, like the checkpointing thread from parallel call that disposes the
@@ -183,11 +180,8 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 	/** The identifier of the last completed checkpoint. */
 	private long lastCompletedCheckpointId = -1L;
 
-	/** Unique ID of this backend. */
-	private UUID backendUID;
-
-	/** The configuration of local recovery. */
-	private final LocalRecoveryConfig localRecoveryConfig;
+//	/** Unique ID of this backend. */
+//	private UUID backendUID;
 
 	/** The snapshot strategy, e.g., if we use full or incremental checkpoints, local state, and so on. */
 	private final SnapshotStrategy<SnapshotResult<KeyedStateHandle>> snapshotStrategy;
@@ -597,7 +591,7 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 		this.defaultColumnFamily = columnFamilyHandles.get(0);
 	}
 
-	private static RocksDB openDB(
+	static RocksDB openDB(
 		String path,
 		DBOptions dbOptions,
 		ColumnFamilyOptions columnOptions,

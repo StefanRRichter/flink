@@ -54,9 +54,9 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 
-import static org.apache.flink.contrib.streaming.state.RocksDBFullSnapshotFlagUtils.END_OF_KEY_GROUP_MARK;
-import static org.apache.flink.contrib.streaming.state.RocksDBFullSnapshotFlagUtils.clearMetaDataFollowsFlag;
-import static org.apache.flink.contrib.streaming.state.RocksDBFullSnapshotFlagUtils.hasMetaDataFollowsFlag;
+import static org.apache.flink.contrib.streaming.state.RocksDBSnapshotUtil.END_OF_KEY_GROUP_MARK;
+import static org.apache.flink.contrib.streaming.state.RocksDBSnapshotUtil.clearMetaDataFollowsFlag;
+import static org.apache.flink.contrib.streaming.state.RocksDBSnapshotUtil.hasMetaDataFollowsFlag;
 
 public class RocksDBFullRestoreOperation<K> {
 
