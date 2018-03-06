@@ -42,8 +42,21 @@ under the License.
 		</dependency>
 		<dependency>
 			<groupId>org.apache.flink</groupId>
-            <artifactId>flink-streaming-java_${scala.binary.version}</artifactId>
+			<artifactId>flink-streaming-java_${scala.binary.version}</artifactId>
 			<version>${project.version}</version>
+		</dependency>
+		<dependency>
+			<groupId>org.apache.flink</groupId>
+			<artifactId>flink-statebackend-rocksdb_${scala.binary.version}</artifactId>
+			<version>${project.version}</version>
+		</dependency>
+		<dependency>
+			<groupId>org.slf4j</groupId>
+			<artifactId>slf4j-log4j12</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>log4j</groupId>
+			<artifactId>log4j</artifactId>
 		</dependency>
 	</dependencies>
 
@@ -88,7 +101,7 @@ under the License.
 				<version>1.7</version>
 				<executions>
 					<execution>
-						<id>rename</id>
+						<id>rename-classloading</id>
 						<phase>package</phase>
 						<goals>
 							<goal>run</goal>
@@ -96,6 +109,18 @@ under the License.
 						<configuration>
 							<target>
 								<copy file="${project.basedir}/target/flink-end-to-end-tests_${scala.binary.version}-${project.version}-ClassLoaderTestProgram.jar" tofile="${project.basedir}/target/ClassLoaderTestProgram.jar" />
+							</target>
+						</configuration>
+					</execution>
+					<execution>
+						<id>rename-stateful</id>
+						<phase>package</phase>
+						<goals>
+							<goal>run</goal>
+						</goals>
+						<configuration>
+							<target>
+								<copy file="${project.basedir}/target/flink-end-to-end-tests_${scala.binary.version}-${project.version}.jar" tofile="${project.basedir}/target/flink-end-to-end-tests.jar" />
 							</target>
 						</configuration>
 					</execution>
