@@ -124,6 +124,10 @@ public class SimpleAckingTaskManagerGateway implements TaskManagerGateway {
 	public void failPartition(ExecutionAttemptID executionAttemptID) {}
 
 	@Override
+	public void cancelCheckpoint(ExecutionAttemptID executionAttemptID, JobID jobId, long checkpointId, long timestamp) {
+	}
+
+	@Override
 	public void notifyCheckpointComplete(
 			ExecutionAttemptID executionAttemptID,
 			JobID jobId,

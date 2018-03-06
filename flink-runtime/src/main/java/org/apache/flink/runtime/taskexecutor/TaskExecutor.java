@@ -693,6 +693,12 @@ public class TaskExecutor extends RpcEndpoint implements TaskExecutorGateway {
 		}
 	}
 
+	@Override
+	public CompletableFuture<Acknowledge> cancelCheckpoint(ExecutionAttemptID executionAttemptID, long checkpointId, long checkpointTimestamp) {
+		//TODO
+		return CompletableFuture.completedFuture(Acknowledge.get());
+	}
+
 	// ----------------------------------------------------------------------
 	// Slot allocation RPCs
 	// ----------------------------------------------------------------------

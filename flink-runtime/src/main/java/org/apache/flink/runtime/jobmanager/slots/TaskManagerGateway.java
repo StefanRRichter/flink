@@ -144,6 +144,19 @@ public interface TaskManagerGateway {
 	void failPartition(ExecutionAttemptID executionAttemptID);
 
 	/**
+	 *
+	 * @param executionAttemptID
+	 * @param jobId
+	 * @param checkpointId
+	 * @param timestamp
+	 */
+	void cancelCheckpoint(
+		ExecutionAttemptID executionAttemptID,
+		JobID jobId,
+		long checkpointId,
+		long timestamp);
+
+	/**
 	 * Notify the given task about a completed checkpoint.
 	 *
 	 * @param executionAttemptID identifying the task

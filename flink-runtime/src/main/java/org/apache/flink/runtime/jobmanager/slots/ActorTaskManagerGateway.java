@@ -183,6 +183,15 @@ public class ActorTaskManagerGateway implements TaskManagerGateway {
 	}
 
 	@Override
+	public void cancelCheckpoint(ExecutionAttemptID executionAttemptID, JobID jobId, long checkpointId, long timestamp) {
+		Preconditions.checkNotNull(executionAttemptID);
+		Preconditions.checkNotNull(jobId);
+
+		//TODO own message type!
+		actorGateway.tell(new NotifyCheckpointComplete(jobId, executionAttemptID, checkpointId, timestamp));
+	}
+
+	@Override
 	public void notifyCheckpointComplete(
 			ExecutionAttemptID executionAttemptID,
 			JobID jobId,
