@@ -36,7 +36,7 @@ watchdogPid=$!
 
 $FLINK_DIR/bin/flink run -c org.apache.flink.streaming.tests.SimpleStatefulJob -p ${parallelism} $TEST_PROGRAM_JAR \
 --resolve-order parent-first --checkpointDir file:///Users/stefan/test-tmp --output $TEST_DATA_DIR/out/simple_out_pf \
---numKeys 1000000 --failAfter 150000 --checkpointInterval 300 --parallelism ${parallelism}
+--checkpointInterval 300 --maxAttempts 5 --parallelism ${parallelism}
 
 #QUERY_RESULT=$(curl "http://localhost:9065/jobs/overview" 2> /dev/null || true)
 
