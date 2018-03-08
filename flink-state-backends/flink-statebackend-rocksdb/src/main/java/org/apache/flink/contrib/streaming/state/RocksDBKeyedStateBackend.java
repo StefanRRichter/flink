@@ -282,7 +282,10 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 			new IncrementalSnapshotStrategy() :
 			new FullSnapshotStrategy();
 
-		this.writeOptions = new WriteOptions().setDisableWAL(true);
+		this.writeOptions = new WriteOptions();
+		this.writeOptions
+			.setDisableWAL(true)
+			.setSync(false);
 
 		LOG.debug("Setting initial keyed backend uid for operator {} to {}.", this.operatorIdentifier, this.backendUID);
 	}
@@ -380,6 +383,16 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 
 			cleanInstanceBasePath();
 		}
+	}
+
+	private WriteOptions copyWriteOptions() {
+		WriteOptions writeOptions = new WriteOptions();
+		writeOptions
+			.setSync(this.writeOptions.sync())
+			.setDisableWAL(this.writeOptions.disableWAL())
+			.setIgnoreMissingColumnFamilies(this.writeOptions.ignoreMissingColumnFamilies())
+			.setNoSlowdown(this.writeOptions.noSlowdown());
+		return writeOptions;
 	}
 
 	private void cleanInstanceBasePath() {
@@ -655,8 +668,7 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 		 */
 		private void restoreKVStateData() throws IOException, RocksDBException {
 
-			try (WriteOptions writeOptions = new WriteOptions()) {
-				writeOptions.setDisableWAL(true);
+			try (WriteOptions writeOptions = rocksDBKeyedStateBackend.copyWriteOptions()) {
 
 				//for all key-groups in the current state handle...
 				for (Tuple2<Integer, Long> keyGroupOffset : currentKeyGroupsStateHandle.getGroupRangeOffsets()) {
