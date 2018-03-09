@@ -18,6 +18,7 @@
 
 package org.apache.flink.contrib.streaming.state;
 
+import org.apache.flink.api.common.typeutils.TypeSerializer;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.core.fs.CloseableRegistry;
 import org.apache.flink.core.fs.FSDataInputStream;
@@ -35,6 +36,7 @@ import org.apache.flink.runtime.state.DirectoryStateHandle;
 import org.apache.flink.runtime.state.DoneFuture;
 import org.apache.flink.runtime.state.IncrementalKeyedStateHandle;
 import org.apache.flink.runtime.state.IncrementalLocalKeyedStateHandle;
+import org.apache.flink.runtime.state.KeyGroupRange;
 import org.apache.flink.runtime.state.KeyedBackendSerializationProxy;
 import org.apache.flink.runtime.state.KeyedStateHandle;
 import org.apache.flink.runtime.state.LocalRecoveryConfig;
@@ -56,9 +58,11 @@ import org.apache.flink.util.ResourceGuard;
 
 import org.rocksdb.Checkpoint;
 import org.rocksdb.ColumnFamilyHandle;
+import org.rocksdb.RocksDB;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.annotation.Nonnegative;
 import javax.annotation.Nonnull;
 
 import java.io.File;
@@ -66,23 +70,70 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.SortedMap;
+import java.util.UUID;
 import java.util.concurrent.FutureTask;
 import java.util.concurrent.RunnableFuture;
 
 import static org.apache.flink.contrib.streaming.state.RocksDBSnapshotUtil.SST_FILE_SUFFIX;
 
-public class IncrementalSnapshotStrategy extends SnapshotStrategyBase {
+public class IncrementalSnapshotStrategy<K> extends SnapshotStrategyBase<K> {
 
 	private static final Logger LOG = LoggerFactory.getLogger(IncrementalSnapshotStrategy.class);
 
+	@Nonnull
+	private final File instanceBasePath;
+	/** The state handle ids of all sst files materialized in snapshots for previous checkpoints. */
+	@Nonnull
+	private final UUID backendUID;
+	@Nonnull
+	private final SortedMap<Long, Set<StateHandleID>> materializedSstFiles;
+
+	/** The identifier of the last completed checkpoint. */
+	private long lastCompletedCheckpointId;// = -1L;
+
+	@Nonnull
 	private final SnapshotStrategy<SnapshotResult<KeyedStateHandle>> savepointDelegate;
 
-	public IncrementalSnapshotStrategy() {
-		this.savepointDelegate = new FullSnapshotStrategy();
+	public IncrementalSnapshotStrategy(
+		@Nonnull RocksDB db,
+		@Nonnull ResourceGuard rocksDBResourceGuard,
+		@Nonnull TypeSerializer<K> keySerializer,
+		@Nonnull LinkedHashMap<String, Tuple2<ColumnFamilyHandle, RegisteredKeyedBackendStateMetaInfo<?, ?>>> kvStateInformation,
+		@Nonnull KeyGroupRange keyGroupRange,
+		@Nonnegative int keyGroupPrefixBytes,
+		@Nonnull LocalRecoveryConfig localRecoveryConfig,
+		@Nonnull CloseableRegistry cancelStreamRegistry,
+		@Nonnull File instanceBasePath,
+		@Nonnull UUID backendUID,
+		@Nonnull SortedMap<Long, Set<StateHandleID>> materializedSstFiles,
+		long lastCompletedCheckpointId,
+		@Nonnull SnapshotStrategy<SnapshotResult<KeyedStateHandle>> savepointDelegate) {
+
+		super(
+			db,
+			rocksDBResourceGuard,
+			keySerializer,
+			kvStateInformation,
+			keyGroupRange,
+			keyGroupPrefixBytes,
+			localRecoveryConfig,
+			cancelStreamRegistry);
+
+		this.instanceBasePath = instanceBasePath;
+		this.backendUID = backendUID;
+		this.materializedSstFiles = materializedSstFiles;
+		this.lastCompletedCheckpointId = lastCompletedCheckpointId;
+		this.savepointDelegate = savepointDelegate;
 	}
+
+//	public IncrementalSnapshotStrategy() {
+//		this.savepointDelegate = new FullSnapshotStrategy();
+//	}
 
 	@Override
 	public RunnableFuture<SnapshotResult<KeyedStateHandle>> performSnapshot(
@@ -98,10 +149,6 @@ public class IncrementalSnapshotStrategy extends SnapshotStrategyBase {
 				checkpointTimestamp,
 				checkpointStreamFactory,
 				checkpointOptions);
-		}
-
-		if (db == null) {
-			throw new IOException("RocksDB closed.");
 		}
 
 		if (kvStateInformation.isEmpty()) {
@@ -138,9 +185,8 @@ public class IncrementalSnapshotStrategy extends SnapshotStrategyBase {
 			snapshotDirectory = SnapshotDirectory.temporary(path);
 		}
 
-		final RocksDBIncrementalSnapshotOperation<K> snapshotOperation =
-			new RocksDBIncrementalSnapshotOperation<>(
-				RocksDBKeyedStateBackend.this,
+		final RocksDBIncrementalSnapshotOperation snapshotOperation =
+			new RocksDBIncrementalSnapshotOperation(
 				checkpointStreamFactory,
 				snapshotDirectory,
 				checkpointId);
@@ -169,13 +215,24 @@ public class IncrementalSnapshotStrategy extends SnapshotStrategyBase {
 		};
 	}
 
+	@Override
+	public void notifyCheckpointComplete(long completedCheckpointId) {
+		synchronized (materializedSstFiles) {
+
+			if (completedCheckpointId < lastCompletedCheckpointId) {
+				return;
+			}
+
+			materializedSstFiles.keySet().removeIf(checkpointId -> checkpointId < completedCheckpointId);
+
+			lastCompletedCheckpointId = completedCheckpointId;
+		}
+	}
+
 	/**
 	 * Encapsulates the process to perform an incremental snapshot of a RocksDBKeyedStateBackend.
 	 */
-	private static final class RocksDBIncrementalSnapshotOperation<K> {
-
-		/** The backend which we snapshot. */
-		private final RocksDBKeyedStateBackend<K> stateBackend;
+	private final class RocksDBIncrementalSnapshotOperation {
 
 		/** Stream factory that creates the outpus streams to DFS. */
 		private final CheckpointStreamFactory checkpointStreamFactory;
@@ -204,20 +261,18 @@ public class IncrementalSnapshotStrategy extends SnapshotStrategyBase {
 		// This lease protects from concurrent disposal of the native rocksdb instance.
 		private final ResourceGuard.Lease dbLease;
 
-		private final LocalRecoveryConfig localRecoveryConfig;
-
 		private SnapshotResult<StreamStateHandle> metaStateHandle = null;
 
 		private RocksDBIncrementalSnapshotOperation(
-			RocksDBKeyedStateBackend<K> stateBackend,
 			CheckpointStreamFactory checkpointStreamFactory,
 			SnapshotDirectory localBackupDirectory,
 			long checkpointId) throws IOException {
 
-			this.stateBackend = stateBackend;
+//			this.stateBackend = stateBackend;
 			this.checkpointStreamFactory = checkpointStreamFactory;
 			this.checkpointId = checkpointId;
-			this.dbLease = this.stateBackend.rocksDBResourceGuard.acquireResource();
+			//TODO aquire already at the beginning of the snapshot!!!!!!!!!!!!!!!!!!!!!!!!! but careful to release on fail
+			this.dbLease = rocksDBResourceGuard.acquireResource();
 			this.localBackupDirectory = localBackupDirectory;
 		}
 
@@ -268,8 +323,6 @@ public class IncrementalSnapshotStrategy extends SnapshotStrategyBase {
 		@Nonnull
 		private SnapshotResult<StreamStateHandle> materializeMetaData() throws Exception {
 
-			LocalRecoveryConfig localRecoveryConfig = stateBackend.localRecoveryConfig;
-
 			CheckpointStreamWithResultProvider streamWithResultProvider =
 
 				LocalRecoveryConfig.LocalRecoveryMode.ENABLE_FILE_BASED == localRecoveryConfig.getLocalRecoveryMode() ?
@@ -290,7 +343,7 @@ public class IncrementalSnapshotStrategy extends SnapshotStrategyBase {
 				//no need for compression scheme support because sst-files are already compressed
 				KeyedBackendSerializationProxy<K> serializationProxy =
 					new KeyedBackendSerializationProxy<>(
-						stateBackend.keySerializer,
+						keySerializer,
 						stateMetaInfoSnapshots,
 						false);
 
@@ -321,9 +374,9 @@ public class IncrementalSnapshotStrategy extends SnapshotStrategyBase {
 			final long lastCompletedCheckpoint;
 
 			// use the last completed checkpoint as the comparison base.
-			synchronized (stateBackend.materializedSstFiles) {
-				lastCompletedCheckpoint = stateBackend.lastCompletedCheckpointId;
-				baseSstFiles = stateBackend.materializedSstFiles.get(lastCompletedCheckpoint);
+			synchronized (materializedSstFiles) {
+				lastCompletedCheckpoint = lastCompletedCheckpointId;
+				baseSstFiles = materializedSstFiles.get(lastCompletedCheckpoint);
 			}
 
 			LOG.trace("Taking incremental snapshot for checkpoint {}. Snapshot is based on last completed checkpoint {} " +
@@ -331,7 +384,7 @@ public class IncrementalSnapshotStrategy extends SnapshotStrategyBase {
 
 			// save meta data
 			for (Map.Entry<String, Tuple2<ColumnFamilyHandle, RegisteredKeyedBackendStateMetaInfo<?, ?>>> stateMetaInfoEntry
-				: stateBackend.kvStateInformation.entrySet()) {
+				: kvStateInformation.entrySet()) {
 				stateMetaInfoSnapshots.add(stateMetaInfoEntry.getValue().f1.snapshot());
 			}
 
@@ -342,14 +395,14 @@ public class IncrementalSnapshotStrategy extends SnapshotStrategyBase {
 			}
 
 			// create hard links of living files in the snapshot path
-			Checkpoint checkpoint = Checkpoint.create(stateBackend.db);
+			Checkpoint checkpoint = Checkpoint.create(db);
 			checkpoint.createCheckpoint(localBackupDirectory.getDirectory().getPath());
 		}
 
 		@Nonnull
 		SnapshotResult<KeyedStateHandle> runSnapshot() throws Exception {
 
-			stateBackend.cancelStreamRegistry.registerCloseable(closeableRegistry);
+			cancelStreamRegistry.registerCloseable(closeableRegistry);
 
 			// write meta data
 			metaStateHandle = materializeMetaData();
@@ -390,13 +443,13 @@ public class IncrementalSnapshotStrategy extends SnapshotStrategyBase {
 				}
 			}
 
-			synchronized (stateBackend.materializedSstFiles) {
-				stateBackend.materializedSstFiles.put(checkpointId, sstFiles.keySet());
+			synchronized (materializedSstFiles) {
+				materializedSstFiles.put(checkpointId, sstFiles.keySet());
 			}
 
 			IncrementalKeyedStateHandle jmIncrementalKeyedStateHandle = new IncrementalKeyedStateHandle(
-				stateBackend.backendUID,
-				stateBackend.keyGroupRange,
+				backendUID,
+				keyGroupRange,
 				checkpointId,
 				sstFiles,
 				miscFiles,
@@ -425,10 +478,10 @@ public class IncrementalSnapshotStrategy extends SnapshotStrategyBase {
 
 				IncrementalLocalKeyedStateHandle localDirKeyedStateHandle =
 					new IncrementalLocalKeyedStateHandle(
-						stateBackend.backendUID,
+						backendUID,
 						checkpointId,
 						directoryStateHandle,
-						stateBackend.keyGroupRange,
+						keyGroupRange,
 						taskLocalSnapshotMetaDataStateHandle,
 						sstFiles.keySet());
 				return SnapshotResult.withLocalState(jmIncrementalKeyedStateHandle, localDirKeyedStateHandle);
@@ -439,7 +492,7 @@ public class IncrementalSnapshotStrategy extends SnapshotStrategyBase {
 
 		void stop() {
 
-			if (stateBackend.cancelStreamRegistry.unregisterCloseable(closeableRegistry)) {
+			if (cancelStreamRegistry.unregisterCloseable(closeableRegistry)) {
 				try {
 					closeableRegistry.close();
 				} catch (IOException e) {
@@ -452,7 +505,7 @@ public class IncrementalSnapshotStrategy extends SnapshotStrategyBase {
 
 			dbLease.close();
 
-			if (stateBackend.cancelStreamRegistry.unregisterCloseable(closeableRegistry)) {
+			if (cancelStreamRegistry.unregisterCloseable(closeableRegistry)) {
 				try {
 					closeableRegistry.close();
 				} catch (IOException e) {

@@ -33,13 +33,13 @@ import org.apache.flink.runtime.state.CheckpointStreamFactory;
 import org.apache.flink.runtime.state.CheckpointStreamWithResultProvider;
 import org.apache.flink.runtime.state.CheckpointedStateScope;
 import org.apache.flink.runtime.state.DoneFuture;
+import org.apache.flink.runtime.state.KeyGroupRange;
 import org.apache.flink.runtime.state.KeyGroupRangeOffsets;
 import org.apache.flink.runtime.state.KeyedBackendSerializationProxy;
 import org.apache.flink.runtime.state.KeyedStateHandle;
 import org.apache.flink.runtime.state.LocalRecoveryConfig;
 import org.apache.flink.runtime.state.RegisteredKeyedBackendStateMetaInfo;
 import org.apache.flink.runtime.state.SnapshotResult;
-import org.apache.flink.runtime.state.SnapshotStrategy;
 import org.apache.flink.runtime.state.StreamCompressionDecorator;
 import org.apache.flink.runtime.state.StreamStateHandle;
 import org.apache.flink.runtime.state.UncompressedStreamCompressionDecorator;
@@ -56,6 +56,7 @@ import org.rocksdb.Snapshot;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.annotation.Nonnegative;
 import javax.annotation.Nonnull;
 
 import java.io.IOException;
@@ -70,9 +71,35 @@ import static org.apache.flink.contrib.streaming.state.RocksDBSnapshotUtil.END_O
 import static org.apache.flink.contrib.streaming.state.RocksDBSnapshotUtil.hasMetaDataFollowsFlag;
 import static org.apache.flink.contrib.streaming.state.RocksDBSnapshotUtil.setMetaDataFollowsFlagInKey;
 
-public class FullSnapshotStrategy<K> extends SnapshotStrategyBase {
+public class FullSnapshotStrategy<K> extends SnapshotStrategyBase<K> {
 
 	private static final Logger LOG = LoggerFactory.getLogger(FullSnapshotStrategy.class);
+	@Nonnull
+	protected final StreamCompressionDecorator keyGroupCompressionDecorator;
+
+	public FullSnapshotStrategy(
+		@Nonnull RocksDB db,
+		@Nonnull ResourceGuard rocksDBResourceGuard,
+		@Nonnull TypeSerializer<K> keySerializer,
+		@Nonnull LinkedHashMap<String, Tuple2<ColumnFamilyHandle, RegisteredKeyedBackendStateMetaInfo<?, ?>>> kvStateInformation,
+		@Nonnull KeyGroupRange keyGroupRange,
+		@Nonnegative int keyGroupPrefixBytes,
+		@Nonnull LocalRecoveryConfig localRecoveryConfig,
+		@Nonnull CloseableRegistry cancelStreamRegistry,
+		@Nonnull StreamCompressionDecorator keyGroupCompressionDecorator) {
+		super(
+			db,
+			rocksDBResourceGuard,
+			keySerializer,
+			kvStateInformation,
+			keyGroupRange,
+			keyGroupPrefixBytes,
+			localRecoveryConfig,
+			cancelStreamRegistry);
+
+		this.keyGroupCompressionDecorator = keyGroupCompressionDecorator;
+	}
+
 
 	@Override
 	public RunnableFuture<SnapshotResult<KeyedStateHandle>> performSnapshot(
@@ -109,9 +136,9 @@ public class FullSnapshotStrategy<K> extends SnapshotStrategyBase {
 					CheckpointedStateScope.EXCLUSIVE,
 					primaryStreamFactory);
 
-		final RocksDBFullSnapshotOperation<K> snapshotOperation =
-			new RocksDBFullSnapshotOperation<>(
-				RocksDBKeyedStateBackend.this,
+		final RocksDBFullSnapshotOperation snapshotOperation =
+			new RocksDBFullSnapshotOperation(
+				rocksDBResourceGuard.acquireResource(),
 				supplier,
 				snapshotCloseableRegistry);
 
@@ -128,7 +155,7 @@ public class FullSnapshotStrategy<K> extends SnapshotStrategyBase {
 				}
 
 				@Override
-				protected void releaseResources() throws Exception {
+				protected void releaseResources() {
 					closeLocalRegistry();
 					releaseSnapshotOperationResources();
 				}
@@ -139,7 +166,7 @@ public class FullSnapshotStrategy<K> extends SnapshotStrategyBase {
 				}
 
 				@Override
-				protected void stopOperation() throws Exception {
+				protected void stopOperation() {
 					closeLocalRegistry();
 				}
 
@@ -187,19 +214,13 @@ public class FullSnapshotStrategy<K> extends SnapshotStrategyBase {
 	 * Encapsulates the process to perform a full snapshot of a RocksDBKeyedStateBackend.
 	 */
 	@VisibleForTesting
-	static class RocksDBFullSnapshotOperation<K> {
+	class RocksDBFullSnapshotOperation {
 
-		private final RocksDB db;
-		private final int keyGroupPrefixBytes;
-		private final StreamCompressionDecorator keyGroupCompressionDecorator;
-		private final TypeSerializer<K> keySerializer;
-		private final LinkedHashMap<String, Tuple2<ColumnFamilyHandle, RegisteredKeyedBackendStateMetaInfo<?, ?>>> kvStateInformation;
-
-		private final KeyGroupRangeOffsets keyGroupRangeOffsets;
+		private final ResourceGuard.Lease dbLease;
 		private final SupplierWithException<CheckpointStreamWithResultProvider, Exception> checkpointStreamSupplier;
 		private final CloseableRegistry snapshotCloseableRegistry;
-		private final ResourceGuard.Lease dbLease;
 
+		private KeyGroupRangeOffsets keyGroupRangeOffsets;
 		private Snapshot snapshot;
 		private ReadOptions readOptions;
 		private List<Tuple2<ColumnFamilyHandle, RegisteredKeyedBackendStateMetaInfo<?, ?>>> kvStateInformationCopy;
@@ -209,44 +230,15 @@ public class FullSnapshotStrategy<K> extends SnapshotStrategyBase {
 		private DataOutputView outputView;
 
 
-		public RocksDBFullSnapshotOperation(
-			RocksDB db,
+		@VisibleForTesting
+		RocksDBFullSnapshotOperation(
 			ResourceGuard.Lease dbLease,
-			TypeSerializer<K> keySerializer,
-			LinkedHashMap<String, Tuple2<ColumnFamilyHandle, RegisteredKeyedBackendStateMetaInfo<?, ?>>> kvStateInformation,
-			KeyGroupRangeOffsets keyGroupRangeOffsets,
-			int keyGroupPrefixBytes,
-			CloseableRegistry snapshotCloseableRegistry,
 			SupplierWithException<CheckpointStreamWithResultProvider, Exception> checkpointStreamSupplier,
-			StreamCompressionDecorator keyGroupCompressionDecorator) {
+			CloseableRegistry snapshotCloseableRegistry) {
 
-			this.db = db;
-			this.keyGroupPrefixBytes = keyGroupPrefixBytes;
-			this.keyGroupCompressionDecorator = keyGroupCompressionDecorator;
-			this.keySerializer = keySerializer;
-			this.kvStateInformation = kvStateInformation;
-			this.keyGroupRangeOffsets = keyGroupRangeOffsets;
 			this.checkpointStreamSupplier = checkpointStreamSupplier;
 			this.snapshotCloseableRegistry = snapshotCloseableRegistry;
 			this.dbLease = dbLease;
-		}
-
-		@VisibleForTesting
-		RocksDBFullSnapshotOperation(
-			RocksDBKeyedStateBackend<K> stateBackend,
-			SupplierWithException<CheckpointStreamWithResultProvider, Exception> checkpointStreamSupplier,
-			CloseableRegistry registry) throws IOException {
-
-			this(
-				stateBackend.db,
-				stateBackend.rocksDBResourceGuard.acquireResource(),
-				stateBackend.keySerializer,
-				stateBackend.kvStateInformation,
-				new KeyGroupRangeOffsets(stateBackend.keyGroupRange),
-				stateBackend.keyGroupPrefixBytes,
-				registry,
-				checkpointStreamSupplier,
-				stateBackend.keyGroupCompressionDecorator);
 		}
 
 		/**
@@ -324,9 +316,7 @@ public class FullSnapshotStrategy<K> extends SnapshotStrategyBase {
 			}
 
 			if (null != snapshot) {
-				if (null != db) {
-					db.releaseSnapshot(snapshot);
-				}
+				db.releaseSnapshot(snapshot);
 				IOUtils.closeQuietly(snapshot);
 				snapshot = null;
 			}
@@ -375,6 +365,7 @@ public class FullSnapshotStrategy<K> extends SnapshotStrategyBase {
 
 		private void writeKVStateData() throws IOException, InterruptedException {
 
+			this.keyGroupRangeOffsets = new KeyGroupRangeOffsets(keyGroupRange);
 			byte[] previousKey = null;
 			byte[] previousValue = null;
 			DataOutputView kgOutView = null;
@@ -473,7 +464,7 @@ public class FullSnapshotStrategy<K> extends SnapshotStrategyBase {
 			BytePrimitiveArraySerializer.INSTANCE.serialize(value, out);
 		}
 
-		private static void checkInterrupted() throws InterruptedException {
+		private void checkInterrupted() throws InterruptedException {
 			if (Thread.currentThread().isInterrupted()) {
 				throw new InterruptedException("RocksDB snapshot interrupted.");
 			}
