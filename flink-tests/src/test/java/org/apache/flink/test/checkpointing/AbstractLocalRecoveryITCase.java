@@ -30,6 +30,7 @@ import java.io.IOException;
 
 import static org.apache.flink.runtime.state.LocalRecoveryConfig.LocalRecoveryMode;
 import static org.apache.flink.test.checkpointing.AbstractEventTimeWindowCheckpointingITCase.StateBackendEnum;
+import static org.apache.flink.test.checkpointing.AbstractEventTimeWindowCheckpointingITCase.StateBackendEnum.ROCKSDB_FULLY_ASYNC;
 
 /**
  * This test delegates to instances of {@link AbstractEventTimeWindowCheckpointingITCase} that have been reconfigured
@@ -52,27 +53,30 @@ public abstract class AbstractLocalRecoveryITCase extends TestLogger {
 
 	@Test
 	public final void executeTest() throws Exception {
-		AbstractEventTimeWindowCheckpointingITCase.tempFolder.create();
-		AbstractEventTimeWindowCheckpointingITCase windowChkITCase =
-			new AbstractEventTimeWindowCheckpointingITCase() {
-				@Override
-				protected StateBackendEnum getStateBackend() {
-					return backendEnum;
-				}
+		int iter = 50;
+		do {
+			AbstractEventTimeWindowCheckpointingITCase.tempFolder.create();
+			AbstractEventTimeWindowCheckpointingITCase windowChkITCase =
+				new AbstractEventTimeWindowCheckpointingITCase() {
+					@Override
+					protected StateBackendEnum getStateBackend() {
+						return backendEnum;
+					}
 
-				@Override
-				protected Configuration createClusterConfig() throws IOException {
-					Configuration config = super.createClusterConfig();
+					@Override
+					protected Configuration createClusterConfig() throws IOException {
+						Configuration config = super.createClusterConfig();
 
-					config.setString(
-						CheckpointingOptions.LOCAL_RECOVERY,
-						recoveryMode.toString());
+						config.setString(
+							CheckpointingOptions.LOCAL_RECOVERY,
+							recoveryMode.toString());
 
-					return config;
-				}
-			};
+						return config;
+					}
+				};
 
-		executeTest(windowChkITCase);
+			executeTest(windowChkITCase);
+		} while ((backendEnum == ROCKSDB_FULLY_ASYNC) && --iter >= 0);
 	}
 
 	private void executeTest(AbstractEventTimeWindowCheckpointingITCase delegate) throws Exception {
