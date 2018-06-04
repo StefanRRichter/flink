@@ -28,11 +28,14 @@ import org.apache.flink.util.Preconditions;
 import org.rocksdb.ColumnFamilyHandle;
 import org.rocksdb.RocksDBException;
 
+import javax.annotation.Nonnull;
+
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Iterator;
 import java.util.List;
+import java.util.NoSuchElementException;
 
 /**
  * {@link ListState} implementation that stores state in RocksDB.
@@ -108,21 +111,20 @@ public class RocksDBListState<K, N, V>
 			ByteArrayInputStream bais = new ByteArrayInputStream(valueBytes);
 			DataInputViewStreamWrapper in = new DataInputViewStreamWrapper(bais);
 
-			List<V> result = new ArrayList<>();
-			while (in.available() > 0) {
-				result.add(elementSerializer.deserialize(in));
-				if (in.available() > 0) {
-					in.readByte();
+			return new Iterable<V>() {
+				@Nonnull
+				@Override
+				public Iterator<V> iterator() {
+					return new LazyRocksDBListStateIterator<>(in, elementSerializer);
 				}
-			}
-			return result;
+			};
 		} catch (IOException | RocksDBException e) {
 			throw new RuntimeException("Error while retrieving data from RocksDB", e);
 		}
 	}
 
 	@Override
-	public void add(V value) throws IOException {
+	public void add(V value) {
 		Preconditions.checkNotNull(value, "You cannot add null to a ListState.");
 
 		try {
@@ -236,5 +238,59 @@ public class RocksDBListState<K, N, V>
 		}
 
 		return keySerializationStream.toByteArray();
+	}
+
+	/**
+	 * Implementation of a lazy iterator for the {@link RocksDBListState}.
+	 *
+	 * @param <V> type of the iterated values.
+	 */
+	static class LazyRocksDBListStateIterator<V> implements Iterator<V> {
+
+		@Nonnull
+		private final TypeSerializer<V> elementSerializer;
+
+		@Nonnull
+		private final DataInputViewStreamWrapper in;
+
+		LazyRocksDBListStateIterator(
+			@Nonnull DataInputViewStreamWrapper in,
+			@Nonnull TypeSerializer<V> elementSerializer) {
+			this.elementSerializer = elementSerializer;
+			this.in = in;
+		}
+
+		@Override
+		public boolean hasNext() {
+			try {
+				return in.available() > 0;
+			} catch (IOException e) {
+				throw wrapException(e);
+			}
+		}
+
+		@Override
+		public V next() {
+			final V value;
+			try {
+
+				if (!hasNext()) {
+					throw new NoSuchElementException();
+				}
+
+				value = elementSerializer.deserialize(in);
+				if (in.available() > 0) {
+					// consume the DELIMITER byte
+					in.readByte();
+				}
+				return value;
+			} catch (IOException e) {
+				throw wrapException(e);
+			}
+		}
+
+		private RuntimeException wrapException(Exception e) {
+			throw new RuntimeException("Error while iterating data from RocksDB", e);
+		}
 	}
 }
