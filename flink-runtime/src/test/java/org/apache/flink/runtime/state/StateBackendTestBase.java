@@ -35,6 +35,7 @@ import org.apache.flink.api.common.state.ReducingStateDescriptor;
 import org.apache.flink.api.common.state.StateDescriptor;
 import org.apache.flink.api.common.state.ValueState;
 import org.apache.flink.api.common.state.ValueStateDescriptor;
+import org.apache.flink.api.common.state.ttl.TtlTimeProvider;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.api.common.typeutils.CompatibilityResult;
 import org.apache.flink.api.common.typeutils.ParameterlessTypeSerializerConfig;
@@ -3804,6 +3805,67 @@ public abstract class StateBackendTestBase<B extends AbstractStateBackend> exten
 		}
 	}
 
+	@Test
+	public void testValueStateTTL() throws Exception {
+		CheckpointStreamFactory streamFactory = createStreamFactory();
+		AbstractKeyedStateBackend<Integer> backend = createKeyedBackend(IntSerializer.INSTANCE);
+
+		ValueStateDescriptor<String> kvId = new ValueStateDescriptor<>("test", String.class);
+
+		TypeSerializer<Integer> keySerializer = IntSerializer.INSTANCE;
+		TypeSerializer<VoidNamespace> namespaceSerializer = VoidNamespaceSerializer.INSTANCE;
+
+		ValueState<String> state = backend.getPartitionedState(VoidNamespace.INSTANCE, VoidNamespaceSerializer.INSTANCE, kvId);
+	}
+
+	@Test
+	public void testListStateTTL() throws Exception {
+
+		AbstractKeyedStateBackend<Integer> backend = createKeyedBackend(IntSerializer.INSTANCE);
+		ListStateDescriptor<String> kvId = new ListStateDescriptor<>("test", String.class);
+		TestTTLTimeProvider timeProvider = new TestTTLTimeProvider();
+		ListState<String> state = backend.getPartitionedState(VoidNamespace.INSTANCE, VoidNamespaceSerializer.INSTANCE, kvId);
+
+		final long expirationTime = 10L;
+
+		timeProvider.setCurrentTimestamp(0L);
+		backend.setCurrentKey(0);
+		state.add("0-0");
+		backend.setCurrentKey(1);
+		state.add("1-0");
+
+		timeProvider.advanceTimeBy(expirationTime - 1);
+
+		Iterator<String> iterator = state.get().iterator();
+		assertEquals(iterator.next(), "1-0");
+		assertFalse(iterator.hasNext());
+		backend.setCurrentKey(0);
+
+		iterator = state.get().iterator();
+		assertEquals(iterator.next(), "0-0");
+		assertFalse(iterator.hasNext());
+
+		backend.setCurrentKey(1);
+		state.add("1-9");
+		timeProvider.advanceTimeBy(1L);
+		backend.setCurrentKey(0);
+		state.add("0-10");
+
+		iterator = state.get().iterator();
+		assertEquals(iterator.next(), "0-10");
+		assertFalse(iterator.hasNext());
+		backend.setCurrentKey(1);
+		iterator = state.get().iterator();
+		assertEquals(iterator.next(), "1-9");
+		assertFalse(iterator.hasNext());
+
+		backend.setCurrentKey(1);
+		state.addAll(Arrays.asList("C-1", "D-1"));
+		timeProvider.advanceTimeBy(expirationTime / 2);
+		state.update(Arrays.asList("", ""));
+		timeProvider.advanceTimeBy(expirationTime);
+	}
+
 	private static class AppendingFold implements FoldFunction<Integer, String> {
 		private static final long serialVersionUID = 1L;
 
@@ -4439,5 +4501,26 @@ public abstract class StateBackendTestBase<B extends AbstractStateBackend> exten
 
 	private static final class MutableLong {
 		long value;
+	}
+
+	/**
+	 * Test implementation of {@link TtlTimeProvider}.
+	 */
+	private class TestTTLTimeProvider implements TtlTimeProvider {
+
+		long currentTimestamp;
+
+		@Override
+		public long currentTimestamp() {
+			return 0;
+		}
+
+		public void setCurrentTimestamp(long currentTimestamp) {
+			this.currentTimestamp = currentTimestamp;
+		}
+
+		public void advanceTimeBy(long advanceTime) {
+			currentTimestamp += advanceTime;
+		}
 	}
 }

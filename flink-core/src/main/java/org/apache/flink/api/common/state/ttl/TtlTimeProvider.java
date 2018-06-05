@@ -18,6 +18,6 @@
 
 package org.apache.flink.api.common.state.ttl;
 
-interface TtlTimeProvider {
+public interface TtlTimeProvider {
 	long currentTimestamp();
 }
