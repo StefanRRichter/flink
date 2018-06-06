@@ -18,9 +18,6 @@
 
 package org.apache.flink.api.common.typeutils.base;
 
-import java.io.IOException;
-import java.lang.reflect.Array;
-
 import org.apache.flink.annotation.Internal;
 import org.apache.flink.api.common.typeutils.CompatibilityResult;
 import org.apache.flink.api.common.typeutils.CompatibilityUtil;
@@ -31,6 +28,10 @@ import org.apache.flink.api.common.typeutils.UnloadableDummyTypeSerializer;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.core.memory.DataInputView;
 import org.apache.flink.core.memory.DataOutputView;
+
+import java.io.IOException;
+import java.lang.reflect.Array;
+import java.util.Arrays;
 
 import static org.apache.flink.util.Preconditions.checkNotNull;
 
@@ -84,16 +85,21 @@ public final class GenericArraySerializer<C> extends TypeSerializer<C[]> {
 
 	@Override
 	public C[] copy(C[] from) {
-		C[] copy = create(from.length);
 
-		for (int i = 0; i < copy.length; i++) {
-			C val = from[i];
-			if (val != null) {
-				copy[i] = this.componentSerializer.copy(val);
+		final TypeSerializer<C> serializer = this.componentSerializer;
+
+		if (serializer.isImmutableType()) {
+			return Arrays.copyOf(from, from.length);
+		} else {
+			C[] copy = create(from.length);
+			for (int i = 0; i < copy.length; i++) {
+				C val = from[i];
+				if (val != null) {
+					copy[i] = serializer.copy(val);
+				}
 			}
+			return copy;
 		}
-
-		return copy;
 	}
 	
 	@Override
