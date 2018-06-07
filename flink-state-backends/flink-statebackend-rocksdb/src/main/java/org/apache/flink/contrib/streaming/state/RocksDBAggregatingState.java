@@ -42,7 +42,7 @@ import java.util.Collection;
  * @param <R> The type of the value returned from the state
  */
 public class RocksDBAggregatingState<K, N, T, ACC, R>
-		extends AbstractRocksDBState<K, N, ACC, AggregatingState<T, R>>
+		extends AbstractRocksDBState<K, N, ACC>
 		implements InternalAggregatingState<K, N, T, ACC, R> {
 
 	/** User-specified aggregation function. */

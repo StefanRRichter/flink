@@ -43,7 +43,7 @@ import java.io.IOException;
  */
 @Deprecated
 public class RocksDBFoldingState<K, N, T, ACC>
-		extends AbstractRocksDBState<K, N, ACC, FoldingState<T, ACC>>
+		extends AbstractRocksDBState<K, N, ACC>
 		implements InternalFoldingState<K, N, T, ACC> {
 
 	/** User-specified fold function. */
