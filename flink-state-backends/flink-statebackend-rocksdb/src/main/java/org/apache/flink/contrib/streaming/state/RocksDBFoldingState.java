@@ -23,7 +23,6 @@ import org.apache.flink.api.common.state.FoldingState;
 import org.apache.flink.api.common.typeutils.TypeSerializer;
 import org.apache.flink.core.memory.ByteArrayInputStreamWithPos;
 import org.apache.flink.core.memory.DataInputViewStreamWrapper;
-import org.apache.flink.core.memory.DataOutputViewStreamWrapper;
 import org.apache.flink.runtime.state.internal.InternalFoldingState;
 
 import org.rocksdb.ColumnFamilyHandle;
@@ -89,8 +88,7 @@ public class RocksDBFoldingState<K, N, T, ACC>
 	@Override
 	public ACC get() {
 		try {
-			writeCurrentKeyWithGroupAndNamespace();
-			byte[] key = keySerializationStream.toByteArray();
+			byte[] key = serializeCurrentKeyWithGroupAndNamespace();
 			byte[] valueBytes = backend.db.get(columnFamily, key);
 			if (valueBytes == null) {
 				return null;
@@ -102,23 +100,18 @@ public class RocksDBFoldingState<K, N, T, ACC>
 	}
 
 	@Override
-	public void add(T value) throws IOException {
+	public void add(T value) {
 		try {
-			writeCurrentKeyWithGroupAndNamespace();
-			byte[] key = keySerializationStream.toByteArray();
+			byte[] key = serializeCurrentKeyWithGroupAndNamespace();
 			byte[] valueBytes = backend.db.get(columnFamily, key);
-			DataOutputViewStreamWrapper out = new DataOutputViewStreamWrapper(keySerializationStream);
-			if (valueBytes == null) {
-				keySerializationStream.reset();
-				valueSerializer.serialize(foldFunction.fold(getDefaultValue(), value), out);
-				backend.db.put(columnFamily, writeOptions, key, keySerializationStream.toByteArray());
-			} else {
-				ACC oldValue = valueSerializer.deserialize(new DataInputViewStreamWrapper(new ByteArrayInputStreamWithPos(valueBytes)));
-				ACC newValue = foldFunction.fold(oldValue, value);
-				keySerializationStream.reset();
-				valueSerializer.serialize(newValue, out);
-				backend.db.put(columnFamily, writeOptions, key, keySerializationStream.toByteArray());
-			}
+
+			ACC newValue = (valueBytes == null) ?
+				foldFunction.fold(getDefaultValue(), value) :
+				foldFunction.fold(
+					valueSerializer.deserialize(new DataInputViewStreamWrapper(new ByteArrayInputStreamWithPos(valueBytes))),
+					value);
+
+			backend.db.put(columnFamily, writeOptions, key, serializeValue(newValue));
 		} catch (Exception e) {
 			throw new RuntimeException("Error while adding data to RocksDB", e);
 		}

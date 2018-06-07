@@ -230,6 +230,9 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 	/** The snapshot strategy, e.g., if we use full or incremental checkpoints, local state, and so on. */
 	private final SnapshotStrategy<SnapshotResult<KeyedStateHandle>> snapshotStrategy;
 
+	/** Helper to build the byte arrays of composite keys to address data in RocksDB. Shared across all states. */
+	private final RocksDBSerializedCompositeKeyBuilder<K> sharedRocksKeyBuilder;
+
 	public RocksDBKeyedStateBackend(
 		String operatorIdentifier,
 		ClassLoader userCodeClassLoader,
@@ -281,6 +284,8 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 			new FullSnapshotStrategy();
 
 		this.writeOptions = new WriteOptions().setDisableWAL(true);
+
+		this.sharedRocksKeyBuilder = new RocksDBSerializedCompositeKeyBuilder<>(keySerializer, keyGroupPrefixBytes, 32);
 
 		LOG.debug("Setting initial keyed backend uid for operator {} to {}.", this.operatorIdentifier, this.backendUID);
 	}
@@ -335,6 +340,12 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 	ColumnFamilyHandle getColumnFamilyHandle(String state) {
 		Tuple2<ColumnFamilyHandle, ?> columnInfo = kvStateInformation.get(state);
 		return columnInfo != null ? columnInfo.f0 : null;
+	}
+
+	@Override
+	public void setCurrentKey(K newKey) {
+		super.setCurrentKey(newKey);
+		sharedRocksKeyBuilder.setKeyAndKeyGroup(currentKey, currentKeyGroup);
 	}
 
 	/**
@@ -396,6 +407,10 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 
 	public WriteOptions getWriteOptions() {
 		return writeOptions;
+	}
+
+	RocksDBSerializedCompositeKeyBuilder<K> getSharedRocksKeyBuilder() {
+		return sharedRocksKeyBuilder;
 	}
 
 	/**

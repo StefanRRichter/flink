@@ -20,14 +20,13 @@ package org.apache.flink.contrib.streaming.state;
 
 import org.apache.flink.api.common.state.ValueState;
 import org.apache.flink.api.common.typeutils.TypeSerializer;
+import org.apache.flink.core.memory.ByteArrayInputStreamWithPos;
 import org.apache.flink.core.memory.DataInputViewStreamWrapper;
-import org.apache.flink.core.memory.DataOutputViewStreamWrapper;
 import org.apache.flink.runtime.state.internal.InternalValueState;
 
 import org.rocksdb.ColumnFamilyHandle;
 import org.rocksdb.RocksDBException;
 
-import java.io.ByteArrayInputStream;
 import java.io.IOException;
 
 /**
@@ -78,31 +77,25 @@ public class RocksDBValueState<K, N, V>
 	@Override
 	public V value() {
 		try {
-			writeCurrentKeyWithGroupAndNamespace();
-			byte[] key = keySerializationStream.toByteArray();
-			byte[] valueBytes = backend.db.get(columnFamily, key);
+			byte[] valueBytes = backend.db.get(columnFamily, serializeCurrentKeyWithGroupAndNamespace());
 			if (valueBytes == null) {
 				return getDefaultValue();
 			}
-			return valueSerializer.deserialize(new DataInputViewStreamWrapper(new ByteArrayInputStream(valueBytes)));
+			return valueSerializer.deserialize(new DataInputViewStreamWrapper(new ByteArrayInputStreamWithPos(valueBytes)));
 		} catch (IOException | RocksDBException e) {
 			throw new RuntimeException("Error while retrieving data from RocksDB.", e);
 		}
 	}
 
 	@Override
-	public void update(V value) throws IOException {
+	public void update(V value) {
 		if (value == null) {
 			clear();
 			return;
 		}
-		DataOutputViewStreamWrapper out = new DataOutputViewStreamWrapper(keySerializationStream);
+
 		try {
-			writeCurrentKeyWithGroupAndNamespace();
-			byte[] key = keySerializationStream.toByteArray();
-			keySerializationStream.reset();
-			valueSerializer.serialize(value, out);
-			backend.db.put(columnFamily, writeOptions, key, keySerializationStream.toByteArray());
+			backend.db.put(columnFamily, writeOptions, serializeCurrentKeyWithGroupAndNamespace(), serializeValue(value));
 		} catch (Exception e) {
 			throw new RuntimeException("Error while adding data to RocksDB", e);
 		}

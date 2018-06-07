@@ -20,15 +20,14 @@ package org.apache.flink.contrib.streaming.state;
 
 import org.apache.flink.api.common.state.ListState;
 import org.apache.flink.api.common.typeutils.TypeSerializer;
+import org.apache.flink.core.memory.ByteArrayInputStreamWithPos;
 import org.apache.flink.core.memory.DataInputViewStreamWrapper;
-import org.apache.flink.core.memory.DataOutputViewStreamWrapper;
 import org.apache.flink.runtime.state.internal.InternalListState;
 import org.apache.flink.util.Preconditions;
 
 import org.rocksdb.ColumnFamilyHandle;
 import org.rocksdb.RocksDBException;
 
-import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -97,15 +96,15 @@ public class RocksDBListState<K, N, V>
 	@Override
 	public Iterable<V> get() {
 		try {
-			writeCurrentKeyWithGroupAndNamespace();
-			byte[] key = keySerializationStream.toByteArray();
+
+			byte[] key = serializeCurrentKeyWithGroupAndNamespace();
 			byte[] valueBytes = backend.db.get(columnFamily, key);
 
 			if (valueBytes == null) {
 				return null;
 			}
 
-			ByteArrayInputStream bais = new ByteArrayInputStream(valueBytes);
+			ByteArrayInputStreamWithPos bais = new ByteArrayInputStreamWithPos(valueBytes);
 			DataInputViewStreamWrapper in = new DataInputViewStreamWrapper(bais);
 
 			List<V> result = new ArrayList<>();
@@ -122,16 +121,15 @@ public class RocksDBListState<K, N, V>
 	}
 
 	@Override
-	public void add(V value) throws IOException {
+	public void add(V value) {
 		Preconditions.checkNotNull(value, "You cannot add null to a ListState.");
 
 		try {
-			writeCurrentKeyWithGroupAndNamespace();
-			byte[] key = keySerializationStream.toByteArray();
-			keySerializationStream.reset();
-			DataOutputViewStreamWrapper out = new DataOutputViewStreamWrapper(keySerializationStream);
-			elementSerializer.serialize(value, out);
-			backend.db.merge(columnFamily, writeOptions, key, keySerializationStream.toByteArray());
+			backend.db.merge(
+				columnFamily,
+				writeOptions,
+				serializeCurrentKeyWithGroupAndNamespace(),
+				serializeValue(value, elementSerializer));
 		} catch (Exception e) {
 			throw new RuntimeException("Error while adding data to RocksDB", e);
 		}
@@ -143,25 +141,18 @@ public class RocksDBListState<K, N, V>
 			return;
 		}
 
-		// cache key and namespace
-		final K key = backend.getCurrentKey();
-		final int keyGroup = backend.getCurrentKeyGroupIndex();
-
 		try {
 			// create the target full-binary-key
-			writeKeyWithGroupAndNamespace(
-					keyGroup, key, target,
-					keySerializationStream, keySerializationDataOutputView);
-			final byte[] targetKey = keySerializationStream.toByteArray();
+			setCurrentNamespace(target);
+			final byte[] targetKey = serializeCurrentKeyWithGroupAndNamespace();
 
 			// merge the sources to the target
 			for (N source : sources) {
 				if (source != null) {
-					writeKeyWithGroupAndNamespace(
-							keyGroup, key, source,
-							keySerializationStream, keySerializationDataOutputView);
 
-					byte[] sourceKey = keySerializationStream.toByteArray();
+					setCurrentNamespace(source);
+					final byte[] sourceKey = serializeCurrentKeyWithGroupAndNamespace();
+
 					byte[] valueBytes = backend.db.get(columnFamily, sourceKey);
 					backend.db.delete(columnFamily, writeOptions, sourceKey);
 
@@ -177,22 +168,18 @@ public class RocksDBListState<K, N, V>
 	}
 
 	@Override
-	public void update(List<V> values) throws Exception {
+	public void update(List<V> values) {
 		Preconditions.checkNotNull(values, "List of values to add cannot be null.");
 
 		clear();
 
 		if (!values.isEmpty()) {
 			try {
-				writeCurrentKeyWithGroupAndNamespace();
-				byte[] key = keySerializationStream.toByteArray();
-
-				byte[] premerge = getPreMergedValue(values);
-				if (premerge != null) {
-					backend.db.put(columnFamily, writeOptions, key, premerge);
-				} else {
-					throw new IOException("Failed pre-merge values in update()");
-				}
+				backend.db.put(
+					columnFamily,
+					writeOptions,
+					serializeCurrentKeyWithGroupAndNamespace(),
+					serializeValueList(values, elementSerializer, DELIMITER));
 			} catch (IOException | RocksDBException e) {
 				throw new RuntimeException("Error while updating data to RocksDB", e);
 			}
@@ -200,41 +187,19 @@ public class RocksDBListState<K, N, V>
 	}
 
 	@Override
-	public void addAll(List<V> values) throws Exception {
+	public void addAll(List<V> values) {
 		Preconditions.checkNotNull(values, "List of values to add cannot be null.");
 
 		if (!values.isEmpty()) {
 			try {
-				writeCurrentKeyWithGroupAndNamespace();
-				byte[] key = keySerializationStream.toByteArray();
-
-				byte[] premerge = getPreMergedValue(values);
-				if (premerge != null) {
-					backend.db.merge(columnFamily, writeOptions, key, premerge);
-				} else {
-					throw new IOException("Failed pre-merge values in addAll()");
-				}
+				backend.db.merge(
+					columnFamily,
+					writeOptions,
+					serializeCurrentKeyWithGroupAndNamespace(),
+					serializeValueList(values, elementSerializer, DELIMITER));
 			} catch (IOException | RocksDBException e) {
 				throw new RuntimeException("Error while updating data to RocksDB", e);
 			}
 		}
-	}
-
-	private byte[] getPreMergedValue(List<V> values) throws IOException {
-		DataOutputViewStreamWrapper out = new DataOutputViewStreamWrapper(keySerializationStream);
-
-		keySerializationStream.reset();
-		boolean first = true;
-		for (V value : values) {
-			Preconditions.checkNotNull(value, "You cannot add null to a ListState.");
-			if (first) {
-				first = false;
-			} else {
-				keySerializationStream.write(DELIMITER);
-			}
-			elementSerializer.serialize(value, out);
-		}
-
-		return keySerializationStream.toByteArray();
 	}
 }

@@ -592,7 +592,7 @@ public abstract class AbstractStreamOperator<OUT>
 			try {
 				// need to work around type restrictions
 				@SuppressWarnings("unchecked,rawtypes")
-				AbstractKeyedStateBackend rawBackend = (AbstractKeyedStateBackend) keyedStateBackend;
+				AbstractKeyedStateBackend rawBackend = keyedStateBackend;
 
 				rawBackend.setCurrentKey(key);
 			} catch (Exception e) {

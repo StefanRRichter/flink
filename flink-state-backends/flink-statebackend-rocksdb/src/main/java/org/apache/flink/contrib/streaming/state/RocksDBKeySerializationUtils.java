@@ -23,6 +23,8 @@ import org.apache.flink.core.memory.ByteArrayOutputStreamWithPos;
 import org.apache.flink.core.memory.DataInputView;
 import org.apache.flink.core.memory.DataOutputView;
 
+import javax.annotation.Nonnull;
+
 import java.io.IOException;
 
 /**
@@ -84,8 +86,12 @@ class RocksDBKeySerializationUtils {
 		}
 	}
 
-	public static boolean isAmbiguousKeyPossible(TypeSerializer keySerializer, TypeSerializer namespaceSerializer) {
-		return (keySerializer.getLength() < 0) && (namespaceSerializer.getLength() < 0);
+	public static boolean isSerializerTypeVariableSized(@Nonnull TypeSerializer<?> serializer) {
+		return serializer.getLength() < 0;
+	}
+
+	public static boolean isAmbiguousKeyPossible(TypeSerializer<?> keySerializer, TypeSerializer<?> namespaceSerializer) {
+		return (isSerializerTypeVariableSized(keySerializer) && isSerializerTypeVariableSized(namespaceSerializer));
 	}
 
 	public static void writeKeyGroup(
@@ -95,6 +101,14 @@ class RocksDBKeySerializationUtils {
 		for (int i = keyGroupPrefixBytes; --i >= 0; ) {
 			keySerializationDateDataOutputView.writeByte(extractByteAtPosition(keyGroup, i));
 		}
+	}
+
+	public static <K> void writeKey(
+		K key,
+		TypeSerializer<K> keySerializer,
+		DataOutputView keySerializationDataOutputView) throws IOException {
+		//write key
+		keySerializer.serialize(key, keySerializationDataOutputView);
 	}
 
 	public static <K> void writeKey(
@@ -129,7 +143,7 @@ class RocksDBKeySerializationUtils {
 		writeVariableIntBytes(length, keySerializationDateDataOutputView);
 	}
 
-	private static void writeVariableIntBytes(
+	public static void writeVariableIntBytes(
 		int value,
 		DataOutputView keySerializationDateDataOutputView)
 		throws IOException {

@@ -33,13 +33,20 @@ public class ByteArrayInputStreamWithPos extends InputStream {
 	protected byte[] buffer;
 	protected int position;
 	protected int count;
-	protected int mark = 0;
+	protected int mark;
+
+	public ByteArrayInputStreamWithPos() {
+	}
 
 	public ByteArrayInputStreamWithPos(byte[] buffer) {
 		this(buffer, 0, buffer.length);
 	}
 
 	public ByteArrayInputStreamWithPos(byte[] buffer, int offset, int length) {
+		setInternalArray(buffer, offset, length);
+	}
+
+	public void setInternalArray(byte[] buffer, int offset, int length) {
 		this.position = offset;
 		this.buffer = buffer;
 		this.mark = offset;
