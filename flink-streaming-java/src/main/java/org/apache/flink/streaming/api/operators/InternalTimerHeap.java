@@ -56,7 +56,7 @@ import static org.apache.flink.util.Preconditions.checkArgument;
  * @param <K> type of the key of the internal timers managed by this priority queue.
  * @param <N> type of the namespace of the internal timers managed by this priority queue.
  */
-public class InternalTimerHeap<K, N> implements Iterable<InternalTimer<K, N>> {
+public class InternalTimerHeap<K, N> implements InternalTimerState<K, N>, Iterable<InternalTimer<K, N>> {
 
 	/**
 	 * Comparator for {@link TimerHeapInternalTimer}, based on the timestamp in ascending order.
@@ -114,50 +114,40 @@ public class InternalTimerHeap<K, N> implements Iterable<InternalTimer<K, N>> {
 		this.queue = new TimerHeapInternalTimer[1 + minimumCapacity];
 	}
 
+	@Override
 	@Nullable
 	public InternalTimer<K, N> poll() {
 		return size() > 0 ? removeElementAtIndex(1) : null;
 	}
 
+	@Override
 	@Nullable
 	public InternalTimer<K, N> peek() {
 		return size() > 0 ? queue[1] : null;
 	}
 
-	/**
-	 * Adds a new timer with the given timestamp, key, and namespace to the heap, if an identical timer was not yet
-	 * registered.
-	 *
-	 * @param timestamp the timer timestamp.
-	 * @param key the timer key.
-	 * @param namespace the timer namespace.
-	 * @return true iff a new timer with given timestamp, key, and namespace was added to the heap.
-	 */
+	@Override
 	public boolean scheduleTimer(long timestamp, @Nonnull K key, @Nonnull N namespace) {
 		return addInternal(new TimerHeapInternalTimer<>(timestamp, key, namespace));
 	}
 
-	/**
-	 * Stops timer with the given timestamp, key, and namespace by removing it from the heap, if it exists on the heap.
-	 *
-	 * @param timestamp the timer timestamp.
-	 * @param key the timer key.
-	 * @param namespace the timer namespace.
-	 * @return true iff a timer with given timestamp, key, and namespace was found and removed from the heap.
-	 */
+	@Override
 	public boolean stopTimer(long timestamp, @Nonnull K key, @Nonnull N namespace) {
 		return removeInternal(new TimerHeapInternalTimer<>(timestamp, key, namespace));
 	}
 
+	@Override
 	public boolean isEmpty() {
 		return size() == 0;
 	}
 
+	@Override
 	@Nonnegative
 	public int size() {
 		return size;
 	}
 
+	@Override
 	public void clear() {
 		Arrays.fill(queue, null);
 		for (HashMap<TimerHeapInternalTimer<K, N>, TimerHeapInternalTimer<K, N>> timerHashMap :
@@ -184,10 +174,8 @@ public class InternalTimerHeap<K, N> implements Iterable<InternalTimer<K, N>> {
 		return new InternalTimerPriorityQueueIterator();
 	}
 
-	/**
-	 * This method adds all the given timers to the heap.
-	 */
-	void bulkAddRestoredTimers(Collection<? extends InternalTimer<K, N>> restoredTimers) {
+	@Override
+	public void addAll(@Nullable Collection<? extends InternalTimer<K, N>> restoredTimers) {
 
 		if (restoredTimers == null) {
 			return;

@@ -287,10 +287,10 @@ public class HeapInternalTimerService<K, N> implements InternalTimerService<N>, 
 			"Key Group " + keyGroupIdx + " does not belong to the local range.");
 
 		// restore the event time timers
-		eventTimeTimersQueue.bulkAddRestoredTimers(restoredTimersSnapshot.getEventTimeTimers());
+		eventTimeTimersQueue.addAll(restoredTimersSnapshot.getEventTimeTimers());
 
 		// restore the processing time timers
-		processingTimeTimersQueue.bulkAddRestoredTimers(restoredTimersSnapshot.getProcessingTimeTimers());
+		processingTimeTimersQueue.addAll(restoredTimersSnapshot.getProcessingTimeTimers());
 	}
 
 	public int numProcessingTimeTimers() {
