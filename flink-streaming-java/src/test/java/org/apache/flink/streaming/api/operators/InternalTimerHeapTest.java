@@ -133,7 +133,7 @@ public class InternalTimerHeapTest extends TestLogger {
 
 			Assert.assertTrue(timerPriorityQueue.isEmpty());
 
-			timerPriorityQueue.bulkAddRestoredTimers(checkSet);
+			timerPriorityQueue.addAll(checkSet);
 		}
 	}
 
@@ -189,8 +189,8 @@ public class InternalTimerHeapTest extends TestLogger {
 		InternalTimerHeap<Integer, VoidNamespace> timerPriorityQueue =
 			newPriorityQueue(1);
 
-		timerPriorityQueue.bulkAddRestoredTimers(twoTimesTimerSet);
-		timerPriorityQueue.bulkAddRestoredTimers(twoTimesTimerSet);
+		timerPriorityQueue.addAll(twoTimesTimerSet);
+		timerPriorityQueue.addAll(twoTimesTimerSet);
 
 		Assert.assertEquals(timerSet.size(), timerPriorityQueue.size());
 
