@@ -27,6 +27,8 @@ import org.apache.flink.api.common.typeutils.base.LongSerializer;
 import org.apache.flink.core.memory.DataInputView;
 import org.apache.flink.core.memory.DataOutputView;
 import org.apache.flink.runtime.state.KeyExtractorFunction;
+import org.apache.flink.runtime.state.heap.HeapOrderedSet;
+import org.apache.flink.runtime.state.heap.HeapOrderedSetElement;
 
 import javax.annotation.Nonnull;
 

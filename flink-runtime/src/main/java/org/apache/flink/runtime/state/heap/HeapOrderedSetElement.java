@@ -16,13 +16,13 @@
  * limitations under the License.
  */
 
-package org.apache.flink.streaming.api.operators;
+package org.apache.flink.runtime.state.heap;
 
 /**
  * Interface for objects that can be managed by a {@link HeapOrderedSet}. Such an object can only be contained in at
  * most one {@link HeapOrderedSet} at a time.
  */
-interface HeapOrderedSetElement {
+public interface HeapOrderedSetElement {
 
 	/**
 	 * The index that indicates that a {@link HeapOrderedSetElement} object is not contained in any

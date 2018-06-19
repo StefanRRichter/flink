@@ -23,6 +23,7 @@ import org.apache.flink.runtime.state.KeyExtractorFunction;
 import org.apache.flink.runtime.state.KeyGroupPartitioner;
 import org.apache.flink.runtime.state.KeyGroupRange;
 import org.apache.flink.runtime.state.StateSnapshot;
+import org.apache.flink.runtime.state.heap.HeapOrderedSet;
 
 import javax.annotation.Nonnegative;
 import javax.annotation.Nonnull;
