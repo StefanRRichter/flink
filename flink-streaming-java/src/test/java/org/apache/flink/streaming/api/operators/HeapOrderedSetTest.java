@@ -21,6 +21,7 @@ package org.apache.flink.streaming.api.operators;
 import org.apache.flink.runtime.state.KeyExtractorFunction;
 import org.apache.flink.runtime.state.KeyGroupRange;
 import org.apache.flink.runtime.state.VoidNamespace;
+import org.apache.flink.runtime.state.heap.HeapOrderedSet;
 import org.apache.flink.util.Preconditions;
 import org.apache.flink.util.TestLogger;
 

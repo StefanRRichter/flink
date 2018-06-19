@@ -16,12 +16,13 @@
  * limitations under the License.
  */
 
-package org.apache.flink.streaming.api.operators;
+package org.apache.flink.runtime.state.heap;
 
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.runtime.state.KeyExtractorFunction;
 import org.apache.flink.runtime.state.KeyGroupRange;
 import org.apache.flink.runtime.state.KeyGroupRangeAssignment;
+import org.apache.flink.runtime.state.OrderedSetState;
 
 import javax.annotation.Nonnegative;
 import javax.annotation.Nonnull;
@@ -103,7 +104,7 @@ public class HeapOrderedSet<T extends HeapOrderedSetElement> implements OrderedS
 	 * @param totalNumberOfKeyGroups the total number of key-groups of the job.
 	 */
 	@SuppressWarnings("unchecked")
-	HeapOrderedSet(
+	public HeapOrderedSet(
 		@Nonnull Comparator<T> elementComparator,
 		@Nonnull KeyExtractorFunction<T> keyExtractor,
 		@Nonnegative int minimumCapacity,
@@ -212,14 +213,14 @@ public class HeapOrderedSet<T extends HeapOrderedSetElement> implements OrderedS
 	 * Returns an unmodifiable set of all elements in the given key-group.
 	 */
 	@Nonnull
-	Set<T> getElementsForKeyGroup(@Nonnegative int keyGroupIdx) {
+	public Set<T> getElementsForKeyGroup(@Nonnegative int keyGroupIdx) {
 		return Collections.unmodifiableSet(getDedupMapForKeyGroup(keyGroupIdx).keySet());
 	}
 
 	@VisibleForTesting
 	@SuppressWarnings("unchecked")
 	@Nonnull
-	List<Set<T>> getElementsByKeyGroup() {
+	public List<Set<T>> getElementsByKeyGroup() {
 		List<Set<T>> result = new ArrayList<>(deduplicationMapsByKeyGroup.length);
 		for (int i = 0; i < deduplicationMapsByKeyGroup.length; ++i) {
 			result.add(i, Collections.unmodifiableSet(deduplicationMapsByKeyGroup[i].keySet()));
