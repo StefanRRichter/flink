@@ -18,6 +18,8 @@
 
 package org.apache.flink.streaming.api.operators;
 
+import org.apache.flink.api.common.typeutils.TypeSerializer;
+import org.apache.flink.runtime.state.KeyExtractorFunction;
 import org.apache.flink.runtime.state.KeyGroupPartitioner;
 import org.apache.flink.runtime.state.KeyGroupRange;
 import org.apache.flink.runtime.state.StateSnapshot;
@@ -26,21 +28,25 @@ import javax.annotation.Nonnegative;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
+import java.lang.reflect.Array;
+
 /**
- * This class represents the snapshot of an {@link InternalTimerHeap}.
+ * This class represents the snapshot of an {@link HeapOrderedSet}.
  *
- * @param <K> type of key.
- * @param <N> type of namespace.
+ * @param <T> type of the state elements.
  */
-public class InternalTimerHeapSnapshot<K, N> implements StateSnapshot {
+public class HeapOrderedSetStateSnapshot<T> implements StateSnapshot {
+
+	@Nonnull
+	private final KeyExtractorFunction<T> keyExtractor;
 
 	/** Copy of the heap array containing all the (immutable timers). */
 	@Nonnull
-	private final TimerHeapInternalTimer<K, N>[] timerHeapArrayCopy;
+	private final T[] timerHeapArrayCopy;
 
 	/** The timer serializer. */
 	@Nonnull
-	private final TimerHeapInternalTimer.TimerSerializer<K, N> timerSerializer;
+	private final TypeSerializer<T> timerSerializer;
 
 	/** The key-group range covered by this snapshot. */
 	@Nonnull
@@ -54,11 +60,13 @@ public class InternalTimerHeapSnapshot<K, N> implements StateSnapshot {
 	@Nullable
 	private KeyGroupPartitionedSnapshot partitionedSnapshot;
 
-	InternalTimerHeapSnapshot(
-		@Nonnull TimerHeapInternalTimer<K, N>[] timerHeapArrayCopy,
-		@Nonnull TimerHeapInternalTimer.TimerSerializer<K, N> timerSerializer,
+	HeapOrderedSetStateSnapshot(
+		@Nonnull T[] timerHeapArrayCopy,
+		@Nonnull KeyExtractorFunction<T> keyExtractor,
+		@Nonnull TypeSerializer<T> timerSerializer,
 		@Nonnull KeyGroupRange keyGroupRange,
 		@Nonnegative int totalKeyGroups) {
+		this.keyExtractor = keyExtractor;
 
 		this.timerHeapArrayCopy = timerHeapArrayCopy;
 		this.timerSerializer = timerSerializer;
@@ -73,16 +81,18 @@ public class InternalTimerHeapSnapshot<K, N> implements StateSnapshot {
 
 		if (partitionedSnapshot == null) {
 
-			TimerHeapInternalTimer<K, N>[] partitioningOutput = new TimerHeapInternalTimer[timerHeapArrayCopy.length];
+			T[] partitioningOutput = (T[]) Array.newInstance(
+				timerHeapArrayCopy.getClass().getComponentType(),
+				timerHeapArrayCopy.length);
 
-			KeyGroupPartitioner<TimerHeapInternalTimer<K, N>> timerPartitioner =
+			KeyGroupPartitioner<T> timerPartitioner =
 				new KeyGroupPartitioner<>(
 					timerHeapArrayCopy,
 					timerHeapArrayCopy.length,
 					partitioningOutput,
 					keyGroupRange,
 					totalKeyGroups,
-					TimerHeapInternalTimer::getKey,
+					keyExtractor,
 					timerSerializer::serialize);
 
 			partitionedSnapshot = timerPartitioner.partitionByKeyGroup();

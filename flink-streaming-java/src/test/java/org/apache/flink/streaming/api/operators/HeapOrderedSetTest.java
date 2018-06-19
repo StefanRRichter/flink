@@ -18,6 +18,7 @@
 
 package org.apache.flink.streaming.api.operators;
 
+import org.apache.flink.runtime.state.KeyExtractorFunction;
 import org.apache.flink.runtime.state.KeyGroupRange;
 import org.apache.flink.runtime.state.VoidNamespace;
 import org.apache.flink.util.Preconditions;
@@ -30,6 +31,8 @@ import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
@@ -38,21 +41,21 @@ import java.util.Set;
 import java.util.concurrent.ThreadLocalRandom;
 
 /**
- * Tests for {@link InternalTimerHeap}.
+ * Tests for {@link HeapOrderedSet}.
  */
-public class InternalTimerHeapTest extends TestLogger {
+public class HeapOrderedSetTest extends TestLogger {
 
 	private static final KeyGroupRange KEY_GROUP_RANGE = new KeyGroupRange(0, 1);
 
 	private static void insertRandomTimers(
-		InternalTimerHeap<Integer, VoidNamespace> timerPriorityQueue,
+		HeapOrderedSet<TimerHeapInternalTimer<Integer, VoidNamespace>> timerPriorityQueue,
 		int count) {
 		insertRandomTimers(timerPriorityQueue, null, count);
 	}
 
 	private static void insertRandomTimers(
-		@Nonnull InternalTimerHeap<Integer, VoidNamespace> timerPriorityQueue,
-		@Nullable Set<InternalTimer<Integer, VoidNamespace>> checkSet,
+		@Nonnull HeapOrderedSet<TimerHeapInternalTimer<Integer, VoidNamespace>> timerPriorityQueue,
+		@Nullable Set<TimerHeapInternalTimer<Integer, VoidNamespace>> checkSet,
 		int count) {
 
 		ThreadLocalRandom localRandom = ThreadLocalRandom.current();
@@ -63,15 +66,22 @@ public class InternalTimerHeapTest extends TestLogger {
 			if (checkSet != null) {
 				Preconditions.checkState(checkSet.add(timer));
 			}
-			Assert.assertTrue(timerPriorityQueue.scheduleTimer(
-				timer.getTimestamp(),
-				timer.getKey(),
-				timer.getNamespace()));
+			Assert.assertTrue(timerPriorityQueue.add(timer));
 		}
 	}
 
-	private static InternalTimerHeap<Integer, VoidNamespace> newPriorityQueue(int initialCapacity) {
-		return new InternalTimerHeap<>(
+	private static HeapOrderedSet<TimerHeapInternalTimer<Integer, VoidNamespace>> newPriorityQueue(
+		int initialCapacity) {
+
+		final KeyExtractorFunction<TimerHeapInternalTimer<Integer, VoidNamespace>> keyExtractorFunction =
+			TimerHeapInternalTimer.getKeyExtractorFunction();
+
+		final Comparator<TimerHeapInternalTimer<Integer, VoidNamespace>> timerComparator =
+			TimerHeapInternalTimer.getTimerComparator();
+
+		return new HeapOrderedSet<>(
+			timerComparator,
+			keyExtractorFunction,
 			initialCapacity,
 			KEY_GROUP_RANGE,
 			KEY_GROUP_RANGE.getNumberOfKeyGroups());
@@ -81,8 +91,9 @@ public class InternalTimerHeapTest extends TestLogger {
 	public void testPeekPollOrder() {
 		final int initialCapacity = 4;
 		final int testSize = 1000;
-		InternalTimerHeap<Integer, VoidNamespace> timerPriorityQueue = newPriorityQueue(initialCapacity);
-		HashSet<InternalTimer<Integer, VoidNamespace>> checkSet = new HashSet<>(testSize);
+		HeapOrderedSet<TimerHeapInternalTimer<Integer, VoidNamespace>> timerPriorityQueue =
+			newPriorityQueue(initialCapacity);
+		HashSet<TimerHeapInternalTimer<Integer, VoidNamespace>> checkSet = new HashSet<>(testSize);
 
 		insertRandomTimers(timerPriorityQueue, checkSet, testSize);
 
@@ -108,20 +119,20 @@ public class InternalTimerHeapTest extends TestLogger {
 	@Test
 	public void testStopInsertMixKeepsOrder() {
 
-		InternalTimerHeap<Integer, VoidNamespace> timerPriorityQueue = newPriorityQueue(3);
+		HeapOrderedSet<TimerHeapInternalTimer<Integer, VoidNamespace>> timerPriorityQueue = newPriorityQueue(3);
 
 		final int testSize = 345;
-		HashSet<InternalTimer<Integer, VoidNamespace>> checkSet = new HashSet<>(testSize);
+		HashSet<TimerHeapInternalTimer<Integer, VoidNamespace>> checkSet = new HashSet<>(testSize);
 
 		insertRandomTimers(timerPriorityQueue, checkSet, testSize);
 
 		// check that the whole set is still in order
 		while (!checkSet.isEmpty()) {
 
-			Iterator<InternalTimer<Integer, VoidNamespace>> iterator = checkSet.iterator();
-			InternalTimer<Integer, VoidNamespace> timer = iterator.next();
+			Iterator<TimerHeapInternalTimer<Integer, VoidNamespace>> iterator = checkSet.iterator();
+			TimerHeapInternalTimer<Integer, VoidNamespace> timer = iterator.next();
 			iterator.remove();
-			Assert.assertTrue(timerPriorityQueue.stopTimer(timer.getTimestamp(), timer.getKey(), timer.getNamespace()));
+			Assert.assertTrue(timerPriorityQueue.remove(timer));
 			Assert.assertEquals(checkSet.size(), timerPriorityQueue.size());
 
 			long lastTimestamp = Long.MIN_VALUE;
@@ -139,17 +150,17 @@ public class InternalTimerHeapTest extends TestLogger {
 
 	@Test
 	public void testPoll() {
-		InternalTimerHeap<Integer, VoidNamespace> timerPriorityQueue = newPriorityQueue(3);
+		HeapOrderedSet<TimerHeapInternalTimer<Integer, VoidNamespace>> timerPriorityQueue = newPriorityQueue(3);
 
 		Assert.assertNull(timerPriorityQueue.poll());
 
 		final int testSize = 345;
-		HashSet<InternalTimer<Integer, VoidNamespace>> checkSet = new HashSet<>(testSize);
+		HashSet<TimerHeapInternalTimer<Integer, VoidNamespace>> checkSet = new HashSet<>(testSize);
 		insertRandomTimers(timerPriorityQueue, checkSet, testSize);
 
 		long lastTimestamp = Long.MIN_VALUE;
 		while (!timerPriorityQueue.isEmpty()) {
-			InternalTimer<Integer, VoidNamespace> removed = timerPriorityQueue.poll();
+			TimerHeapInternalTimer<Integer, VoidNamespace> removed = timerPriorityQueue.poll();
 			Assert.assertNotNull(removed);
 			Assert.assertTrue(checkSet.remove(removed));
 			Assert.assertTrue(removed.getTimestamp() >= lastTimestamp);
@@ -162,12 +173,12 @@ public class InternalTimerHeapTest extends TestLogger {
 
 	@Test
 	public void testIsEmpty() {
-		InternalTimerHeap<Integer, VoidNamespace> timerPriorityQueue =
+		HeapOrderedSet<TimerHeapInternalTimer<Integer, VoidNamespace>> timerPriorityQueue =
 			newPriorityQueue(1);
 
 		Assert.assertTrue(timerPriorityQueue.isEmpty());
 
-		timerPriorityQueue.scheduleTimer(42L, 4711, VoidNamespace.INSTANCE);
+		timerPriorityQueue.add(new TimerHeapInternalTimer<>(42L, 4711, VoidNamespace.INSTANCE));
 		Assert.assertFalse(timerPriorityQueue.isEmpty());
 
 		timerPriorityQueue.poll();
@@ -177,16 +188,16 @@ public class InternalTimerHeapTest extends TestLogger {
 	@Test
 	public void testBulkAddRestoredTimers() {
 		final int testSize = 10;
-		HashSet<InternalTimer<Integer, VoidNamespace>> timerSet = new HashSet<>(testSize);
+		HashSet<TimerHeapInternalTimer<Integer, VoidNamespace>> timerSet = new HashSet<>(testSize);
 		for (int i = 0; i < testSize; ++i) {
 			timerSet.add(new TimerHeapInternalTimer<>(i, i, VoidNamespace.INSTANCE));
 		}
 
-		List<InternalTimer<Integer, VoidNamespace>> twoTimesTimerSet = new ArrayList<>(timerSet.size() * 2);
+		List<TimerHeapInternalTimer<Integer, VoidNamespace>> twoTimesTimerSet = new ArrayList<>(timerSet.size() * 2);
 		twoTimesTimerSet.addAll(timerSet);
 		twoTimesTimerSet.addAll(timerSet);
 
-		InternalTimerHeap<Integer, VoidNamespace> timerPriorityQueue =
+		HeapOrderedSet<TimerHeapInternalTimer<Integer, VoidNamespace>> timerPriorityQueue =
 			newPriorityQueue(1);
 
 		timerPriorityQueue.addAll(twoTimesTimerSet);
@@ -194,7 +205,7 @@ public class InternalTimerHeapTest extends TestLogger {
 
 		Assert.assertEquals(timerSet.size(), timerPriorityQueue.size());
 
-		for (InternalTimer<Integer, VoidNamespace> timer : timerPriorityQueue) {
+		for (TimerHeapInternalTimer<Integer, VoidNamespace> timer : timerPriorityQueue) {
 			Assert.assertTrue(timerSet.remove(timer));
 		}
 
@@ -202,35 +213,54 @@ public class InternalTimerHeapTest extends TestLogger {
 	}
 
 	@Test
+	@SuppressWarnings("unchecked")
 	public void testToArray() {
+
 		final int testSize = 10;
-		HashSet<InternalTimer<Integer, VoidNamespace>> checkSet = new HashSet<>(testSize);
-		InternalTimerHeap<Integer, VoidNamespace> timerPriorityQueue =
-			newPriorityQueue(1);
 
-		Assert.assertEquals(0, timerPriorityQueue.toArray().length);
+		List<TimerHeapInternalTimer<Integer, VoidNamespace>[]> tests = new ArrayList<>(2);
+		tests.add(new TimerHeapInternalTimer[0]);
+		tests.add(new TimerHeapInternalTimer[testSize]);
+		tests.add(new TimerHeapInternalTimer[testSize + 1]);
 
-		insertRandomTimers(timerPriorityQueue, checkSet, testSize);
+		for (TimerHeapInternalTimer<Integer, VoidNamespace>[] testArray : tests) {
 
-		Object[] toArray = timerPriorityQueue.toArray();
-		Assert.assertEquals(timerPriorityQueue.size(), toArray.length);
+			Arrays.fill(testArray, new TimerHeapInternalTimer<>(42L, 4711, VoidNamespace.INSTANCE));
 
-		for (Object o : toArray) {
-			if (o instanceof TimerHeapInternalTimer) {
+			HashSet<TimerHeapInternalTimer<Integer, VoidNamespace>> checkSet = new HashSet<>(testSize);
+
+			HeapOrderedSet<TimerHeapInternalTimer<Integer, VoidNamespace>> timerPriorityQueue =
+				newPriorityQueue(1);
+
+			Assert.assertEquals(testArray.length, timerPriorityQueue.toArray(testArray).length);
+
+			insertRandomTimers(timerPriorityQueue, checkSet, testSize);
+
+			TimerHeapInternalTimer<Integer, VoidNamespace>[] toArray = timerPriorityQueue.toArray(testArray);
+
+			Assert.assertEquals((testArray.length >= testSize), (testArray == toArray));
+
+			int count = 0;
+			for (TimerHeapInternalTimer<Integer, VoidNamespace> o : toArray) {
+				if (o == null) {
+					break;
+				}
 				Assert.assertTrue(checkSet.remove(o));
+				++count;
 			}
-		}
 
-		Assert.assertTrue(checkSet.isEmpty());
+			Assert.assertEquals(timerPriorityQueue.size(), count);
+			Assert.assertTrue(checkSet.isEmpty());
+		}
 	}
 
 	@Test
 	public void testIterator() {
-		InternalTimerHeap<Integer, VoidNamespace> timerPriorityQueue =
+		HeapOrderedSet<TimerHeapInternalTimer<Integer, VoidNamespace>> timerPriorityQueue =
 			newPriorityQueue(1);
 
 		// test empty iterator
-		Iterator<InternalTimer<Integer, VoidNamespace>> iterator = timerPriorityQueue.iterator();
+		Iterator<TimerHeapInternalTimer<Integer, VoidNamespace>> iterator = timerPriorityQueue.iterator();
 		Assert.assertFalse(iterator.hasNext());
 		try {
 			iterator.next();
@@ -240,7 +270,7 @@ public class InternalTimerHeapTest extends TestLogger {
 
 		// iterate some data
 		final int testSize = 10;
-		HashSet<InternalTimer<Integer, VoidNamespace>> checkSet = new HashSet<>(testSize);
+		HashSet<TimerHeapInternalTimer<Integer, VoidNamespace>> checkSet = new HashSet<>(testSize);
 		insertRandomTimers(timerPriorityQueue, checkSet, testSize);
 		iterator = timerPriorityQueue.iterator();
 		while (iterator.hasNext()) {
@@ -258,7 +288,7 @@ public class InternalTimerHeapTest extends TestLogger {
 
 	@Test
 	public void testClear() {
-		InternalTimerHeap<Integer, VoidNamespace> timerPriorityQueue =
+		HeapOrderedSet<TimerHeapInternalTimer<Integer, VoidNamespace>> timerPriorityQueue =
 			newPriorityQueue(1);
 
 		int count = 10;
@@ -270,15 +300,18 @@ public class InternalTimerHeapTest extends TestLogger {
 
 	@Test
 	public void testScheduleTimer() {
-		InternalTimerHeap<Integer, VoidNamespace> timerPriorityQueue =
+		HeapOrderedSet<TimerHeapInternalTimer<Integer, VoidNamespace>> timerPriorityQueue =
 			newPriorityQueue(1);
 
 		final long timestamp = 42L;
 		final Integer key = 4711;
-		Assert.assertTrue(timerPriorityQueue.scheduleTimer(timestamp, key, VoidNamespace.INSTANCE));
-		Assert.assertFalse(timerPriorityQueue.scheduleTimer(timestamp, key, VoidNamespace.INSTANCE));
+
+		TimerHeapInternalTimer<Integer, VoidNamespace> timer =
+			new TimerHeapInternalTimer<>(timestamp, key, VoidNamespace.INSTANCE);
+		Assert.assertTrue(timerPriorityQueue.add(timer));
+		Assert.assertFalse(timerPriorityQueue.add(timer));
 		Assert.assertEquals(1, timerPriorityQueue.size());
-		final InternalTimer<Integer, VoidNamespace> timer = timerPriorityQueue.poll();
+		timer = timerPriorityQueue.poll();
 		Assert.assertNotNull(timer);
 		Assert.assertEquals(timestamp, timer.getTimestamp());
 		Assert.assertEquals(key, timer.getKey());
@@ -287,15 +320,17 @@ public class InternalTimerHeapTest extends TestLogger {
 
 	@Test
 	public void testStopTimer() {
-		InternalTimerHeap<Integer, VoidNamespace> timerPriorityQueue =
+		HeapOrderedSet<TimerHeapInternalTimer<Integer, VoidNamespace>> timerPriorityQueue =
 			newPriorityQueue(1);
 
 		final long timestamp = 42L;
 		final Integer key = 4711;
-		Assert.assertFalse(timerPriorityQueue.stopTimer(timestamp, key, VoidNamespace.INSTANCE));
-		Assert.assertTrue(timerPriorityQueue.scheduleTimer(timestamp, key, VoidNamespace.INSTANCE));
-		Assert.assertTrue(timerPriorityQueue.stopTimer(timestamp, key, VoidNamespace.INSTANCE));
-		Assert.assertFalse(timerPriorityQueue.stopTimer(timestamp, key, VoidNamespace.INSTANCE));
+		final TimerHeapInternalTimer<Integer, VoidNamespace> timer =
+			new TimerHeapInternalTimer<>(timestamp, key, VoidNamespace.INSTANCE);
+		Assert.assertFalse(timerPriorityQueue.remove(timer));
+		Assert.assertTrue(timerPriorityQueue.add(timer));
+		Assert.assertTrue(timerPriorityQueue.remove(timer));
+		Assert.assertFalse(timerPriorityQueue.remove(timer));
 		Assert.assertTrue(timerPriorityQueue.isEmpty());
 	}
 }

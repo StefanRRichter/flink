@@ -18,19 +18,28 @@
 
 package org.apache.flink.streaming.api.operators;
 
-import org.apache.flink.runtime.state.KeyGroupPartitioner;
-import org.apache.flink.runtime.state.KeyGroupPartitionerTestBase;
-import org.apache.flink.runtime.state.VoidNamespace;
-
 /**
- * Test of {@link KeyGroupPartitioner} for timers.
+ * Interface for objects that can be managed by a {@link HeapOrderedSet}. Such an object can only be contained in at
+ * most one {@link HeapOrderedSet} at a time.
  */
-public class KeyGroupPartitionerForTimersTest
-	extends KeyGroupPartitionerTestBase<TimerHeapInternalTimer<Integer,VoidNamespace>> {
+interface HeapOrderedSetElement {
 
-	public KeyGroupPartitionerForTimersTest() {
-		super(
-			(random -> new TimerHeapInternalTimer<>(42L, random.nextInt() & Integer.MAX_VALUE, VoidNamespace.INSTANCE)),
-			TimerHeapInternalTimer::getKey);
-	}
+	/**
+	 * The index that indicates that a {@link HeapOrderedSetElement} object is not contained in any
+	 * {@link HeapOrderedSet}.
+	 */
+	int NOT_CONTAINED_IN_ORDERED_SET = Integer.MIN_VALUE;
+
+	/**
+	 * Returns the current index of this object in the internal array of {@link HeapOrderedSet}.
+	 */
+	int getManagedIndex();
+
+	/**
+	 * Sets the current index of this object in the {@link HeapOrderedSet} and should only be called by the owning
+	 * {@link HeapOrderedSet}.
+	 *
+	 * @param timerHeapIndex the new index in the timer heap.
+	 */
+	void setManagedIndex(int timerHeapIndex);
 }

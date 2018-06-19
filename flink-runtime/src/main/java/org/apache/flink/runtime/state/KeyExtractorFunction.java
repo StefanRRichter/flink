@@ -16,21 +16,21 @@
  * limitations under the License.
  */
 
-package org.apache.flink.streaming.api.operators;
+package org.apache.flink.runtime.state;
 
-import org.apache.flink.runtime.state.KeyGroupPartitioner;
-import org.apache.flink.runtime.state.KeyGroupPartitionerTestBase;
-import org.apache.flink.runtime.state.VoidNamespace;
+import javax.annotation.Nonnull;
 
 /**
- * Test of {@link KeyGroupPartitioner} for timers.
+ * Function to extract a key from a given object.
+ *
+ * @param <T> type of the element from which we extract the key.
  */
-public class KeyGroupPartitionerForTimersTest
-	extends KeyGroupPartitionerTestBase<TimerHeapInternalTimer<Integer,VoidNamespace>> {
+@FunctionalInterface
+public interface KeyExtractorFunction<T> {
 
-	public KeyGroupPartitionerForTimersTest() {
-		super(
-			(random -> new TimerHeapInternalTimer<>(42L, random.nextInt() & Integer.MAX_VALUE, VoidNamespace.INSTANCE)),
-			TimerHeapInternalTimer::getKey);
-	}
+	/**
+	 * Returns the key for the given element by which the key-group can be computed.
+	 */
+	@Nonnull
+	Object extractKeyFromElement(@Nonnull T element);
 }
