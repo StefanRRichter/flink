@@ -75,12 +75,12 @@ public class RocksDBOrderedSetTest {
 
 			Random random = new Random(1);
 
-			int maxTestSize = 100000;
+			int maxTestSize = 1000000;
 
 			for (int k = 0; k < 1; ++k) {
 
 				final int testSize = maxTestSize;
-				//HashSet<Integer> check = new HashSet<>(testSize);
+//				HashSet<Integer> check = new HashSet<>(testSize);
 				final int bound = maxTestSize * 100;
 
 				long t = System.currentTimeMillis();
@@ -107,18 +107,18 @@ public class RocksDBOrderedSetTest {
 				long nt = System.currentTimeMillis();
 				System.out.println("insert "+(nt - t));
 				//Assert.assertEquals(check.size(), instance.size());
-				//List<Integer> expected = Arrays.asList(check.toArray(new Integer[0]));
-				//Collections.sort(expected);
-
-				//List<Integer> result = new ArrayList<>(check.size());
+//				List<Integer> expected = Arrays.asList(check.toArray(new Integer[0]));
+//				Collections.sort(expected);
+//
+//				List<Integer> result = new ArrayList<>(check.size());
 
 				t=System.currentTimeMillis();
 				while (!instance.isEmpty()) {
 					final Integer peek = instance.peek();
 					final Integer poll = instance.poll();
 					Assert.assertEquals(poll, peek);
-					//result.add(poll);
-					//Assert.assertTrue(check.remove(poll));
+//					result.add(poll);
+//					Assert.assertTrue(check.remove(poll));
 					//Assert.assertEquals(check.size(), instance.size());
 				}
 
@@ -127,7 +127,7 @@ public class RocksDBOrderedSetTest {
 
 				Assert.assertNull(instance.peek());
 				Assert.assertNull(instance.poll());
-				//Assert.assertEquals(expected, result);
+//				Assert.assertEquals(expected, result);
 			}
 		} finally {
 			batchWrapper.close();
