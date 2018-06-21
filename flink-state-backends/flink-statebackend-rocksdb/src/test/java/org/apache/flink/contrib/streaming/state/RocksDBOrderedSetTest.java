@@ -46,14 +46,14 @@ public class RocksDBOrderedSetTest {
 			ByteArrayOutputStreamWithPos outputStreamWithPos = new ByteArrayOutputStreamWithPos(32);
 			DataOutputViewStreamWrapper outputView = new DataOutputViewStreamWrapper(outputStreamWithPos);
 
-			KeyGroupRange keyGroupRange = KeyGroupRange.of(0, 3);
+			KeyGroupRange keyGroupRange = KeyGroupRange.of(0, 7);
 			PartitionedOrderedSet.SortedFetchingCacheFactory<Integer> factory = new PartitionedOrderedSet.SortedFetchingCacheFactory<Integer>() {
 				@Override
 				public AbstractCachingOrderedSetPartition<Integer> createCache(int keyGroup, Comparator<Integer> elementComparator) {
 					return new RocksDBOrderedSet<>(
 						keyGroup,
 						elementComparator,
-						1024,
+						32*4*1024 / keyGroupRange.getNumberOfKeyGroups(),
 						rocksDB,
 						columnFamily,
 						writeOptions,
@@ -78,7 +78,7 @@ public class RocksDBOrderedSetTest {
 			for (int k = 0; k < 1; ++k) {
 
 				final int testSize = maxTestSize;
-//				HashSet<Integer> check = new HashSet<>(testSize);
+				//HashSet<Integer> check = new HashSet<>(testSize);
 				final int bound = maxTestSize * 100;
 
 				long t = System.currentTimeMillis();
@@ -86,39 +86,33 @@ public class RocksDBOrderedSetTest {
 				int x = 0;
 				while (x++ < testSize) {
 					int element = random.nextInt(bound);
-//					check.add(element);
+					//check.add(element);
 					instance.add(element);
 
 					if (random.nextInt(3) == 0 /*&& !check.isEmpty()*/) {
-//						final Iterator<Integer> iterator = check.iterator();
+						//final Iterator<Integer> iterator = check.iterator();
 						instance.remove(element);
-//						iterator.remove();
+						//iterator.remove();
 					}
 
-//					Assert.assertEquals(check.size(), instance.size());
+					//Assert.assertEquals(check.size(), instance.size());
 				}
 				long nt = System.currentTimeMillis();
 				System.out.println("insert "+(nt - t));
-//				Assert.assertEquals(check.size(), instance.size());
-//				List<Integer> expected = Arrays.asList(check.toArray(new Integer[0]));
-//				Collections.sort(expected);
+				//Assert.assertEquals(check.size(), instance.size());
+				//List<Integer> expected = Arrays.asList(check.toArray(new Integer[0]));
+				//Collections.sort(expected);
 
-//				List<Integer> result = new ArrayList<>(check.size());
-
-				rocksDB.compactRange();
+				//List<Integer> result = new ArrayList<>(check.size());
 
 				t=System.currentTimeMillis();
 				while (!instance.isEmpty()) {
 					final Integer peek = instance.peek();
 					final Integer poll = instance.poll();
 					Assert.assertEquals(poll, peek);
-//					result.add(poll);
-//					Assert.assertTrue(check.remove(poll));
-//					if (random.nextInt(3) == 0 && !check.isEmpty()) {
-//						instance.add(iterator.next());
-//						iterator.remove();
-//					}
-//					Assert.assertEquals(check.size(), instance.size());
+					//result.add(poll);
+					//Assert.assertTrue(check.remove(poll));
+					//Assert.assertEquals(check.size(), instance.size());
 				}
 
 				nt = System.currentTimeMillis();
@@ -126,7 +120,7 @@ public class RocksDBOrderedSetTest {
 
 				Assert.assertNull(instance.peek());
 				Assert.assertNull(instance.poll());
-//				Assert.assertEquals(expected, result);
+				//Assert.assertEquals(expected, result);
 			}
 		} finally {
 			readOptions.close();

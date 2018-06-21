@@ -24,6 +24,7 @@ public abstract class AbstractCachingOrderedSetPartition<E> implements HeapOrder
 
 	protected final Comparator<E> elementComparator;
 	protected final int keyGroupId;
+	private boolean backendEmpty;
 	private int pqManagedIndex;
 
 	@SuppressWarnings("unchecked")
@@ -31,58 +32,63 @@ public abstract class AbstractCachingOrderedSetPartition<E> implements HeapOrder
 		this.elementComparator = elementComparator;
 		this.keyGroupId = keyGroupId;
 		this.pqManagedIndex = HeapOrderedSetElement.NOT_CONTAINED;
+		this.backendEmpty = false;
 	}
 
 	public E getFirst() {
+
+		pull();
+
 		return peekFirstFromCache();
 	}
 
 	public E removeFirst() {
 
+		pull();
+
 		final E first = removeFirstFromCache();
 
 		if (first != null) {
-
 			removeFromBackend(first);
-
-			if (isCacheEmpty()) {
-				refillCacheFromBackend();
-			}
 		}
 
-		checkConsistency();
 		return first;
 	}
 
 	public boolean add(E toAdd) {
-		if (isCacheEmpty()) {
-			addToCache(toAdd);
-		} else if (elementComparator.compare(toAdd, peekLastFromCache()) < 0) {
+
+		pull();
+
+		final E cacheTail = peekLastFromCache();
+
+		if (cacheTail != null && elementComparator.compare(toAdd, cacheTail) < 0) {
 			if (isCacheFull()) {
 				removeLastFromCache();
 			}
 			addToCache(toAdd);
 		}
+
+		backendEmpty = false;
 		addToBackend(toAdd);
-		checkConsistency();
 		return peekFirstFromCache() == toAdd; //TODO move into if
 	}
 
 	public boolean remove(E toRemove) {
 
+		pull();
+
 		boolean result = toRemove.equals(peekFirstFromCache());
 
 		removeFromCache(toRemove);
 		removeFromBackend(toRemove);
-		if (isCacheEmpty()) {
-			refillCacheFromBackend();
-		}
-		checkConsistency();
 		return result;
 	}
 
-	protected void checkConsistency() {
-
+	private void pull() {
+		if (!backendEmpty && isCacheEmpty()) {
+			refillCacheFromBackend();
+			backendEmpty = isCacheEmpty();
+		}
 	}
 
 	@Override
@@ -119,4 +125,3 @@ public abstract class AbstractCachingOrderedSetPartition<E> implements HeapOrder
 
 	protected abstract int size();
 }
-
