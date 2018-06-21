@@ -28,7 +28,7 @@ public interface HeapOrderedSetElement {
 	 * The index that indicates that a {@link HeapOrderedSetElement} object is not contained in any
 	 * {@link HeapOrderedSet}.
 	 */
-	int NOT_CONTAINED_IN_ORDERED_SET = Integer.MIN_VALUE;
+	int NOT_CONTAINED = Integer.MIN_VALUE;
 
 	/**
 	 * Returns the current index of this object in the internal array of {@link HeapOrderedSet}.
@@ -39,7 +39,7 @@ public interface HeapOrderedSetElement {
 	 * Sets the current index of this object in the {@link HeapOrderedSet} and should only be called by the owning
 	 * {@link HeapOrderedSet}.
 	 *
-	 * @param timerHeapIndex the new index in the timer heap.
+	 * @param newIndex the new index in the timer heap.
 	 */
-	void setManagedIndex(int timerHeapIndex);
+	void setManagedIndex(int newIndex);
 }

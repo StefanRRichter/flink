@@ -68,7 +68,7 @@ public final class TimerHeapInternalTimer<K, N> implements InternalTimer<K, N>, 
 		this.timestamp = timestamp;
 		this.key = key;
 		this.namespace = namespace;
-		this.timerHeapIndex = NOT_CONTAINED_IN_ORDERED_SET;
+		this.timerHeapIndex = NOT_CONTAINED;
 	}
 
 	@Override
@@ -110,8 +110,8 @@ public final class TimerHeapInternalTimer<K, N> implements InternalTimer<K, N>, 
 	}
 
 	@Override
-	public void setManagedIndex(int timerHeapIndex) {
-		this.timerHeapIndex = timerHeapIndex;
+	public void setManagedIndex(int newIndex) {
+		this.timerHeapIndex = newIndex;
 	}
 
 	/**
@@ -119,7 +119,7 @@ public final class TimerHeapInternalTimer<K, N> implements InternalTimer<K, N>, 
 	 * removed.
 	 */
 	void removedFromTimerQueue() {
-		setManagedIndex(NOT_CONTAINED_IN_ORDERED_SET);
+		setManagedIndex(NOT_CONTAINED);
 	}
 
 	@Override

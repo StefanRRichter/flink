@@ -306,6 +306,12 @@ under the License.
 			<groupId>org.reflections</groupId>
 			<artifactId>reflections</artifactId>
 		</dependency>
+		<dependency>
+			<groupId>it.unimi.dsi</groupId>
+			<artifactId>fastutil</artifactId>
+			<version>8.1.0</version>
+			<scope>compile</scope>
+		</dependency>
 
 	</dependencies>
 

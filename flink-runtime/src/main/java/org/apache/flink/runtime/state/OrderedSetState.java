@@ -21,6 +21,7 @@ package org.apache.flink.runtime.state;
 import org.apache.flink.annotation.Internal;
 
 import javax.annotation.Nonnegative;
+import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
 import java.util.Collection;
@@ -55,17 +56,19 @@ public interface OrderedSetState<T> extends Iterable<T>{
 	 * Adds the given element to the set, if it is not already contained.
 	 *
 	 * @param toAdd the element to add to the set.
-	 * @return true iff a new element was added to the set.
+	 * @return <code>true</> only if the element was added to the set, <code>false</> if the element was not added
+	 * or it is unclear if it was added.
 	 */
-	boolean add(T toAdd);
+	boolean add(@Nonnull T toAdd);
 
 	/**
 	 * Removes the given element from the set, if is contained in the set.
 	 *
 	 * @param toRemove the element to remove.
-	 * @return true iff the element was removed from the set.
+	 * @return <code>true</> only if the element was removed from the set, <code>false</> if the element was not removed
+	 * or it is unclear if it was removed.
 	 */
-	boolean remove(T toRemove);
+	boolean remove(@Nonnull T toRemove);
 
 	/**
 	 * Check if the set contains any elements.
