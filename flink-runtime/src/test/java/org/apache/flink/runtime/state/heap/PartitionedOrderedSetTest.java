@@ -22,8 +22,8 @@ public class PartitionedOrderedSetTest {
 		KeyGroupRange keyGroupRange = KeyGroupRange.of(0, 3);
 		PartitionedOrderedSet.SortedFetchingCacheFactory<Integer> factory = new PartitionedOrderedSet.SortedFetchingCacheFactory<Integer>() {
 			@Override
-			public TreeCachingOrderedSetPartition<Integer> createCache(Comparator<Integer> elementComparator) {
-				return new TreeCachingOrderedSetPartition<Integer>(elementComparator, 64) {
+			public TreeCachingOrderedSetPartition<Integer> createCache(int keyGroup, Comparator<Integer> elementComparator) {
+				return new TreeCachingOrderedSetPartition<Integer>(keyGroup, elementComparator, 64) { //TODO!
 
 					TreeSet<Integer> backend = new TreeSet<>(elementComparator);
 

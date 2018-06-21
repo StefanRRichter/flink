@@ -27,8 +27,8 @@ public abstract class TreeCachingOrderedSetPartition<E> extends AbstractCachingO
 	protected final ObjectAVLTreeSet<E> cache;
 	protected final int capacity;
 
-	public TreeCachingOrderedSetPartition(Comparator<E> elementComparator, int capacity) {
-		super(elementComparator);
+	public TreeCachingOrderedSetPartition(int keyGroupId, Comparator<E> elementComparator, int capacity) {
+		super(keyGroupId, elementComparator);
 		this.cache = new ObjectAVLTreeSet<>(elementComparator);
 		this.capacity = capacity;
 	}

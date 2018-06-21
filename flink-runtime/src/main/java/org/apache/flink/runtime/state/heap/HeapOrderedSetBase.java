@@ -19,7 +19,6 @@
 package org.apache.flink.runtime.state.heap;
 
 import org.apache.flink.runtime.state.OrderedSetState;
-import org.apache.flink.util.Preconditions;
 
 import javax.annotation.Nonnegative;
 import javax.annotation.Nonnull;
@@ -247,15 +246,15 @@ public class HeapOrderedSetBase<T extends HeapOrderedSetElement> implements Orde
 		moveElementToIdx(currentElement, idx);
 	}
 
-	public void validate() {
-		for (int i = 2; i <= size; ++i) {
-			xxx(i);
-		}
-	}
-
-	private void xxx(int idx) {
-		Preconditions.checkState(elementComparator.compare(queue[idx >>> 1], queue[idx]) <= 0);
-	}
+//	public void validate() {
+//		for (int i = 2; i <= size; ++i) {
+//			xxx(i);
+//		}
+//	}
+//
+//	private void xxx(int idx) {
+//		Preconditions.checkState(elementComparator.compare(queue[idx >>> 1], queue[idx]) <= 0);
+//	}
 
 	private boolean isElementIndexValid(int elementIndex, int heapSize) {
 		return elementIndex <= heapSize;

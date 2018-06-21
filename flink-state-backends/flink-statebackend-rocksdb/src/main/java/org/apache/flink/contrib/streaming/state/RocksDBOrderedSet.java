@@ -18,269 +18,170 @@
 
 package org.apache.flink.contrib.streaming.state;
 
-import org.apache.flink.runtime.state.KeyExtractorFunction;
-import org.apache.flink.runtime.state.KeyGroupRange;
-import org.apache.flink.runtime.state.KeyGroupRangeAssignment;
-import org.apache.flink.runtime.state.OrderedSetState;
-import org.apache.flink.runtime.state.heap.HeapOrderedSetBase;
-import org.apache.flink.runtime.state.heap.HeapOrderedSetElement;
+import org.apache.flink.api.common.typeutils.TypeSerializer;
+import org.apache.flink.configuration.ConfigConstants;
+import org.apache.flink.core.memory.ByteArrayInputStreamWithPos;
+import org.apache.flink.core.memory.ByteArrayOutputStreamWithPos;
+import org.apache.flink.core.memory.DataInputViewStreamWrapper;
+import org.apache.flink.core.memory.DataOutputViewStreamWrapper;
+import org.apache.flink.runtime.state.heap.TreeCachingOrderedSetPartition;
+import org.apache.flink.util.FlinkRuntimeException;
 
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
+import org.rocksdb.ColumnFamilyHandle;
+import org.rocksdb.ReadOptions;
+import org.rocksdb.RocksDB;
+import org.rocksdb.RocksDBException;
+import org.rocksdb.WriteOptions;
 
-import java.util.Arrays;
-import java.util.Collection;
+import java.io.IOException;
 import java.util.Comparator;
-import java.util.Iterator;
-import java.util.TreeSet;
 
-public class RocksDBOrderedSet<T> implements OrderedSetState<T> {
+public class RocksDBOrderedSet<T> extends TreeCachingOrderedSetPartition<T> {
 
-	private static final class SortedCacheComparator<T> implements Comparator<AbstractSortedFetchingCache<T>> {
+	private static final byte[] DUMMY_BYTES = "0".getBytes(ConfigConstants.DEFAULT_CHARSET);
 
-		private final Comparator<T> elementComparator;
+	private final RocksDB db;
+	private final ColumnFamilyHandle columnFamilyHandle;
+	private final WriteOptions writeOptions;
+	private final ReadOptions readOptions;
+	private final TypeSerializer<T> serializer;
 
-		SortedCacheComparator(Comparator<T> elementComparator) {
-			this.elementComparator = elementComparator;
-		}
+	private final ByteArrayOutputStreamWithPos outputStream;
+	private final DataOutputViewStreamWrapper outputView;
+//	private final ByteArrayInputStreamWithPos inputStream;
+//	private final DataInputViewStreamWrapper inputView;
 
-		@Override
-		public int compare(AbstractSortedFetchingCache<T> o1, AbstractSortedFetchingCache<T> o2) {
-			final T leftTimer = o1.getFirst();
-			final T rightTimer = o2.getFirst();
+	private final byte[] groupPrefixBytes;
 
-			if (leftTimer == null) {
-				return (rightTimer == null ? 0 : 1);
-			} else {
-				return (rightTimer == null ? -1 : elementComparator.compare(leftTimer, rightTimer));
-			}
-		}
-	}
-
-	public interface SortedFetchingCacheFactory<T> {
-		AbstractSortedFetchingCache<T> createCache(Comparator<T> elementComparator);
-	}
-
-	/**
-	 * Function to extract the key from contained elements.
-	 */
-	private final KeyExtractorFunction<T> keyExtractor;
-	private final AbstractSortedFetchingCache<T>[] keyGroupLists;
-	private final int totalKeyGroups;
-	private final int firstKeyGroup;
-
-	@SuppressWarnings("unchecked")
 	public RocksDBOrderedSet(
-		KeyExtractorFunction<T> keyExtractor,
+		int keyGroupId,
 		Comparator<T> elementComparator,
-		SortedFetchingCacheFactory<T> fetchingCacheFactory,
-		KeyGroupRange keyGroupRange,
-		int totalKeyGroups) {
+		int capacity,
+		RocksDB db,
+		ColumnFamilyHandle columnFamilyHandle,
+		WriteOptions writeOptions,
+		ReadOptions readOptions,
+		TypeSerializer<T> serializer,
+		ByteArrayOutputStreamWithPos outputStream,
+		DataOutputViewStreamWrapper outputView) {
+//		ByteArrayInputStreamWithPos inputStream,
+//		DataInputViewStreamWrapper inputView
 
-		this.keyExtractor = keyExtractor;
-		this.totalKeyGroups = totalKeyGroups;
-		this.firstKeyGroup = keyGroupRange.getStartKeyGroup();
-		this.keyGroupLists = new AbstractSortedFetchingCache[keyGroupRange.getNumberOfKeyGroups()];
-		this.keyGroupHeap = new HeapOrderedSetBase<>(
-			new SortedCacheComparator<>(elementComparator),
-			keyGroupRange.getNumberOfKeyGroups());
-		for (int i = 0; i < keyGroupLists.length; i++) {
-			final AbstractSortedFetchingCache<T> keyGroupCache = fetchingCacheFactory.createCache(elementComparator);
-			keyGroupLists[i] = keyGroupCache;
-			keyGroupHeap.add(keyGroupCache);
+		super(keyGroupId, elementComparator, capacity);
+		this.db = db;
+		this.columnFamilyHandle = columnFamilyHandle;
+		this.writeOptions = writeOptions;
+		this.readOptions = readOptions;
+		this.serializer = serializer;
+		this.outputStream = outputStream;
+		this.outputView = outputView;
+//		this.inputStream = inputStream;
+//		this.inputView = inputView;
+		this.groupPrefixBytes = createKeyGroupBytes();
+	}
+
+	private byte[] createKeyGroupBytes() {
+
+		outputStream.reset();
+
+		try {
+			outputView.writeShort(keyGroupId);
+		} catch (IOException e) {
+			throw new FlinkRuntimeException("Could not write key-group bytes.", e);
 		}
+
+		return outputStream.toByteArray();
 	}
 
-	@Nonnull
-	private final HeapOrderedSetBase<AbstractSortedFetchingCache<T>> keyGroupHeap;
-
-	@Nullable
-	@Override
-	public T poll() {
-		final AbstractSortedFetchingCache<T> headList = keyGroupHeap.peek();
-		final T head = headList.removeFirst();
-		keyGroupHeap.adjustElement(headList);
-		keyGroupHeap.validate();
-		return head;
-	}
-
-	@Nullable
-	@Override
-	public T peek() {
-		return keyGroupHeap.peek().getFirst();
-	}
+//	/**
+//	 * Function to extract the key from contained elements.
+//	 */
+//	private final KeyExtractorFunction<T> keyExtractor;
+//	private final int totalKeyGroups;
+//	private final int firstKeyGroup;
 
 	@Override
-	public boolean add(@Nonnull T toAdd) {
-		final AbstractSortedFetchingCache<T> list = getListForElementKeyGroup(toAdd);
-		if (list.add(toAdd)) {
-			keyGroupHeap.adjustElement(list);
-			keyGroupHeap.validate();
-			return list == keyGroupHeap.peek();
-		} else {
-			keyGroupHeap.validate();
-			return false;
-		}
-	}
-
-	@Override
-	public boolean remove(@Nonnull T toRemove) {
-		final AbstractSortedFetchingCache<T> list = getListForElementKeyGroup(toRemove);
-		if (list.remove(toRemove)) {
-			keyGroupHeap.adjustElement(list);
-			keyGroupHeap.validate();
-			return list == keyGroupHeap.peek();
-		} else {
-			keyGroupHeap.validate();
-			return false;
+	protected void addToBackend(T element) {
+		byte[] timerBytes = serializeTimer(element);
+		try {
+			db.put(columnFamilyHandle, writeOptions, timerBytes, DUMMY_BYTES);
+		} catch (RocksDBException e) {
+			throw new FlinkRuntimeException("Error while getting timer from RocksDB.", e);
 		}
 	}
 
 	@Override
-	public boolean isEmpty() {
-		return peek() == null;
-	}
-
-	@Override
-	public int size() {
-		int sizeSum = 0;
-		for (AbstractSortedFetchingCache<T> list : keyGroupLists) {
-			sizeSum += list.size();
-		}
-		return sizeSum;
-	}
-
-	@Override
-	public void clear() {
-		throw new UnsupportedOperationException();
-	}
-
-	@Override
-	public void addAll(@Nullable Collection<? extends T> toAdd) {
-
-		if (toAdd == null) {
-			return;
-		}
-
-		for (T element : toAdd) {
-			add(element);
+	protected void removeFromBackend(T element) {
+		byte[] timerBytes = serializeTimer(element);
+		try {
+			db.delete(columnFamilyHandle, writeOptions, timerBytes);
+		} catch (RocksDBException e) {
+			throw new FlinkRuntimeException("Error while removing timer from RocksDB.", e);
 		}
 	}
 
 	@Override
-	public Iterator<T> iterator() {
-		throw new UnsupportedOperationException();
-	}
+	protected void refillCacheFromBackend() {
+		try (RocksIteratorWrapper iterator = new RocksIteratorWrapper(db.newIterator(columnFamilyHandle, readOptions))) {
 
-	@Override
-	public String toString() {
-		return "RocksDBOrderedSetStefan{" +
-			"keyGroupLists=" + Arrays.toString(keyGroupLists) +
-			'}';
-	}
+			iterator.seek(groupPrefixBytes);
 
-	private AbstractSortedFetchingCache<T> getListForElementKeyGroup(T element) {
-		return keyGroupLists[computeKeyGroupIndex(element)];
-	}
+			while (iterator.isValid()) {
 
-	private int computeKeyGroupIndex(T element) {
-		return KeyGroupRangeAssignment.assignToKeyGroup(keyExtractor.extractKeyFromElement(element), totalKeyGroups) - firstKeyGroup;
-	}
+				byte[] elementBytes = iterator.key();
 
-	public static abstract class AbstractSortedFetchingCache<E> implements HeapOrderedSetElement {
-
-		protected final TreeSet<E> cache;
-		protected final Comparator<E> comparator;
-		protected final int capacity;
-
-		private int pqManagedIndex;
-
-		@SuppressWarnings("unchecked")
-		public AbstractSortedFetchingCache(Comparator<E> comparator, int capacity) {
-			this.comparator = comparator;
-			this.capacity = capacity;
-			this.cache = new TreeSet<>(comparator);
-			this.pqManagedIndex = HeapOrderedSetElement.NOT_CONTAINED;
-		}
-
-		public E getFirst() {
-			return !cache.isEmpty() ? cache.first() : null;
-		}
-
-		public E removeFirst() {
-
-			final E first = cache.pollFirst();
-
-			if (first != null) {
-
-				removeFromBackend(first);
-
-				if (cache.isEmpty()) {
-					refillCacheFromBackend();
+				if (!isPrefixWith(elementBytes, groupPrefixBytes)) {
+					break;
 				}
-			}
 
-			checkConsistency();
-			return first;
-		}
+				addToCache(deserializeTimer(elementBytes));
 
-		public boolean add(E toAdd) {
-			if (cache.isEmpty() || comparator.compare(toAdd, cache.last()) < 0) {
-				if (cache.add(toAdd) && cache.size() > capacity) {
-					cache.pollLast();
+				if (isCacheFull()) {
+					break;
 				}
+
+				iterator.next();
 			}
-			addToBackend(toAdd);
-			checkConsistency();
-			return cache.first() == toAdd;
 		}
+	}
 
-		public boolean remove(E toRemove) {
+	@Override
+	protected int size() {
+		return 0;
+	}
 
-			boolean result = toRemove.equals(cache.first());
+	private static boolean isPrefixWith(byte[] bytes, byte[] prefixBytes) {
+//		if (bytes.length < prefixBytes.length) {
+//			return false;
+//		}
 
-			cache.remove(toRemove);
-			removeFromBackend(toRemove);
-			if (cache.isEmpty()) {
-				refillCacheFromBackend();
+		for (int i = 0; i < prefixBytes.length; ++i) {
+			if (bytes[i] != prefixBytes[i]) {
+				return false;
 			}
-			checkConsistency();
-			return result;
 		}
+		return true;
+	}
 
-		protected void checkConsistency() {
-
+	private byte[] serializeTimer(T element) {
+		try {
+			outputStream.reset();
+			outputView.writeShort(keyGroupId);
+			serializer.serialize(element, outputView);
+			return outputStream.toByteArray();
+		} catch (IOException e) {
+			throw new FlinkRuntimeException("Error while serializing the timer.", e);
 		}
+	}
 
-		@Override
-		public int getManagedIndex() {
-			return pqManagedIndex;
-		}
-
-		@Override
-		public void setManagedIndex(int updateIndex) {
-			this.pqManagedIndex = updateIndex;
-		}
-
-		protected abstract boolean addToCache(E element);
-
-		protected abstract boolean removeFromCache(E element);
-
-		protected abstract boolean isCacheFull();
-
-		protected abstract boolean isCacheEmpty();
-
-		protected abstract void addToBackend(E element);
-
-		protected abstract void removeFromBackend(E element);
-
-		protected abstract void refillCacheFromBackend();
-
-		protected abstract int size();
-
-		@Override
-		public String toString() {
-			return "AbstractSortedFetchingCache{" + cache + "}";
+	private T deserializeTimer(byte[] bytes) {
+		try {
+			ByteArrayInputStreamWithPos inputStream = new ByteArrayInputStreamWithPos(bytes);
+			DataInputViewStreamWrapper inputView = new DataInputViewStreamWrapper(inputStream);
+			inputView.readShort();
+			return serializer.deserialize(inputView);
+		} catch (IOException e) {
+			throw new FlinkRuntimeException("Error while deserializing the timer.", e);
 		}
 	}
 }

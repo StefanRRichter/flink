@@ -55,12 +55,14 @@ public class PartitionedOrderedSet<T> implements OrderedSetState<T> {
 	}
 
 	public interface SortedFetchingCacheFactory<T> {
-		AbstractCachingOrderedSetPartition<T> createCache(Comparator<T> elementComparator);
+		AbstractCachingOrderedSetPartition<T> createCache(int keyGroupId, Comparator<T> elementComparator);
 	}
 
 	/**
 	 * Function to extract the key from contained elements.
 	 */
+	@Nonnull
+	private final HeapOrderedSetBase<AbstractCachingOrderedSetPartition<T>> keyGroupHeap;
 	private final KeyExtractorFunction<T> keyExtractor;
 	private final AbstractCachingOrderedSetPartition<T>[] keyGroupLists;
 	private final int totalKeyGroups;
@@ -82,14 +84,12 @@ public class PartitionedOrderedSet<T> implements OrderedSetState<T> {
 			new SortedCacheComparator<>(elementComparator),
 			keyGroupRange.getNumberOfKeyGroups());
 		for (int i = 0; i < keyGroupLists.length; i++) {
-			final AbstractCachingOrderedSetPartition<T> keyGroupCache = fetchingCacheFactory.createCache(elementComparator);
+			final AbstractCachingOrderedSetPartition<T> keyGroupCache =
+				fetchingCacheFactory.createCache(firstKeyGroup + i, elementComparator);
 			keyGroupLists[i] = keyGroupCache;
 			keyGroupHeap.add(keyGroupCache);
 		}
 	}
-
-	@Nonnull
-	private final HeapOrderedSetBase<AbstractCachingOrderedSetPartition<T>> keyGroupHeap;
 
 	@Nullable
 	@Override
@@ -97,7 +97,7 @@ public class PartitionedOrderedSet<T> implements OrderedSetState<T> {
 		final AbstractCachingOrderedSetPartition<T> headList = keyGroupHeap.peek();
 		final T head = headList.removeFirst();
 		keyGroupHeap.adjustElement(headList);
-		keyGroupHeap.validate();
+//		keyGroupHeap.validate();
 		return head;
 	}
 
@@ -112,10 +112,10 @@ public class PartitionedOrderedSet<T> implements OrderedSetState<T> {
 		final AbstractCachingOrderedSetPartition<T> list = getListForElementKeyGroup(toAdd);
 		if (list.add(toAdd)) {
 			keyGroupHeap.adjustElement(list);
-			keyGroupHeap.validate();
+//			keyGroupHeap.validate();
 			return list == keyGroupHeap.peek();
 		} else {
-			keyGroupHeap.validate();
+//			keyGroupHeap.validate();
 			return false;
 		}
 	}
@@ -125,10 +125,10 @@ public class PartitionedOrderedSet<T> implements OrderedSetState<T> {
 		final AbstractCachingOrderedSetPartition<T> list = getListForElementKeyGroup(toRemove);
 		if (list.remove(toRemove)) {
 			keyGroupHeap.adjustElement(list);
-			keyGroupHeap.validate();
+//			keyGroupHeap.validate();
 			return list == keyGroupHeap.peek();
 		} else {
-			keyGroupHeap.validate();
+//			keyGroupHeap.validate();
 			return false;
 		}
 	}

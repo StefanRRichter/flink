@@ -23,11 +23,13 @@ import java.util.Comparator;
 public abstract class AbstractCachingOrderedSetPartition<E> implements HeapOrderedSetElement {
 
 	protected final Comparator<E> elementComparator;
+	protected final int keyGroupId;
 	private int pqManagedIndex;
 
 	@SuppressWarnings("unchecked")
-	public AbstractCachingOrderedSetPartition(Comparator<E> elementComparator) {
+	public AbstractCachingOrderedSetPartition(int keyGroupId, Comparator<E> elementComparator) {
 		this.elementComparator = elementComparator;
+		this.keyGroupId = keyGroupId;
 		this.pqManagedIndex = HeapOrderedSetElement.NOT_CONTAINED;
 	}
 
