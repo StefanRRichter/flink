@@ -59,7 +59,8 @@ public class RocksDBOrderedDeleteTest {
 						readOptions,
 						IntSerializer.INSTANCE,
 						outputStreamWithPos,
-						outputView);
+						outputView,
+						null);
 				}
 			};
 
