@@ -42,11 +42,12 @@ public class RocksDBOrderedSetTest {
 		WriteOptions writeOptions = new WriteOptions();
 		writeOptions.disableWAL();
 		ReadOptions readOptions = new ReadOptions();
+		RocksDBWriteBatchWrapper batchWrapper = new RocksDBWriteBatchWrapper(rocksDB, writeOptions);
 		try {
 			ByteArrayOutputStreamWithPos outputStreamWithPos = new ByteArrayOutputStreamWithPos(32);
 			DataOutputViewStreamWrapper outputView = new DataOutputViewStreamWrapper(outputStreamWithPos);
 
-			KeyGroupRange keyGroupRange = KeyGroupRange.of(0, 7);
+			KeyGroupRange keyGroupRange = KeyGroupRange.of(0, 3);
 			PartitionedOrderedSet.SortedFetchingCacheFactory<Integer> factory = new PartitionedOrderedSet.SortedFetchingCacheFactory<Integer>() {
 				@Override
 				public AbstractCachingOrderedSetPartition<Integer> createCache(int keyGroup, Comparator<Integer> elementComparator) {
@@ -60,7 +61,8 @@ public class RocksDBOrderedSetTest {
 						readOptions,
 						IntSerializer.INSTANCE,
 						outputStreamWithPos,
-						outputView);
+						outputView,
+						batchWrapper);
 				}
 			};
 
@@ -73,7 +75,7 @@ public class RocksDBOrderedSetTest {
 
 			Random random = new Random(1);
 
-			int maxTestSize = 1000000;
+			int maxTestSize = 100000;
 
 			for (int k = 0; k < 1; ++k) {
 
@@ -86,13 +88,18 @@ public class RocksDBOrderedSetTest {
 				int x = 0;
 				while (x++ < testSize) {
 					int element = random.nextInt(bound);
-					//check.add(element);
-					instance.add(element);
+//					//check.add(element);
+//					instance.add(element);
+//
+//					if (random.nextInt(3) == 0 /*&& !check.isEmpty()*/) {
+//						//final Iterator<Integer> iterator = check.iterator();
+//						instance.remove(element);
+//						//iterator.remove();
+//					}
 
-					if (random.nextInt(3) == 0 /*&& !check.isEmpty()*/) {
-						//final Iterator<Integer> iterator = check.iterator();
-						instance.remove(element);
-						//iterator.remove();
+					instance.add(element);
+					while(!instance.isEmpty()) {
+						instance.poll();
 					}
 
 					//Assert.assertEquals(check.size(), instance.size());
@@ -123,6 +130,7 @@ public class RocksDBOrderedSetTest {
 				//Assert.assertEquals(expected, result);
 			}
 		} finally {
+			batchWrapper.close();
 			readOptions.close();
 			writeOptions.close();
 			columnFamily.close();

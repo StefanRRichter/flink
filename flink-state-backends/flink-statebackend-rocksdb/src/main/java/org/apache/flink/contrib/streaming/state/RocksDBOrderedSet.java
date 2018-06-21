@@ -48,6 +48,9 @@ public class RocksDBOrderedSet<T> extends TreeCachingOrderedSetPartition<T> {
 
 	private final ByteArrayOutputStreamWithPos outputStream;
 	private final DataOutputViewStreamWrapper outputView;
+
+	private final RocksDBWriteBatchWrapper batchWrapper;
+
 //	private final ByteArrayInputStreamWithPos inputStream;
 //	private final DataInputViewStreamWrapper inputView;
 
@@ -63,7 +66,8 @@ public class RocksDBOrderedSet<T> extends TreeCachingOrderedSetPartition<T> {
 		ReadOptions readOptions,
 		TypeSerializer<T> serializer,
 		ByteArrayOutputStreamWithPos outputStream,
-		DataOutputViewStreamWrapper outputView) {
+		DataOutputViewStreamWrapper outputView,
+		RocksDBWriteBatchWrapper batchWrapper) {
 //		ByteArrayInputStreamWithPos inputStream,
 //		DataInputViewStreamWrapper inputView
 
@@ -78,6 +82,7 @@ public class RocksDBOrderedSet<T> extends TreeCachingOrderedSetPartition<T> {
 //		this.inputStream = inputStream;
 //		this.inputView = inputView;
 		this.groupPrefixBytes = createKeyGroupBytes();
+		this.batchWrapper = batchWrapper;
 	}
 
 	private byte[] createKeyGroupBytes() {
@@ -104,7 +109,7 @@ public class RocksDBOrderedSet<T> extends TreeCachingOrderedSetPartition<T> {
 	protected void addToBackend(T element) {
 		byte[] timerBytes = serializeTimer(element);
 		try {
-			db.put(columnFamilyHandle, writeOptions, timerBytes, DUMMY_BYTES);
+			batchWrapper.put(columnFamilyHandle, timerBytes, DUMMY_BYTES);
 		} catch (RocksDBException e) {
 			throw new FlinkRuntimeException("Error while getting timer from RocksDB.", e);
 		}
@@ -114,7 +119,7 @@ public class RocksDBOrderedSet<T> extends TreeCachingOrderedSetPartition<T> {
 	protected void removeFromBackend(T element) {
 		byte[] timerBytes = serializeTimer(element);
 		try {
-			db.delete(columnFamilyHandle, writeOptions, timerBytes);
+			batchWrapper.remove(columnFamilyHandle, timerBytes);
 		} catch (RocksDBException e) {
 			throw new FlinkRuntimeException("Error while removing timer from RocksDB.", e);
 		}
@@ -122,6 +127,11 @@ public class RocksDBOrderedSet<T> extends TreeCachingOrderedSetPartition<T> {
 
 	@Override
 	protected void refillCacheFromBackend() {
+		try {
+			batchWrapper.flush();
+		} catch (RocksDBException e) {
+			throw new FlinkRuntimeException(e);
+		}
 		try (RocksIteratorWrapper iterator = new RocksIteratorWrapper(db.newIterator(columnFamilyHandle, readOptions))) {
 
 			iterator.seek(groupPrefixBytes);
