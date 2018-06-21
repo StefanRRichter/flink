@@ -20,8 +20,11 @@ import org.rocksdb.WriteOptions;
 
 import java.io.File;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Random;
 
@@ -75,12 +78,12 @@ public class RocksDBOrderedSetTest {
 
 			Random random = new Random(1);
 
-			int maxTestSize = 100000;
+			int maxTestSize = 10000;
 
-			for (int k = 0; k < 1; ++k) {
+			for (int k = 0; k < 1000; ++k) {
 
-				final int testSize = maxTestSize;
-				//HashSet<Integer> check = new HashSet<>(testSize);
+				final int testSize = random.nextInt(maxTestSize);
+				HashSet<Integer> check = new HashSet<>(testSize);
 				final int bound = maxTestSize * 100;
 
 				long t = System.currentTimeMillis();
@@ -88,37 +91,37 @@ public class RocksDBOrderedSetTest {
 				int x = 0;
 				while (x++ < testSize) {
 					int element = random.nextInt(bound);
-//					//check.add(element);
-//					instance.add(element);
-//
-//					if (random.nextInt(3) == 0 /*&& !check.isEmpty()*/) {
-//						//final Iterator<Integer> iterator = check.iterator();
-//						instance.remove(element);
-//						//iterator.remove();
-//					}
-
+					check.add(element);
 					instance.add(element);
-					while(!instance.isEmpty()) {
-						instance.poll();
+
+					if (random.nextInt(3) == 0 /*&& !check.isEmpty()*/) {
+						final Iterator<Integer> iterator = check.iterator();
+						instance.remove(iterator.next());
+						iterator.remove();
 					}
+
+//					instance.add(element);
+//					while(!instance.isEmpty()) {
+//						instance.poll();
+//					}
 
 					//Assert.assertEquals(check.size(), instance.size());
 				}
 				long nt = System.currentTimeMillis();
 				System.out.println("insert "+(nt - t));
 				//Assert.assertEquals(check.size(), instance.size());
-				//List<Integer> expected = Arrays.asList(check.toArray(new Integer[0]));
-				//Collections.sort(expected);
+				List<Integer> expected = Arrays.asList(check.toArray(new Integer[0]));
+				Collections.sort(expected);
 
-				//List<Integer> result = new ArrayList<>(check.size());
+				List<Integer> result = new ArrayList<>(check.size());
 
 				t=System.currentTimeMillis();
 				while (!instance.isEmpty()) {
 					final Integer peek = instance.peek();
 					final Integer poll = instance.poll();
 					Assert.assertEquals(poll, peek);
-					//result.add(poll);
-					//Assert.assertTrue(check.remove(poll));
+					result.add(poll);
+					Assert.assertTrue(check.remove(poll));
 					//Assert.assertEquals(check.size(), instance.size());
 				}
 
@@ -127,7 +130,7 @@ public class RocksDBOrderedSetTest {
 
 				Assert.assertNull(instance.peek());
 				Assert.assertNull(instance.poll());
-				//Assert.assertEquals(expected, result);
+				Assert.assertEquals(expected, result);
 			}
 		} finally {
 			batchWrapper.close();

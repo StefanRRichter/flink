@@ -24,7 +24,7 @@ public abstract class AbstractCachingOrderedSetPartition<E> implements HeapOrder
 
 	protected final Comparator<E> elementComparator;
 	protected final int keyGroupId;
-	private boolean backendEmpty;
+	private boolean backendOnlyElements;
 	private int pqManagedIndex;
 
 	@SuppressWarnings("unchecked")
@@ -32,7 +32,7 @@ public abstract class AbstractCachingOrderedSetPartition<E> implements HeapOrder
 		this.elementComparator = elementComparator;
 		this.keyGroupId = keyGroupId;
 		this.pqManagedIndex = HeapOrderedSetElement.NOT_CONTAINED;
-		this.backendEmpty = false;
+		this.backendOnlyElements = true;
 	}
 
 	public E getFirst() {
@@ -61,14 +61,16 @@ public abstract class AbstractCachingOrderedSetPartition<E> implements HeapOrder
 
 		final E cacheTail = peekLastFromCache();
 
-		if (cacheTail != null && elementComparator.compare(toAdd, cacheTail) < 0) {
+		if (!backendOnlyElements || cacheTail != null && elementComparator.compare(toAdd, cacheTail) < 0) {
 			if (isCacheFull()) {
 				removeLastFromCache();
+				backendOnlyElements = true;
 			}
 			addToCache(toAdd);
+		} else {
+			backendOnlyElements = true;
 		}
 
-		backendEmpty = false;
 		addToBackend(toAdd);
 		return peekFirstFromCache() == toAdd; //TODO move into if
 	}
@@ -85,9 +87,8 @@ public abstract class AbstractCachingOrderedSetPartition<E> implements HeapOrder
 	}
 
 	private void pull() {
-		if (!backendEmpty && isCacheEmpty()) {
-			refillCacheFromBackend();
-			backendEmpty = isCacheEmpty();
+		if (backendOnlyElements && isCacheEmpty()) {
+			backendOnlyElements = refillCacheFromBackend();
 		}
 	}
 
@@ -121,7 +122,7 @@ public abstract class AbstractCachingOrderedSetPartition<E> implements HeapOrder
 
 	protected abstract void removeFromBackend(E element);
 
-	protected abstract void refillCacheFromBackend();
+	protected abstract boolean refillCacheFromBackend();
 
 	protected abstract int size();
 }

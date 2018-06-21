@@ -47,7 +47,7 @@ public class PartitionedOrderedSetTest {
 					}
 
 					@Override
-					protected void refillCacheFromBackend() {
+					protected boolean refillCacheFromBackend() {
 						for (Integer elementInOrder : backend) {
 							cache.add(elementInOrder);
 
@@ -55,6 +55,7 @@ public class PartitionedOrderedSetTest {
 								break;
 							}
 						}
+						return !backend.isEmpty();
 					}
 
 					@Override

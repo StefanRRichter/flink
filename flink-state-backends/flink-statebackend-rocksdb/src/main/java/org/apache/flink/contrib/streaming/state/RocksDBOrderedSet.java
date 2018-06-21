@@ -126,7 +126,7 @@ public class RocksDBOrderedSet<T> extends TreeCachingOrderedSetPartition<T> {
 	}
 
 	@Override
-	protected void refillCacheFromBackend() {
+	protected boolean refillCacheFromBackend() {
 		try {
 			batchWrapper.flush();
 		} catch (RocksDBException e) {
@@ -135,8 +135,9 @@ public class RocksDBOrderedSet<T> extends TreeCachingOrderedSetPartition<T> {
 		try (RocksIteratorWrapper iterator = new RocksIteratorWrapper(db.newIterator(columnFamilyHandle, readOptions))) {
 
 			iterator.seek(groupPrefixBytes);
+			boolean valid = iterator.isValid();
 
-			while (iterator.isValid()) {
+			while (valid && !isCacheFull()) {
 
 				byte[] elementBytes = iterator.key();
 
@@ -146,12 +147,11 @@ public class RocksDBOrderedSet<T> extends TreeCachingOrderedSetPartition<T> {
 
 				addToCache(deserializeTimer(elementBytes));
 
-				if (isCacheFull()) {
-					break;
-				}
-
 				iterator.next();
+				valid = iterator.isValid();
 			}
+
+			return valid;
 		}
 	}
 
