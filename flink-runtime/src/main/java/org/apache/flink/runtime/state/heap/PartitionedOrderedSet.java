@@ -33,7 +33,7 @@ import java.util.Iterator;
 
 public class PartitionedOrderedSet<T> implements InternalPriorityQueue<T> {
 
-	private static final class SortedCacheComparator<T> implements Comparator<AbstractCachingOrderedSetPartition<T>> {
+	private static final class SortedCacheComparator<T> implements Comparator<CachingOrderedSetPartition<T>> {
 
 		private final Comparator<T> elementComparator;
 
@@ -42,9 +42,9 @@ public class PartitionedOrderedSet<T> implements InternalPriorityQueue<T> {
 		}
 
 		@Override
-		public int compare(AbstractCachingOrderedSetPartition<T> o1, AbstractCachingOrderedSetPartition<T> o2) {
-			final T leftTimer = o1.getFirst();
-			final T rightTimer = o2.getFirst();
+		public int compare(CachingOrderedSetPartition<T> o1, CachingOrderedSetPartition<T> o2) {
+			final T leftTimer = o1.peek();
+			final T rightTimer = o2.peek();
 
 			if (leftTimer == null) {
 				return (rightTimer == null ? 0 : 1);
@@ -55,16 +55,16 @@ public class PartitionedOrderedSet<T> implements InternalPriorityQueue<T> {
 	}
 
 	public interface SortedFetchingCacheFactory<T> {
-		AbstractCachingOrderedSetPartition<T> createCache(int keyGroupId, Comparator<T> elementComparator);
+		CachingOrderedSetPartition<T> createCache(int keyGroupId, Comparator<T> elementComparator);
 	}
 
 	/**
 	 * Function to extract the key from contained elements.
 	 */
 	@Nonnull
-	private final HeapPriorityQueue<AbstractCachingOrderedSetPartition<T>> keyGroupHeap;
+	private final HeapPriorityQueue<CachingOrderedSetPartition<T>> keyGroupHeap;
 	private final KeyExtractorFunction<T> keyExtractor;
-	private final AbstractCachingOrderedSetPartition<T>[] keyGroupLists;
+	private final CachingOrderedSetPartition<T>[] keyGroupLists;
 	private final int totalKeyGroups;
 	private final int firstKeyGroup;
 
@@ -79,12 +79,12 @@ public class PartitionedOrderedSet<T> implements InternalPriorityQueue<T> {
 		this.keyExtractor = keyExtractor;
 		this.totalKeyGroups = totalKeyGroups;
 		this.firstKeyGroup = keyGroupRange.getStartKeyGroup();
-		this.keyGroupLists = new AbstractCachingOrderedSetPartition[keyGroupRange.getNumberOfKeyGroups()];
+		this.keyGroupLists = new CachingOrderedSetPartition[keyGroupRange.getNumberOfKeyGroups()];
 		this.keyGroupHeap = new HeapPriorityQueue<>(
 			new SortedCacheComparator<>(elementComparator),
 			keyGroupRange.getNumberOfKeyGroups());
 		for (int i = 0; i < keyGroupLists.length; i++) {
-			final AbstractCachingOrderedSetPartition<T> keyGroupCache =
+			final CachingOrderedSetPartition<T> keyGroupCache =
 				fetchingCacheFactory.createCache(firstKeyGroup + i, elementComparator);
 			keyGroupLists[i] = keyGroupCache;
 			keyGroupHeap.add(keyGroupCache);
@@ -94,8 +94,8 @@ public class PartitionedOrderedSet<T> implements InternalPriorityQueue<T> {
 	@Nullable
 	@Override
 	public T poll() {
-		final AbstractCachingOrderedSetPartition<T> headList = keyGroupHeap.peek();
-		final T head = headList.removeFirst();
+		final CachingOrderedSetPartition<T> headList = keyGroupHeap.peek();
+		final T head = headList.poll();
 		keyGroupHeap.adjustElement(headList);
 //		keyGroupHeap.validate();
 		return head;
@@ -104,12 +104,12 @@ public class PartitionedOrderedSet<T> implements InternalPriorityQueue<T> {
 	@Nullable
 	@Override
 	public T peek() {
-		return keyGroupHeap.peek().getFirst();
+		return keyGroupHeap.peek().peek();
 	}
 
 	@Override
 	public boolean add(@Nonnull T toAdd) {
-		final AbstractCachingOrderedSetPartition<T> list = getListForElementKeyGroup(toAdd);
+		final CachingOrderedSetPartition<T> list = getListForElementKeyGroup(toAdd);
 		if (list.add(toAdd)) {
 			keyGroupHeap.adjustElement(list);
 //			keyGroupHeap.validate();
@@ -122,7 +122,7 @@ public class PartitionedOrderedSet<T> implements InternalPriorityQueue<T> {
 
 	@Override
 	public boolean remove(@Nonnull T toRemove) {
-		final AbstractCachingOrderedSetPartition<T> list = getListForElementKeyGroup(toRemove);
+		final CachingOrderedSetPartition<T> list = getListForElementKeyGroup(toRemove);
 		if (list.remove(toRemove)) {
 			keyGroupHeap.adjustElement(list);
 //			keyGroupHeap.validate();
@@ -141,7 +141,7 @@ public class PartitionedOrderedSet<T> implements InternalPriorityQueue<T> {
 	@Override
 	public int size() {
 		int sizeSum = 0;
-		for (AbstractCachingOrderedSetPartition<T> list : keyGroupLists) {
+		for (CachingOrderedSetPartition<T> list : keyGroupLists) {
 			sizeSum += list.size();
 		}
 		return sizeSum;
@@ -176,7 +176,7 @@ public class PartitionedOrderedSet<T> implements InternalPriorityQueue<T> {
 			'}';
 	}
 
-	private AbstractCachingOrderedSetPartition<T> getListForElementKeyGroup(T element) {
+	private CachingOrderedSetPartition<T> getListForElementKeyGroup(T element) {
 		return keyGroupLists[computeKeyGroupIndex(element)];
 	}
 

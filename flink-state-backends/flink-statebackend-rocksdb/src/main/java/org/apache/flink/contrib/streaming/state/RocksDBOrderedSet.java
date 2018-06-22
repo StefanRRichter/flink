@@ -24,68 +24,52 @@ import org.apache.flink.core.memory.ByteArrayInputStreamWithPos;
 import org.apache.flink.core.memory.ByteArrayOutputStreamWithPos;
 import org.apache.flink.core.memory.DataInputViewStreamWrapper;
 import org.apache.flink.core.memory.DataOutputViewStreamWrapper;
-import org.apache.flink.runtime.state.heap.TreeCachingOrderedSetPartition;
+import org.apache.flink.runtime.state.heap.CachingOrderedSetPartition;
 import org.apache.flink.util.FlinkRuntimeException;
 
 import org.rocksdb.ColumnFamilyHandle;
 import org.rocksdb.ReadOptions;
 import org.rocksdb.RocksDB;
 import org.rocksdb.RocksDBException;
-import org.rocksdb.WriteOptions;
 
 import java.io.IOException;
-import java.util.Comparator;
 
-public class RocksDBOrderedSet<T> extends TreeCachingOrderedSetPartition<T> {
+public class RocksDBOrderedSet<T> implements CachingOrderedSetPartition.OrderedStore<T> {
 
 	private static final byte[] DUMMY_BYTES = "0".getBytes(ConfigConstants.DEFAULT_CHARSET);
 
 	private final RocksDB db;
 	private final ColumnFamilyHandle columnFamilyHandle;
-	private final WriteOptions writeOptions;
 	private final ReadOptions readOptions;
 	private final TypeSerializer<T> serializer;
-
 	private final ByteArrayOutputStreamWithPos outputStream;
 	private final DataOutputViewStreamWrapper outputView;
-
 	private final RocksDBWriteBatchWrapper batchWrapper;
-
-//	private final ByteArrayInputStreamWithPos inputStream;
-//	private final DataInputViewStreamWrapper inputView;
-
 	private final byte[] groupPrefixBytes;
+	private final int keyGroupId;
 
 	public RocksDBOrderedSet(
 		int keyGroupId,
-		Comparator<T> elementComparator,
-		int capacity,
 		RocksDB db,
 		ColumnFamilyHandle columnFamilyHandle,
-		WriteOptions writeOptions,
 		ReadOptions readOptions,
 		TypeSerializer<T> serializer,
 		ByteArrayOutputStreamWithPos outputStream,
 		DataOutputViewStreamWrapper outputView,
 		RocksDBWriteBatchWrapper batchWrapper) {
-//		ByteArrayInputStreamWithPos inputStream,
-//		DataInputViewStreamWrapper inputView
 
-		super(keyGroupId, elementComparator, capacity);
 		this.db = db;
 		this.columnFamilyHandle = columnFamilyHandle;
-		this.writeOptions = writeOptions;
 		this.readOptions = readOptions;
 		this.serializer = serializer;
 		this.outputStream = outputStream;
 		this.outputView = outputView;
-//		this.inputStream = inputStream;
-//		this.inputView = inputView;
-		this.groupPrefixBytes = createKeyGroupBytes();
+		this.keyGroupId = keyGroupId;
 		this.batchWrapper = batchWrapper;
+		this.groupPrefixBytes = createKeyGroupBytes(keyGroupId);
 	}
 
-	private byte[] createKeyGroupBytes() {
+	private byte[] createKeyGroupBytes(int keyGroupId) {
 
 		outputStream.reset();
 
@@ -98,15 +82,8 @@ public class RocksDBOrderedSet<T> extends TreeCachingOrderedSetPartition<T> {
 		return outputStream.toByteArray();
 	}
 
-//	/**
-//	 * Function to extract the key from contained elements.
-//	 */
-//	private final KeyExtractorFunction<T> keyExtractor;
-//	private final int totalKeyGroups;
-//	private final int firstKeyGroup;
-
 	@Override
-	protected void addToBackend(T element) {
+	public void add(T element) {
 		byte[] timerBytes = serializeTimer(element);
 		try {
 			batchWrapper.put(columnFamilyHandle, timerBytes, DUMMY_BYTES);
@@ -116,7 +93,7 @@ public class RocksDBOrderedSet<T> extends TreeCachingOrderedSetPartition<T> {
 	}
 
 	@Override
-	protected void removeFromBackend(T element) {
+	public void remove(T element) {
 		byte[] timerBytes = serializeTimer(element);
 		try {
 			batchWrapper.remove(columnFamilyHandle, timerBytes);
@@ -126,7 +103,7 @@ public class RocksDBOrderedSet<T> extends TreeCachingOrderedSetPartition<T> {
 	}
 
 	@Override
-	protected boolean refillCacheFromBackend() {
+	public boolean refillCacheFromBackend(CachingOrderedSetPartition.OrderedCache<T> orderedCache) {
 		try {
 			batchWrapper.flush();
 		} catch (RocksDBException e) {
@@ -137,7 +114,7 @@ public class RocksDBOrderedSet<T> extends TreeCachingOrderedSetPartition<T> {
 			iterator.seek(groupPrefixBytes);
 			boolean valid = iterator.isValid();
 
-			while (valid && !isCacheFull()) {
+			while (valid && !orderedCache.isFull()) {
 
 				byte[] elementBytes = iterator.key();
 
@@ -145,7 +122,7 @@ public class RocksDBOrderedSet<T> extends TreeCachingOrderedSetPartition<T> {
 					break;
 				}
 
-				addToCache(deserializeTimer(elementBytes));
+				orderedCache.add(deserializeTimer(elementBytes));
 
 				iterator.next();
 				valid = iterator.isValid();
@@ -156,15 +133,11 @@ public class RocksDBOrderedSet<T> extends TreeCachingOrderedSetPartition<T> {
 	}
 
 	@Override
-	protected int size() {
-		return 0;
+	public int size() {
+		throw new UnsupportedOperationException("TODO");
 	}
 
 	private static boolean isPrefixWith(byte[] bytes, byte[] prefixBytes) {
-//		if (bytes.length < prefixBytes.length) {
-//			return false;
-//		}
-
 		for (int i = 0; i < prefixBytes.length; ++i) {
 			if (bytes[i] != prefixBytes[i]) {
 				return false;

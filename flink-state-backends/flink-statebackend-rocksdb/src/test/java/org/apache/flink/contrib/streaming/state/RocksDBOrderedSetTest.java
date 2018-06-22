@@ -4,8 +4,9 @@ import org.apache.flink.api.common.typeutils.base.IntSerializer;
 import org.apache.flink.core.memory.ByteArrayOutputStreamWithPos;
 import org.apache.flink.core.memory.DataOutputViewStreamWrapper;
 import org.apache.flink.runtime.state.KeyGroupRange;
-import org.apache.flink.runtime.state.heap.AbstractCachingOrderedSetPartition;
+import org.apache.flink.runtime.state.heap.CachingOrderedSetPartition;
 import org.apache.flink.runtime.state.heap.PartitionedOrderedSet;
+import org.apache.flink.runtime.state.heap.TreeOrderedCache;
 import org.apache.flink.util.FileUtils;
 
 import org.junit.Assert;
@@ -43,26 +44,28 @@ public class RocksDBOrderedSetTest {
 		writeOptions.disableWAL();
 		ReadOptions readOptions = new ReadOptions();
 		RocksDBWriteBatchWrapper batchWrapper = new RocksDBWriteBatchWrapper(rocksDB, writeOptions);
+		KeyGroupRange keyGroupRange = KeyGroupRange.of(0, 3);
+		int cacheCapacity = 32*4*1024 / keyGroupRange.getNumberOfKeyGroups();
 		try {
 			ByteArrayOutputStreamWithPos outputStreamWithPos = new ByteArrayOutputStreamWithPos(32);
 			DataOutputViewStreamWrapper outputView = new DataOutputViewStreamWrapper(outputStreamWithPos);
 
-			KeyGroupRange keyGroupRange = KeyGroupRange.of(0, 3);
+
 			PartitionedOrderedSet.SortedFetchingCacheFactory<Integer> factory = new PartitionedOrderedSet.SortedFetchingCacheFactory<Integer>() {
 				@Override
-				public AbstractCachingOrderedSetPartition<Integer> createCache(int keyGroup, Comparator<Integer> elementComparator) {
-					return new RocksDBOrderedSet<>(
+				public CachingOrderedSetPartition<Integer> createCache(int keyGroup, Comparator<Integer> elementComparator) {
+
+					final CachingOrderedSetPartition.OrderedCache<Integer> cache = new TreeOrderedCache<>(elementComparator, cacheCapacity);
+					final CachingOrderedSetPartition.OrderedStore<Integer> store = new RocksDBOrderedSet<>(
 						keyGroup,
-						elementComparator,
-						32*4*1024 / keyGroupRange.getNumberOfKeyGroups(),
 						rocksDB,
 						columnFamily,
-						writeOptions,
 						readOptions,
 						IntSerializer.INSTANCE,
 						outputStreamWithPos,
 						outputView,
 						batchWrapper);
+					return new CachingOrderedSetPartition<>(cache, store);
 				}
 			};
 
@@ -88,19 +91,19 @@ public class RocksDBOrderedSetTest {
 				int x = 0;
 				while (x++ < testSize) {
 					int element = random.nextInt(bound);
-//					//check.add(element);
-//					instance.add(element);
-//
-//					if (random.nextInt(3) == 0 /*&& !check.isEmpty()*/) {
-//						//final Iterator<Integer> iterator = check.iterator();
-//						instance.remove(element);
-//						//iterator.remove();
-//					}
-
+					//check.add(element);
 					instance.add(element);
-					while(!instance.isEmpty()) {
-						instance.poll();
+
+					if (random.nextInt(3) == 0 /*&& !check.isEmpty()*/) {
+						//final Iterator<Integer> iterator = check.iterator();
+						instance.remove(element);
+						//iterator.remove();
 					}
+
+//					instance.add(element);
+//					while(!instance.isEmpty()) {
+//						instance.poll();
+//					}
 
 					//Assert.assertEquals(check.size(), instance.size());
 				}
