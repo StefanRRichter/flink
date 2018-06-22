@@ -18,28 +18,32 @@
 
 package org.apache.flink.runtime.state.heap;
 
+import org.apache.flink.annotation.Internal;
+
 /**
- * Interface for objects that can be managed by a {@link HeapOrderedSet}. Such an object can only be contained in at
- * most one {@link HeapOrderedSet} at a time.
+ * Interface for objects that can be managed by a {@link HeapPriorityQueue}. Such an object can only be contained in at
+ * most one {@link HeapPriorityQueue} at a time.
  */
-public interface HeapOrderedSetElement {
+@Internal
+public interface HeapPriorityQueueElement {
 
 	/**
-	 * The index that indicates that a {@link HeapOrderedSetElement} object is not contained in any
-	 * {@link HeapOrderedSet}.
+	 * The index that indicates that a {@link HeapPriorityQueueElement} object is not contained in and managed by any
+	 * {@link HeapPriorityQueue}. We do not strictly enforce that internal indexes must be reset to this value when
+	 * elements are removed from a {@link HeapPriorityQueue}.
 	 */
 	int NOT_CONTAINED = Integer.MIN_VALUE;
 
 	/**
-	 * Returns the current index of this object in the internal array of {@link HeapOrderedSet}.
+	 * Returns the current index of this object in the internal array of {@link HeapPriorityQueue}.
 	 */
-	int getManagedIndex();
+	int getInternalIndex();
 
 	/**
-	 * Sets the current index of this object in the {@link HeapOrderedSet} and should only be called by the owning
-	 * {@link HeapOrderedSet}.
+	 * Sets the current index of this object in the {@link HeapPriorityQueue} and should only be called by the owning
+	 * {@link HeapPriorityQueue}.
 	 *
 	 * @param newIndex the new index in the timer heap.
 	 */
-	void setManagedIndex(int newIndex);
+	void setInternalIndex(int newIndex);
 }

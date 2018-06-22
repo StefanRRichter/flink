@@ -20,7 +20,7 @@ package org.apache.flink.runtime.state.heap;
 
 import java.util.Comparator;
 
-public abstract class AbstractCachingOrderedSetPartition<E> implements HeapOrderedSetElement {
+public abstract class AbstractCachingOrderedSetPartition<E> implements HeapPriorityQueueElement {
 
 	protected final Comparator<E> elementComparator;
 	protected final int keyGroupId;
@@ -31,7 +31,7 @@ public abstract class AbstractCachingOrderedSetPartition<E> implements HeapOrder
 	public AbstractCachingOrderedSetPartition(int keyGroupId, Comparator<E> elementComparator) {
 		this.elementComparator = elementComparator;
 		this.keyGroupId = keyGroupId;
-		this.pqManagedIndex = HeapOrderedSetElement.NOT_CONTAINED;
+		this.pqManagedIndex = HeapPriorityQueueElement.NOT_CONTAINED;
 		this.backendOnlyElements = true;
 	}
 
@@ -61,29 +61,32 @@ public abstract class AbstractCachingOrderedSetPartition<E> implements HeapOrder
 
 		final E cacheTail = peekLastFromCache();
 
+		boolean newHead;
+
 		if (!backendOnlyElements || cacheTail != null && elementComparator.compare(toAdd, cacheTail) < 0) {
 			if (isCacheFull()) {
 				removeLastFromCache();
 				backendOnlyElements = true;
 			}
 			addToCache(toAdd);
+			newHead = toAdd.equals(peekFirstFromCache());
 		} else {
 			backendOnlyElements = true;
+			newHead = false;
 		}
 
 		addToBackend(toAdd);
-		return peekFirstFromCache() == toAdd; //TODO move into if
+		return newHead;
 	}
 
 	public boolean remove(E toRemove) {
 
 		pull();
 
-		boolean result = toRemove.equals(peekFirstFromCache());
-
+		boolean newHead = toRemove.equals(peekFirstFromCache());
 		removeFromCache(toRemove);
 		removeFromBackend(toRemove);
-		return result;
+		return newHead;
 	}
 
 	private void pull() {
@@ -93,12 +96,12 @@ public abstract class AbstractCachingOrderedSetPartition<E> implements HeapOrder
 	}
 
 	@Override
-	public int getManagedIndex() {
+	public int getInternalIndex() {
 		return pqManagedIndex;
 	}
 
 	@Override
-	public void setManagedIndex(int updateIndex) {
+	public void setInternalIndex(int updateIndex) {
 		this.pqManagedIndex = updateIndex;
 	}
 

@@ -23,7 +23,7 @@ import org.apache.flink.api.common.typeutils.CompatibilityResult;
 import org.apache.flink.api.common.typeutils.CompatibilityUtil;
 import org.apache.flink.api.common.typeutils.TypeSerializer;
 import org.apache.flink.runtime.state.KeyGroupRange;
-import org.apache.flink.runtime.state.heap.HeapOrderedSet;
+import org.apache.flink.runtime.state.heap.HeapPriorityQueueSet;
 import org.apache.flink.streaming.runtime.tasks.ProcessingTimeCallback;
 import org.apache.flink.streaming.runtime.tasks.ProcessingTimeService;
 import org.apache.flink.util.Preconditions;
@@ -47,12 +47,12 @@ public class HeapInternalTimerService<K, N> implements InternalTimerService<N>, 
 	/**
 	 * Processing time timers that are currently in-flight.
 	 */
-	private final HeapOrderedSet<TimerHeapInternalTimer<K, N>> processingTimeTimersQueue;
+	private final HeapPriorityQueueSet<TimerHeapInternalTimer<K, N>> processingTimeTimersQueue;
 
 	/**
 	 * Event time timers that are currently in-flight.
 	 */
-	private final HeapOrderedSet<TimerHeapInternalTimer<K, N>> eventTimeTimersQueue;
+	private final HeapPriorityQueueSet<TimerHeapInternalTimer<K, N>> eventTimeTimersQueue;
 
 	/**
 	 * Information concerning the local key-group range.
@@ -342,10 +342,10 @@ public class HeapInternalTimerService<K, N> implements InternalTimerService<N>, 
 			(this.namespaceDeserializer != null && !this.namespaceDeserializer.equals(restoredSnapshot.getNamespaceSerializer()));
 	}
 
-	private static <K, N> HeapOrderedSet<TimerHeapInternalTimer<K, N>> createOrderedSetState(
+	private static <K, N> HeapPriorityQueueSet<TimerHeapInternalTimer<K, N>> createOrderedSetState(
 		KeyGroupRange localKeyGroupRange,
 		int totalKeyGroups) {
-		return new HeapOrderedSet<>(
+		return new HeapPriorityQueueSet<>(
 			TimerHeapInternalTimer.getTimerComparator(),
 			TimerHeapInternalTimer.getKeyExtractorFunction(),
 			128,

@@ -23,7 +23,7 @@ import org.apache.flink.runtime.state.KeyExtractorFunction;
 import org.apache.flink.runtime.state.KeyGroupPartitioner;
 import org.apache.flink.runtime.state.KeyGroupRange;
 import org.apache.flink.runtime.state.StateSnapshot;
-import org.apache.flink.runtime.state.heap.HeapOrderedSet;
+import org.apache.flink.runtime.state.heap.HeapPriorityQueueSet;
 
 import javax.annotation.Nonnegative;
 import javax.annotation.Nonnull;
@@ -32,7 +32,7 @@ import javax.annotation.Nullable;
 import java.lang.reflect.Array;
 
 /**
- * This class represents the snapshot of an {@link HeapOrderedSet}.
+ * This class represents the snapshot of an {@link HeapPriorityQueueSet}.
  *
  * @param <T> type of the state elements.
  */

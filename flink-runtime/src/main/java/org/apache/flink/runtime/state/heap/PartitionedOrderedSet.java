@@ -21,7 +21,7 @@ package org.apache.flink.runtime.state.heap;
 import org.apache.flink.runtime.state.KeyExtractorFunction;
 import org.apache.flink.runtime.state.KeyGroupRange;
 import org.apache.flink.runtime.state.KeyGroupRangeAssignment;
-import org.apache.flink.runtime.state.OrderedSetState;
+import org.apache.flink.runtime.state.InternalPriorityQueue;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -31,7 +31,7 @@ import java.util.Collection;
 import java.util.Comparator;
 import java.util.Iterator;
 
-public class PartitionedOrderedSet<T> implements OrderedSetState<T> {
+public class PartitionedOrderedSet<T> implements InternalPriorityQueue<T> {
 
 	private static final class SortedCacheComparator<T> implements Comparator<AbstractCachingOrderedSetPartition<T>> {
 
@@ -62,7 +62,7 @@ public class PartitionedOrderedSet<T> implements OrderedSetState<T> {
 	 * Function to extract the key from contained elements.
 	 */
 	@Nonnull
-	private final HeapOrderedSetBase<AbstractCachingOrderedSetPartition<T>> keyGroupHeap;
+	private final HeapPriorityQueue<AbstractCachingOrderedSetPartition<T>> keyGroupHeap;
 	private final KeyExtractorFunction<T> keyExtractor;
 	private final AbstractCachingOrderedSetPartition<T>[] keyGroupLists;
 	private final int totalKeyGroups;
@@ -80,7 +80,7 @@ public class PartitionedOrderedSet<T> implements OrderedSetState<T> {
 		this.totalKeyGroups = totalKeyGroups;
 		this.firstKeyGroup = keyGroupRange.getStartKeyGroup();
 		this.keyGroupLists = new AbstractCachingOrderedSetPartition[keyGroupRange.getNumberOfKeyGroups()];
-		this.keyGroupHeap = new HeapOrderedSetBase<>(
+		this.keyGroupHeap = new HeapPriorityQueue<>(
 			new SortedCacheComparator<>(elementComparator),
 			keyGroupRange.getNumberOfKeyGroups());
 		for (int i = 0; i < keyGroupLists.length; i++) {

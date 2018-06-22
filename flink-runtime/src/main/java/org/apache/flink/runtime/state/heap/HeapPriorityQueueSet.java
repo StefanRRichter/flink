@@ -22,7 +22,6 @@ import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.runtime.state.KeyExtractorFunction;
 import org.apache.flink.runtime.state.KeyGroupRange;
 import org.apache.flink.runtime.state.KeyGroupRangeAssignment;
-import org.apache.flink.runtime.state.OrderedSetState;
 
 import javax.annotation.Nonnegative;
 import javax.annotation.Nonnull;
@@ -38,23 +37,19 @@ import java.util.Set;
 import static org.apache.flink.util.Preconditions.checkArgument;
 
 /**
- * A heap-based priority queue for {@link HeapOrderedSetElement} objects. This heap is supported by hash sets for fast
- * contains (de-duplication) and deletes. The heap implementation is a simple binary tree stored inside an array.
- * Element indexes in the heap array start at 1 instead of 0 to make array index computations a bit simpler in the hot
- * methods.
+ * A heap-based priority queue with set semantics, based on {@link HeapPriorityQueue}. The heap is supported by hash
+ * set for fast contains (de-duplication) and deletes. Object identification happens based on {@link #equals(Object)}.
  *
  * <p>Possible future improvements:
  * <ul>
- *  <li>We could also implement shrinking for the heap and the deduplication maps.</li>
+ *  <li>We could also implement shrinking for the heap and the deduplication set.</li>
  *  <li>We could replace the deduplication maps with more efficient custom implementations. In particular, a hash set
  * would be enough if it could return existing elements on unsuccessful adding, etc..</li>
  * </ul>
  *
  * @param <T> type of the contained elements.
  */
-public class HeapOrderedSet<T extends HeapOrderedSetElement>
-	extends HeapOrderedSetBase<T>
-	implements OrderedSetState<T> {
+public class HeapPriorityQueueSet<T extends HeapPriorityQueueElement> extends HeapPriorityQueue<T> {
 
 	/**
 	 * Function to extract the key from contained elements.
@@ -77,7 +72,7 @@ public class HeapOrderedSet<T extends HeapOrderedSetElement>
 	private final int totalNumberOfKeyGroups;
 
 	/**
-	 * Creates an empty {@link HeapOrderedSet} with the requested initial capacity.
+	 * Creates an empty {@link HeapPriorityQueueSet} with the requested initial capacity.
 	 *
 	 * @param elementComparator comparator for the contained elements.
 	 * @param keyExtractor function to extract a key from the contained elements.
@@ -86,7 +81,7 @@ public class HeapOrderedSet<T extends HeapOrderedSetElement>
 	 * @param totalNumberOfKeyGroups the total number of key-groups of the job.
 	 */
 	@SuppressWarnings("unchecked")
-	public HeapOrderedSet(
+	public HeapPriorityQueueSet(
 		@Nonnull Comparator<T> elementComparator,
 		@Nonnull KeyExtractorFunction<T> keyExtractor,
 		@Nonnegative int minimumCapacity,
@@ -119,11 +114,18 @@ public class HeapOrderedSet<T extends HeapOrderedSetElement>
 		}
 	}
 
+	/**
+	 * Returns true iff the element was added.
+	 */
 	@Override
 	public boolean add(@Nonnull T element) {
 		return getDedupMapForElement(element).putIfAbsent(element, element) == null && super.add(element);
 	}
 
+	/**
+	 * In contrast to the superclass and to maintain set semantics, removal here is based on comparing the given element
+	 * via {@link #equals(Object)}. Returns true iff an element was removed.
+	 */
 	@Override
 	public boolean remove(@Nonnull T elementToRemove) {
 		T storedElement = getDedupMapForElement(elementToRemove).remove(elementToRemove);

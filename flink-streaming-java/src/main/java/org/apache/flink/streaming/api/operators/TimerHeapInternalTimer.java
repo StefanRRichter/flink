@@ -27,8 +27,8 @@ import org.apache.flink.api.common.typeutils.base.LongSerializer;
 import org.apache.flink.core.memory.DataInputView;
 import org.apache.flink.core.memory.DataOutputView;
 import org.apache.flink.runtime.state.KeyExtractorFunction;
-import org.apache.flink.runtime.state.heap.HeapOrderedSet;
-import org.apache.flink.runtime.state.heap.HeapOrderedSetElement;
+import org.apache.flink.runtime.state.heap.HeapPriorityQueueSet;
+import org.apache.flink.runtime.state.heap.HeapPriorityQueueElement;
 
 import javax.annotation.Nonnull;
 
@@ -36,13 +36,13 @@ import java.io.IOException;
 import java.util.Comparator;
 
 /**
- * Implementation of {@link InternalTimer} to use with a {@link HeapOrderedSet}.
+ * Implementation of {@link InternalTimer} to use with a {@link HeapPriorityQueueSet}.
  *
  * @param <K> Type of the keys to which timers are scoped.
  * @param <N> Type of the namespace to which timers are scoped.
  */
 @Internal
-public final class TimerHeapInternalTimer<K, N> implements InternalTimer<K, N>, HeapOrderedSetElement {
+public final class TimerHeapInternalTimer<K, N> implements InternalTimer<K, N>, HeapPriorityQueueElement {
 
 	private static final KeyExtractorFunction<TimerHeapInternalTimer<?, ?>> KEY_EXTRACTOR_FUNCTION =
 		TimerHeapInternalTimer::getKey;
@@ -105,12 +105,12 @@ public final class TimerHeapInternalTimer<K, N> implements InternalTimer<K, N>, 
 	}
 
 	@Override
-	public int getManagedIndex() {
+	public int getInternalIndex() {
 		return timerHeapIndex;
 	}
 
 	@Override
-	public void setManagedIndex(int newIndex) {
+	public void setInternalIndex(int newIndex) {
 		this.timerHeapIndex = newIndex;
 	}
 
@@ -119,7 +119,7 @@ public final class TimerHeapInternalTimer<K, N> implements InternalTimer<K, N>, 
 	 * removed.
 	 */
 	void removedFromTimerQueue() {
-		setManagedIndex(NOT_CONTAINED);
+		setInternalIndex(NOT_CONTAINED);
 	}
 
 	@Override

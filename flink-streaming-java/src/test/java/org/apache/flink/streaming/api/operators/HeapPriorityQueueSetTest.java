@@ -21,7 +21,7 @@ package org.apache.flink.streaming.api.operators;
 import org.apache.flink.runtime.state.KeyExtractorFunction;
 import org.apache.flink.runtime.state.KeyGroupRange;
 import org.apache.flink.runtime.state.VoidNamespace;
-import org.apache.flink.runtime.state.heap.HeapOrderedSet;
+import org.apache.flink.runtime.state.heap.HeapPriorityQueueSet;
 import org.apache.flink.util.Preconditions;
 import org.apache.flink.util.TestLogger;
 
@@ -42,20 +42,20 @@ import java.util.Set;
 import java.util.concurrent.ThreadLocalRandom;
 
 /**
- * Tests for {@link HeapOrderedSet}.
+ * Tests for {@link HeapPriorityQueueSet}.
  */
-public class HeapOrderedSetTest extends TestLogger {
+public class HeapPriorityQueueSetTest extends TestLogger {
 
 	private static final KeyGroupRange KEY_GROUP_RANGE = new KeyGroupRange(0, 1);
 
 	private static void insertRandomTimers(
-		HeapOrderedSet<TimerHeapInternalTimer<Integer, VoidNamespace>> timerPriorityQueue,
+		HeapPriorityQueueSet<TimerHeapInternalTimer<Integer, VoidNamespace>> timerPriorityQueue,
 		int count) {
 		insertRandomTimers(timerPriorityQueue, null, count);
 	}
 
 	private static void insertRandomTimers(
-		@Nonnull HeapOrderedSet<TimerHeapInternalTimer<Integer, VoidNamespace>> timerPriorityQueue,
+		@Nonnull HeapPriorityQueueSet<TimerHeapInternalTimer<Integer, VoidNamespace>> timerPriorityQueue,
 		@Nullable Set<TimerHeapInternalTimer<Integer, VoidNamespace>> checkSet,
 		int count) {
 
@@ -71,7 +71,7 @@ public class HeapOrderedSetTest extends TestLogger {
 		}
 	}
 
-	private static HeapOrderedSet<TimerHeapInternalTimer<Integer, VoidNamespace>> newPriorityQueue(
+	private static HeapPriorityQueueSet<TimerHeapInternalTimer<Integer, VoidNamespace>> newPriorityQueue(
 		int initialCapacity) {
 
 		final KeyExtractorFunction<TimerHeapInternalTimer<Integer, VoidNamespace>> keyExtractorFunction =
@@ -80,7 +80,7 @@ public class HeapOrderedSetTest extends TestLogger {
 		final Comparator<TimerHeapInternalTimer<Integer, VoidNamespace>> timerComparator =
 			TimerHeapInternalTimer.getTimerComparator();
 
-		return new HeapOrderedSet<>(
+		return new HeapPriorityQueueSet<>(
 			timerComparator,
 			keyExtractorFunction,
 			initialCapacity,
@@ -92,7 +92,7 @@ public class HeapOrderedSetTest extends TestLogger {
 	public void testPeekPollOrder() {
 		final int initialCapacity = 4;
 		final int testSize = 1000;
-		HeapOrderedSet<TimerHeapInternalTimer<Integer, VoidNamespace>> timerPriorityQueue =
+		HeapPriorityQueueSet<TimerHeapInternalTimer<Integer, VoidNamespace>> timerPriorityQueue =
 			newPriorityQueue(initialCapacity);
 		HashSet<TimerHeapInternalTimer<Integer, VoidNamespace>> checkSet = new HashSet<>(testSize);
 
@@ -120,7 +120,7 @@ public class HeapOrderedSetTest extends TestLogger {
 	@Test
 	public void testStopInsertMixKeepsOrder() {
 
-		HeapOrderedSet<TimerHeapInternalTimer<Integer, VoidNamespace>> timerPriorityQueue = newPriorityQueue(3);
+		HeapPriorityQueueSet<TimerHeapInternalTimer<Integer, VoidNamespace>> timerPriorityQueue = newPriorityQueue(3);
 
 		final int testSize = 345;
 		HashSet<TimerHeapInternalTimer<Integer, VoidNamespace>> checkSet = new HashSet<>(testSize);
@@ -151,7 +151,7 @@ public class HeapOrderedSetTest extends TestLogger {
 
 	@Test
 	public void testPoll() {
-		HeapOrderedSet<TimerHeapInternalTimer<Integer, VoidNamespace>> timerPriorityQueue = newPriorityQueue(3);
+		HeapPriorityQueueSet<TimerHeapInternalTimer<Integer, VoidNamespace>> timerPriorityQueue = newPriorityQueue(3);
 
 		Assert.assertNull(timerPriorityQueue.poll());
 
@@ -174,7 +174,7 @@ public class HeapOrderedSetTest extends TestLogger {
 
 	@Test
 	public void testIsEmpty() {
-		HeapOrderedSet<TimerHeapInternalTimer<Integer, VoidNamespace>> timerPriorityQueue =
+		HeapPriorityQueueSet<TimerHeapInternalTimer<Integer, VoidNamespace>> timerPriorityQueue =
 			newPriorityQueue(1);
 
 		Assert.assertTrue(timerPriorityQueue.isEmpty());
@@ -198,7 +198,7 @@ public class HeapOrderedSetTest extends TestLogger {
 		twoTimesTimerSet.addAll(timerSet);
 		twoTimesTimerSet.addAll(timerSet);
 
-		HeapOrderedSet<TimerHeapInternalTimer<Integer, VoidNamespace>> timerPriorityQueue =
+		HeapPriorityQueueSet<TimerHeapInternalTimer<Integer, VoidNamespace>> timerPriorityQueue =
 			newPriorityQueue(1);
 
 		timerPriorityQueue.addAll(twoTimesTimerSet);
@@ -230,7 +230,7 @@ public class HeapOrderedSetTest extends TestLogger {
 
 			HashSet<TimerHeapInternalTimer<Integer, VoidNamespace>> checkSet = new HashSet<>(testSize);
 
-			HeapOrderedSet<TimerHeapInternalTimer<Integer, VoidNamespace>> timerPriorityQueue =
+			HeapPriorityQueueSet<TimerHeapInternalTimer<Integer, VoidNamespace>> timerPriorityQueue =
 				newPriorityQueue(1);
 
 			Assert.assertEquals(testArray.length, timerPriorityQueue.toArray(testArray).length);
@@ -257,7 +257,7 @@ public class HeapOrderedSetTest extends TestLogger {
 
 	@Test
 	public void testIterator() {
-		HeapOrderedSet<TimerHeapInternalTimer<Integer, VoidNamespace>> timerPriorityQueue =
+		HeapPriorityQueueSet<TimerHeapInternalTimer<Integer, VoidNamespace>> timerPriorityQueue =
 			newPriorityQueue(1);
 
 		// test empty iterator
@@ -289,7 +289,7 @@ public class HeapOrderedSetTest extends TestLogger {
 
 	@Test
 	public void testClear() {
-		HeapOrderedSet<TimerHeapInternalTimer<Integer, VoidNamespace>> timerPriorityQueue =
+		HeapPriorityQueueSet<TimerHeapInternalTimer<Integer, VoidNamespace>> timerPriorityQueue =
 			newPriorityQueue(1);
 
 		int count = 10;
@@ -301,7 +301,7 @@ public class HeapOrderedSetTest extends TestLogger {
 
 	@Test
 	public void testScheduleTimer() {
-		HeapOrderedSet<TimerHeapInternalTimer<Integer, VoidNamespace>> timerPriorityQueue =
+		HeapPriorityQueueSet<TimerHeapInternalTimer<Integer, VoidNamespace>> timerPriorityQueue =
 			newPriorityQueue(1);
 
 		final long timestamp = 42L;
@@ -321,7 +321,7 @@ public class HeapOrderedSetTest extends TestLogger {
 
 	@Test
 	public void testStopTimer() {
-		HeapOrderedSet<TimerHeapInternalTimer<Integer, VoidNamespace>> timerPriorityQueue =
+		HeapPriorityQueueSet<TimerHeapInternalTimer<Integer, VoidNamespace>> timerPriorityQueue =
 			newPriorityQueue(1);
 
 		final long timestamp = 42L;

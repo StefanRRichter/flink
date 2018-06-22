@@ -18,7 +18,7 @@
 
 package org.apache.flink.runtime.state.heap;
 
-import org.apache.flink.runtime.state.OrderedSetState;
+import org.apache.flink.runtime.state.InternalPriorityQueue;
 
 import javax.annotation.Nonnegative;
 import javax.annotation.Nonnull;
@@ -33,21 +33,20 @@ import java.util.NoSuchElementException;
 import static org.apache.flink.util.CollectionUtil.MAX_ARRAY_SIZE;
 
 /**
- * A heap-based priority queue for {@link HeapOrderedSetElement} objects. This heap is supported by hash sets for fast
- * contains (de-duplication) and deletes. The heap implementation is a simple binary tree stored inside an array.
- * Element indexes in the heap array start at 1 instead of 0 to make array index computations a bit simpler in the hot
- * methods.
+ * Basic heap-based priority queue for {@link HeapPriorityQueueElement} objects. This heap supports fast deletes
+ * because it manages position indexes of the contained {@link HeapPriorityQueueElement}s. The heap implementation is
+ * a simple binary tree stored inside an array. Element indexes in the heap array start at 1 instead of 0 to make array
+ * index computations a bit simpler in the hot methods. Object identification of remove is based on object identity and
+ * not on equals.
  *
  * <p>Possible future improvements:
  * <ul>
- *  <li>We could also implement shrinking for the heap and the deduplication maps.</li>
- *  <li>We could replace the deduplication maps with more efficient custom implementations. In particular, a hash set
- * would be enough if it could return existing elements on unsuccessful adding, etc..</li>
+ *  <li>We could also implement shrinking for the heap.</li>
  * </ul>
  *
  * @param <T> type of the contained elements.
  */
-public class HeapOrderedSetBase<T extends HeapOrderedSetElement> implements OrderedSetState<T> {
+public class HeapPriorityQueue<T extends HeapPriorityQueueElement> implements InternalPriorityQueue<T> {
 
 	/**
 	 * Comparator for the contained elements.
@@ -65,18 +64,18 @@ public class HeapOrderedSetBase<T extends HeapOrderedSetElement> implements Orde
 	private int size;
 
 	/**
-	 * Creates an empty {@link HeapOrderedSetBase} with the requested initial capacity.
+	 * Creates an empty {@link HeapPriorityQueue} with the requested initial capacity.
 	 *
 	 * @param elementComparator comparator for the contained elements.
 	 * @param minimumCapacity the minimum and initial capacity of this priority queue.
 	 */
 	@SuppressWarnings("unchecked")
-	public HeapOrderedSetBase(
+	public HeapPriorityQueue(
 		@Nonnull Comparator<T> elementComparator,
 		@Nonnegative int minimumCapacity) {
 
 		this.elementComparator = elementComparator;
-		this.queue = (T[]) new HeapOrderedSetElement[1 + minimumCapacity];
+		this.queue = (T[]) new HeapPriorityQueueElement[1 + minimumCapacity];
 	}
 
 	@Override
@@ -91,11 +90,17 @@ public class HeapOrderedSetBase<T extends HeapOrderedSetElement> implements Orde
 		return size() > 0 ? queue[1] : null;
 	}
 
+	/**
+	 * Adds the element to add to the heap. This element should not be managed by any other {@link HeapPriorityQueue}.
+	 */
 	@Override
 	public boolean add(@Nonnull T toAdd) {
 		return addInternal(toAdd);
 	}
 
+	/**
+	 * This remove is based on object identity, not the result of equals.
+	 */
 	@Override
 	public boolean remove(@Nonnull T toStop) {
 		return removeInternal(toStop);
@@ -165,7 +170,7 @@ public class HeapOrderedSetBase<T extends HeapOrderedSetElement> implements Orde
 	}
 
 	private boolean removeInternal(@Nonnull T elementToRemove) {
-		removeElementAtIndex(elementToRemove.getManagedIndex());
+		removeElementAtIndex(elementToRemove.getInternalIndex());
 		return true;
 	}
 
@@ -173,7 +178,7 @@ public class HeapOrderedSetBase<T extends HeapOrderedSetElement> implements Orde
 		T[] heap = this.queue;
 		T removedValue = heap[removeIdx];
 
-		assert removedValue.getManagedIndex() == removeIdx;
+		assert removedValue.getInternalIndex() == removeIdx;
 
 		final int oldSize = size;
 
@@ -190,7 +195,7 @@ public class HeapOrderedSetBase<T extends HeapOrderedSetElement> implements Orde
 	}
 
 	public void adjustElement(@Nonnull T element) {
-		final int elementIndex = element.getManagedIndex();
+		final int elementIndex = element.getInternalIndex();
 		if (element == queue[elementIndex]) {
 			adjustElementAtIndex(element, elementIndex);
 		}
@@ -246,16 +251,6 @@ public class HeapOrderedSetBase<T extends HeapOrderedSetElement> implements Orde
 		moveElementToIdx(currentElement, idx);
 	}
 
-//	public void validate() {
-//		for (int i = 2; i <= size; ++i) {
-//			xxx(i);
-//		}
-//	}
-//
-//	private void xxx(int idx) {
-//		Preconditions.checkState(elementComparator.compare(queue[idx >>> 1], queue[idx]) <= 0);
-//	}
-
 	private boolean isElementIndexValid(int elementIndex, int heapSize) {
 		return elementIndex <= heapSize;
 	}
@@ -266,7 +261,7 @@ public class HeapOrderedSetBase<T extends HeapOrderedSetElement> implements Orde
 
 	private void moveElementToIdx(T element, int idx) {
 		queue[idx] = element;
-		element.setManagedIndex(idx);
+		element.setInternalIndex(idx);
 	}
 
 	private int increaseSizeByOne() {
@@ -303,7 +298,7 @@ public class HeapOrderedSetBase<T extends HeapOrderedSetElement> implements Orde
 	}
 
 	/**
-	 * {@link Iterator} implementation for {@link HeapOrderedSetBase}.
+	 * {@link Iterator} implementation for {@link HeapPriorityQueue}.
 	 * {@link Iterator#remove()} is not supported.
 	 */
 	private class HeapIterator implements Iterator<T> {

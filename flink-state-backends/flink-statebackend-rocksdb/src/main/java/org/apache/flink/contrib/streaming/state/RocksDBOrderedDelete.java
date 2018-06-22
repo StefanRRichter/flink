@@ -29,7 +29,7 @@ import org.apache.flink.core.memory.DataOutputViewStreamWrapper;
 import org.apache.flink.runtime.state.KeyExtractorFunction;
 import org.apache.flink.runtime.state.KeyGroupRange;
 import org.apache.flink.runtime.state.KeyGroupRangeAssignment;
-import org.apache.flink.runtime.state.OrderedSetState;
+import org.apache.flink.runtime.state.InternalPriorityQueue;
 import org.apache.flink.util.FlinkRuntimeException;
 
 import org.rocksdb.ColumnFamilyHandle;
@@ -57,7 +57,7 @@ import java.util.Set;
  *
  * @param <T>
  */
-public class RocksDBOrderedDelete<T> implements OrderedSetState<T> {
+public class RocksDBOrderedDelete<T> implements InternalPriorityQueue<T> {
 
 	@FunctionalInterface
 	public interface PartialIterationConsumer<T> {
@@ -193,7 +193,7 @@ public class RocksDBOrderedDelete<T> implements OrderedSetState<T> {
 	 * {@link #size()} call if a more accurate result is needed.
 	 */
 	@Override
-	public boolean add(T element) {
+	public boolean add(@Nonnull T element) {
 
 		insertDB(element);
 
@@ -220,7 +220,7 @@ public class RocksDBOrderedDelete<T> implements OrderedSetState<T> {
 	 * result is needed.
 	 */
 	@Override
-	public boolean remove(T element) {
+	public boolean remove(@Nonnull T element) {
 		removeDB(element);
 
 		T headElement = groupHeadElements[groupIndexHeap[0]];

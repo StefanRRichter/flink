@@ -27,12 +27,12 @@ import javax.annotation.Nullable;
 import java.util.Collection;
 
 /**
- * Interface for set that is organized as an ordered set.
+ * Interface for collection that gives in order access to elements w.r.t their priority.
  *
  * @param <T> type of elements in the ordered set.
  */
 @Internal
-public interface OrderedSetState<T> extends Iterable<T>{
+public interface InternalPriorityQueue<T> extends Iterable<T>{
 
 	/**
 	 * Retrieves and removes the first element (w.r.t. the order) of this set,
