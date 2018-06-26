@@ -18,6 +18,8 @@
 
 package org.apache.flink.runtime.state.heap;
 
+import org.apache.flink.util.Preconditions;
+
 import it.unimi.dsi.fastutil.objects.ObjectAVLTreeSet;
 
 import java.util.Comparator;
@@ -26,13 +28,14 @@ import java.util.Comparator;
  *
  * @param <E>
  */
-public class TreeOrderedCache<E> implements CachingInternalPriorityQueue.OrderedCache<E> {
+public class TreeOrderedSetCache<E> implements CachingInternalPriorityQueueSet.OrderedSetCache<E> {
 
 	private final ObjectAVLTreeSet<E> avlTree;
 	private final Comparator<E> elementComparator;
 	private final int capacity;
 
-	public TreeOrderedCache(Comparator<E> elementComparator, int capacity) {
+	public TreeOrderedSetCache(Comparator<E> elementComparator, int capacity) {
+		Preconditions.checkArgument(capacity >= 1);
 		this.avlTree = new ObjectAVLTreeSet<>(elementComparator);
 		this.elementComparator = elementComparator;
 		this.capacity = capacity;

@@ -19,6 +19,7 @@
 package org.apache.flink.runtime.state.heap;
 
 import org.apache.flink.runtime.state.InternalPriorityQueue;
+import org.apache.flink.util.CloseableIterator;
 
 import javax.annotation.Nonnegative;
 import javax.annotation.Nonnull;
@@ -48,6 +49,8 @@ import static org.apache.flink.util.CollectionUtil.MAX_ARRAY_SIZE;
  */
 public class HeapPriorityQueue<T extends HeapPriorityQueueElement> implements InternalPriorityQueue<T> {
 
+	private static final int QUEUE_HEAD_INDEX = 1;
+
 	/**
 	 * Comparator for the contained elements.
 	 */
@@ -75,19 +78,19 @@ public class HeapPriorityQueue<T extends HeapPriorityQueueElement> implements In
 		@Nonnegative int minimumCapacity) {
 
 		this.elementComparator = elementComparator;
-		this.queue = (T[]) new HeapPriorityQueueElement[1 + minimumCapacity];
+		this.queue = (T[]) new HeapPriorityQueueElement[QUEUE_HEAD_INDEX + minimumCapacity];
 	}
 
 	@Override
 	@Nullable
 	public T poll() {
-		return size() > 0 ? removeElementAtIndex(1) : null;
+		return size() > 0 ? removeElementAtIndex(QUEUE_HEAD_INDEX) : null;
 	}
 
 	@Override
 	@Nullable
 	public T peek() {
-		return size() > 0 ? queue[1] : null;
+		return size() > 0 ? queue[QUEUE_HEAD_INDEX] : null;
 	}
 
 	/**
@@ -117,19 +120,29 @@ public class HeapPriorityQueue<T extends HeapPriorityQueueElement> implements In
 		return size;
 	}
 
-	@Override
 	public void clear() {
 		size = 0;
 		Arrays.fill(queue, null);
 	}
 
+//	public void validate() {
+//		for (int i = 2; i <= size; ++i) {
+//			xxx(i);
+//		}
+//		System.out.println("OK");
+//	}
+//
+//	private void xxx(int idx) {
+//		Preconditions.checkState(elementComparator.compare(queue[idx >>> 1], queue[idx]) <= 0);
+//	}
+
 	@SuppressWarnings({"unchecked"})
 	@Nonnull
 	public <O> O[] toArray(O[] out) {
 		if (out.length < size) {
-			return (O[]) Arrays.copyOfRange(queue, 1, size + 1, out.getClass());
+			return (O[]) Arrays.copyOfRange(queue, QUEUE_HEAD_INDEX, QUEUE_HEAD_INDEX + size, out.getClass());
 		} else {
-			System.arraycopy(queue, 1, out, 0, size);
+			System.arraycopy(queue, QUEUE_HEAD_INDEX, out, 0, size);
 			if (out.length > size) {
 				out[size] = null;
 			}
@@ -144,7 +157,7 @@ public class HeapPriorityQueue<T extends HeapPriorityQueueElement> implements In
 	 * @return an iterator over the elements in this queue.
 	 */
 	@Nonnull
-	public Iterator<T> iterator() {
+	public CloseableIterator<T> iterator() {
 		return new HeapIterator();
 	}
 
@@ -166,12 +179,13 @@ public class HeapPriorityQueue<T extends HeapPriorityQueueElement> implements In
 		final int newSize = increaseSizeByOne();
 		moveElementToIdx(element, newSize);
 		siftUp(newSize);
-		return true;
+		return element.getInternalIndex() == QUEUE_HEAD_INDEX;
 	}
 
 	private boolean removeInternal(@Nonnull T elementToRemove) {
-		removeElementAtIndex(elementToRemove.getInternalIndex());
-		return true;
+		final int elementIndex = elementToRemove.getInternalIndex();
+		removeElementAtIndex(elementIndex);
+		return elementIndex == QUEUE_HEAD_INDEX;
 	}
 
 	private T removeElementAtIndex(int removeIdx) {
@@ -301,12 +315,12 @@ public class HeapPriorityQueue<T extends HeapPriorityQueueElement> implements In
 	 * {@link Iterator} implementation for {@link HeapPriorityQueue}.
 	 * {@link Iterator#remove()} is not supported.
 	 */
-	private class HeapIterator implements Iterator<T> {
+	private class HeapIterator implements CloseableIterator<T> {
 
 		private int iterationIdx;
 
 		HeapIterator() {
-			this.iterationIdx = 0;
+			this.iterationIdx = QUEUE_HEAD_INDEX - 1;
 		}
 
 		@Override
@@ -320,6 +334,10 @@ public class HeapPriorityQueue<T extends HeapPriorityQueueElement> implements In
 				throw new NoSuchElementException("Iterator has no next element.");
 			}
 			return queue[++iterationIdx];
+		}
+
+		@Override
+		public void close() {
 		}
 	}
 }

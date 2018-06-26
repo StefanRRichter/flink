@@ -24,7 +24,8 @@ import org.apache.flink.core.memory.ByteArrayInputStreamWithPos;
 import org.apache.flink.core.memory.ByteArrayOutputStreamWithPos;
 import org.apache.flink.core.memory.DataInputViewStreamWrapper;
 import org.apache.flink.core.memory.DataOutputViewStreamWrapper;
-import org.apache.flink.runtime.state.heap.CachingInternalPriorityQueue;
+import org.apache.flink.runtime.state.heap.CachingInternalPriorityQueueSet;
+import org.apache.flink.util.CloseableIterator;
 import org.apache.flink.util.FlinkRuntimeException;
 
 import org.rocksdb.ColumnFamilyHandle;
@@ -32,12 +33,16 @@ import org.rocksdb.ReadOptions;
 import org.rocksdb.RocksDB;
 import org.rocksdb.RocksDBException;
 
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
+
 import java.io.IOException;
+import java.util.NoSuchElementException;
 
 /**
  * @param <T>
  */
-public class RocksDBOrderedStore<T> implements CachingInternalPriorityQueue.OrderedStore<T> {
+public class RocksDBOrderedStore<T> implements CachingInternalPriorityQueueSet.OrderedSetStore<T> {
 
 	private static final byte[] DUMMY_BYTES = "0".getBytes(ConfigConstants.DEFAULT_CHARSET);
 
@@ -106,34 +111,6 @@ public class RocksDBOrderedStore<T> implements CachingInternalPriorityQueue.Orde
 	}
 
 	@Override
-	public boolean refillCacheFromBackend(CachingInternalPriorityQueue.OrderedCache<T> orderedCache) {
-
-		flushWriteBatch();
-
-		try (RocksIteratorWrapper iter = new RocksIteratorWrapper(db.newIterator(columnFamilyHandle, readOptions))) {
-
-			iter.seek(groupPrefixBytes);
-			boolean valid = iter.isValid();
-
-			while (valid && !orderedCache.isFull()) {
-
-				byte[] elementBytes = iter.key();
-
-				if (!isPrefixWith(elementBytes, groupPrefixBytes)) {
-					break;
-				}
-
-				orderedCache.add(deserializeTimer(elementBytes));
-
-				iter.next();
-				valid = iter.isValid();
-			}
-
-			return valid;
-		}
-	}
-
-	@Override
 	public int size() {
 
 		flushWriteBatch();
@@ -149,6 +126,19 @@ public class RocksDBOrderedStore<T> implements CachingInternalPriorityQueue.Orde
 		return count;
 	}
 
+	@Override
+	public CloseableIterator<T> orderedIterator() {
+
+		flushWriteBatch();
+
+		return new RocksToJavaIteratorAdapter(
+			new RocksIteratorWrapper(
+				db.newIterator(columnFamilyHandle, readOptions)));
+	}
+
+	/**
+	 * Ensures that recent writes are flushed and reflect in the database.
+	 */
 	private void flushWriteBatch() {
 		try {
 			batchWrapper.flush();
@@ -185,6 +175,65 @@ public class RocksDBOrderedStore<T> implements CachingInternalPriorityQueue.Orde
 			return serializer.deserialize(inputView);
 		} catch (IOException e) {
 			throw new FlinkRuntimeException("Error while deserializing the timer.", e);
+		}
+	}
+
+	/**
+	 * Adapter between RocksDB iterator and Java iterator. This is also closeable to release the native resources after
+	 * use.
+	 */
+	private class RocksToJavaIteratorAdapter implements CloseableIterator<T> {
+
+		@Nonnull
+		private final RocksIteratorWrapper iterator;
+
+		@Nullable
+		private T currentElement;
+
+		private RocksToJavaIteratorAdapter(@Nonnull RocksIteratorWrapper iterator) {
+			this.iterator = iterator;
+			try {
+				iterator.seek(groupPrefixBytes);
+				deserializeNextElementIfAvailable();
+			} catch (Exception ex) {
+				// ensure resource cleanup also in the face of (runtime) exceptions in the constructor.
+				iterator.close();
+				throw new FlinkRuntimeException("Could not initialize ordered iterator.", ex);
+			}
+		}
+
+		@Override
+		public void close() {
+			iterator.close();
+		}
+
+		@Override
+		public boolean hasNext() {
+			return currentElement != null;
+		}
+
+		@Override
+		public T next() {
+			final T returnElement = this.currentElement;
+			if (returnElement == null) {
+				throw new NoSuchElementException("Iterator has no more elements!");
+			}
+			iterator.next();
+			deserializeNextElementIfAvailable();
+			return returnElement;
+		}
+
+		private void deserializeNextElementIfAvailable() {
+			if (iterator.isValid()) {
+				final byte[] elementBytes = iterator.key();
+				if (isPrefixWith(elementBytes, groupPrefixBytes)) {
+					this.currentElement = deserializeTimer(elementBytes);
+				} else {
+					this.currentElement = null;
+				}
+			} else {
+				this.currentElement = null;
+			}
 		}
 	}
 }

@@ -4,9 +4,10 @@ import org.apache.flink.api.common.typeutils.base.IntSerializer;
 import org.apache.flink.core.memory.ByteArrayOutputStreamWithPos;
 import org.apache.flink.core.memory.DataOutputViewStreamWrapper;
 import org.apache.flink.runtime.state.KeyGroupRange;
-import org.apache.flink.runtime.state.heap.CachingInternalPriorityQueue;
+import org.apache.flink.runtime.state.heap.CachingInternalPriorityQueueSet;
 import org.apache.flink.runtime.state.heap.PartitionedOrderedSet;
-import org.apache.flink.runtime.state.heap.TreeOrderedCache;
+import org.apache.flink.runtime.state.heap.TreeOrderedSetCache;
+import org.apache.flink.util.CloseableIterator;
 import org.apache.flink.util.FileUtils;
 import org.apache.flink.util.function.ThrowingConsumer;
 
@@ -27,19 +28,23 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
+import java.util.NoSuchElementException;
 import java.util.Random;
 
-public class RocksDBOrderedStoreTest {
+/**
+ * Test for RocksDBOrderedStore.
+ */
+public class RocksDBOrderedSetStoreTest {
 
 	@Rule
 	public TemporaryFolder temporaryFolder = new TemporaryFolder();
 
 	private void runTestWithRocksInstance(
-		ThrowingConsumer<CachingInternalPriorityQueue.OrderedStore<Integer>, Exception> testMethod) throws Exception {
+		ThrowingConsumer<CachingInternalPriorityQueueSet.OrderedSetStore<Integer>, Exception> testMethod) throws Exception {
 
 		final File rocksFolder = temporaryFolder.newFolder();
 		final List<ColumnFamilyHandle> columnFamilyHandles = new ArrayList<>(1);
-
+		Exception failEx = null;
 		try (final DBOptions dbOptions = PredefinedOptions.FLASH_SSD_OPTIMIZED.createDBOptions().setCreateIfMissing(true);
 			 final ColumnFamilyOptions columnFamilyOptions = PredefinedOptions.FLASH_SSD_OPTIMIZED.createColumnOptions();
 			 final WriteOptions writeOptions = new WriteOptions();
@@ -56,7 +61,7 @@ public class RocksDBOrderedStoreTest {
 
 			writeOptions.disableWAL();
 
-			final CachingInternalPriorityQueue.OrderedStore<Integer> store = new RocksDBOrderedStore<>(
+			final CachingInternalPriorityQueueSet.OrderedSetStore<Integer> store = new RocksDBOrderedStore<>(
 				0,
 				rocksDB,
 				defaultColumnFamily,
@@ -66,12 +71,57 @@ public class RocksDBOrderedStoreTest {
 				outputView,
 				batchWrapper);
 
-			testMethod.accept(store);
+			try {
+				testMethod.accept(store);
+			}catch (Exception ex) {
+				ex.printStackTrace();
+				failEx = ex;
+			}
+		}
+
+		if (failEx != null) {
+			Assert.fail(failEx.getMessage());
 		}
 	}
 
-	private void testAddImpl(CachingInternalPriorityQueue.OrderedStore<Integer> store) {
+	private void testIteratorImpl(CachingInternalPriorityQueueSet.OrderedSetStore<Integer> store) throws Exception {
+
+		//test empty iterator
+		try (final CloseableIterator<Integer> emptyIterator = store.orderedIterator()) {
+			Assert.assertFalse(emptyIterator.hasNext());
+			try {
+				emptyIterator.next();
+				Assert.fail();
+			} catch (NoSuchElementException expected) {
+			}
+		}
+
+		store.add(43);
+		store.add(42);
+		store.add(41);
+		store.add(41);
+		store.remove(42);
+
+		// test in-order iteration
+		try (final CloseableIterator<Integer> iterator = store.orderedIterator()) {
+			Assert.assertTrue(iterator.hasNext());
+			Assert.assertEquals(Integer.valueOf(41), iterator.next());
+			Assert.assertTrue(iterator.hasNext());
+			Assert.assertEquals(Integer.valueOf(43), iterator.next());
+			Assert.assertFalse(iterator.hasNext());
+			try {
+				iterator.next();
+				Assert.fail();
+			} catch (NoSuchElementException expected) {
+			}
+		}
+	}
+	private void testAddRemoveSizeImpl(CachingInternalPriorityQueueSet.OrderedSetStore<Integer> store) {
+
+		// test empty size
 		Assert.assertEquals(0, store.size());
+
+		// test add uniques
 		store.remove(41);
 		Assert.assertEquals(0, store.size());
 		store.add(41);
@@ -83,20 +133,31 @@ public class RocksDBOrderedStoreTest {
 		store.add(44);
 		Assert.assertEquals(4, store.size());
 		store.add(45);
+		Assert.assertEquals(5, store.size());
+
+		// test remove
+		store.remove(41);
+		Assert.assertEquals(4, store.size());
+		store.remove(41);
 		Assert.assertEquals(4, store.size());
 
+		// test set semantics by attempt to insert duplicate
+		store.add(42);
+		Assert.assertEquals(4, store.size());
 	}
 
 	@Test
-	public void testAdd() throws Exception {
-		runTestWithRocksInstance(this::testAddImpl);
+	public void testOrderedIterator() throws Exception {
+		runTestWithRocksInstance(this::testIteratorImpl);
 	}
 
-//	void remove(E element);
-//
-//	boolean refillCacheFromBackend(OrderedCache<E> cacheToFill);
-
 	@Test
+	public void testAddRemoveSize() throws Exception {
+		runTestWithRocksInstance(this::testAddRemoveSizeImpl);
+	}
+
+
+//	@Test
 	public void test() throws Exception {
 
 		final File file = new File(System.getProperty("java.io.tmpdir"), "rockstest");
@@ -109,6 +170,7 @@ public class RocksDBOrderedStoreTest {
 		final RocksDB rocksDB = RocksDB.open(dbOptions, file.getAbsolutePath(), descriptors, handles);
 		final ColumnFamilyHandle columnFamily = handles.get(0);
 		WriteOptions writeOptions = new WriteOptions();
+		writeOptions.disableWAL();
 
 		ReadOptions readOptions = new ReadOptions();
 		RocksDBWriteBatchWrapper batchWrapper = new RocksDBWriteBatchWrapper(rocksDB, writeOptions);
@@ -119,12 +181,12 @@ public class RocksDBOrderedStoreTest {
 			DataOutputViewStreamWrapper outputView = new DataOutputViewStreamWrapper(outputStreamWithPos);
 
 
-			PartitionedOrderedSet.SortedFetchingCacheFactory<Integer> factory = new PartitionedOrderedSet.SortedFetchingCacheFactory<Integer>() {
+			PartitionedOrderedSet.CachingInternalPriorityQueueSetFactory<Integer> factory = new PartitionedOrderedSet.CachingInternalPriorityQueueSetFactory<Integer>() {
 				@Override
-				public CachingInternalPriorityQueue<Integer> createCache(int keyGroup, Comparator<Integer> elementComparator) {
+				public CachingInternalPriorityQueueSet<Integer> createCache(int keyGroup, Comparator<Integer> elementComparator) {
 
-					final CachingInternalPriorityQueue.OrderedCache<Integer> cache = new TreeOrderedCache<>(elementComparator, cacheCapacity);
-					final CachingInternalPriorityQueue.OrderedStore<Integer> store = new RocksDBOrderedStore<>(
+					final CachingInternalPriorityQueueSet.OrderedSetCache<Integer> cache = new TreeOrderedSetCache<>(elementComparator, cacheCapacity);
+					final CachingInternalPriorityQueueSet.OrderedSetStore<Integer> store = new RocksDBOrderedStore<>(
 						keyGroup,
 						rocksDB,
 						columnFamily,
@@ -133,7 +195,7 @@ public class RocksDBOrderedStoreTest {
 						outputStreamWithPos,
 						outputView,
 						batchWrapper);
-					return new CachingInternalPriorityQueue<>(cache, store);
+					return new CachingInternalPriorityQueueSet<>(cache, store);
 				}
 			};
 
@@ -204,7 +266,6 @@ public class RocksDBOrderedStoreTest {
 			batchWrapper.close();
 			readOptions.close();
 			writeOptions.close();
-			columnFamily.close();
 			for (ColumnFamilyHandle handle : handles) {
 				handle.close();
 			}

@@ -19,6 +19,7 @@
 package org.apache.flink.runtime.state;
 
 import org.apache.flink.annotation.Internal;
+import org.apache.flink.util.CloseableIterator;
 
 import javax.annotation.Nonnegative;
 import javax.annotation.Nonnull;
@@ -32,7 +33,7 @@ import java.util.Collection;
  * @param <T> type of elements in the ordered set.
  */
 @Internal
-public interface InternalPriorityQueue<T> extends Iterable<T> {
+public interface InternalPriorityQueue<T> {
 
 	/**
 	 * Retrieves and removes the first element (w.r.t. the order) of this set,
@@ -56,8 +57,8 @@ public interface InternalPriorityQueue<T> extends Iterable<T> {
 	 * Adds the given element to the set, if it is not already contained.
 	 *
 	 * @param toAdd the element to add to the set.
-	 * @return <code>true</> only if the element was added to the set, <code>false</> if the element was not added
-	 * or it is unclear if it was added.
+	 * @return <code>true</> if the operation changed the head element or if is it unclear if the head element changed.
+	 * Only returns <code>false</> iff the head element was not changed by this operation.
 	 */
 	boolean add(@Nonnull T toAdd);
 
@@ -65,8 +66,8 @@ public interface InternalPriorityQueue<T> extends Iterable<T> {
 	 * Removes the given element from the set, if is contained in the set.
 	 *
 	 * @param toRemove the element to remove.
-	 * @return <code>true</> only if the element was removed from the set, <code>false</> if the element was not removed
-	 * or it is unclear if it was removed.
+	 * @return <code>true</> if the operation changed the head element or if is it unclear if the head element changed.
+	 * Only returns <code>false</> iff the head element was not changed by this operation.
 	 */
 	boolean remove(@Nonnull T toRemove);
 
@@ -86,12 +87,12 @@ public interface InternalPriorityQueue<T> extends Iterable<T> {
 	int size();
 
 	/**
-	 * Removed all elements from the set.
-	 */
-	void clear();
-
-	/**
 	 * Adds all the given elements to the set.
 	 */
 	void addAll(@Nullable Collection<? extends T> toAdd);
+
+	/**
+	 * Iterator over all elements, no order guaranteed. Iterator must be closed after usage.
+	 */
+	CloseableIterator<T> iterator();
 }

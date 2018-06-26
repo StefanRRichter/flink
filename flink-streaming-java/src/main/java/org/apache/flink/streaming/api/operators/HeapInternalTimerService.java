@@ -26,6 +26,8 @@ import org.apache.flink.runtime.state.KeyGroupRange;
 import org.apache.flink.runtime.state.heap.HeapPriorityQueueSet;
 import org.apache.flink.streaming.runtime.tasks.ProcessingTimeCallback;
 import org.apache.flink.streaming.runtime.tasks.ProcessingTimeService;
+import org.apache.flink.util.CloseableIterator;
+import org.apache.flink.util.FlinkRuntimeException;
 import org.apache.flink.util.Preconditions;
 
 import java.util.List;
@@ -303,21 +305,24 @@ public class HeapInternalTimerService<K, N> implements InternalTimerService<N>, 
 	}
 
 	public int numProcessingTimeTimers(N namespace) {
-		int count = 0;
-		for (InternalTimer<K, N> timer : processingTimeTimersQueue) {
-			if (timer.getNamespace().equals(namespace)) {
-				count++;
-			}
-		}
-		return count;
+		return countTimersInNamespaceInternal(namespace, processingTimeTimersQueue);
 	}
 
 	public int numEventTimeTimers(N namespace) {
+		return countTimersInNamespaceInternal(namespace, eventTimeTimersQueue);
+	}
+
+	private int countTimersInNamespaceInternal(N namespace, HeapPriorityQueueSet<TimerHeapInternalTimer<K, N>> queue) {
 		int count = 0;
-		for (InternalTimer<K, N> timer : eventTimeTimersQueue) {
-			if (timer.getNamespace().equals(namespace)) {
-				count++;
+		try (final CloseableIterator<TimerHeapInternalTimer<K, N>> iterator = queue.iterator()) {
+			while (iterator.hasNext()) {
+				final TimerHeapInternalTimer<K, N> timer = iterator.next();
+				if (timer.getNamespace().equals(namespace)) {
+					count++;
+				}
 			}
+		} catch (Exception e) {
+			throw new FlinkRuntimeException("Exception when closing iterator.", e);
 		}
 		return count;
 	}

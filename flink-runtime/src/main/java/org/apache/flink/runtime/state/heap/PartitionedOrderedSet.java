@@ -18,22 +18,26 @@
 
 package org.apache.flink.runtime.state.heap;
 
+import org.apache.flink.runtime.state.InternalPriorityQueue;
 import org.apache.flink.runtime.state.KeyExtractorFunction;
 import org.apache.flink.runtime.state.KeyGroupRange;
 import org.apache.flink.runtime.state.KeyGroupRangeAssignment;
-import org.apache.flink.runtime.state.InternalPriorityQueue;
+import org.apache.flink.util.CloseableIterator;
 
+import javax.annotation.Nonnegative;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.Comparator;
-import java.util.Iterator;
 
+/**
+ *
+ * @param <T>
+ */
 public class PartitionedOrderedSet<T> implements InternalPriorityQueue<T> {
 
-	private static final class SortedCacheComparator<T> implements Comparator<CachingInternalPriorityQueue<T>> {
+	private static final class SortedCacheComparator<T> implements Comparator<CachingInternalPriorityQueueSet<T>> {
 
 		private final Comparator<T> elementComparator;
 
@@ -42,7 +46,7 @@ public class PartitionedOrderedSet<T> implements InternalPriorityQueue<T> {
 		}
 
 		@Override
-		public int compare(CachingInternalPriorityQueue<T> o1, CachingInternalPriorityQueue<T> o2) {
+		public int compare(CachingInternalPriorityQueueSet<T> o1, CachingInternalPriorityQueueSet<T> o2) {
 			final T leftTimer = o1.peek();
 			final T rightTimer = o2.peek();
 
@@ -54,38 +58,41 @@ public class PartitionedOrderedSet<T> implements InternalPriorityQueue<T> {
 		}
 	}
 
-	public interface SortedFetchingCacheFactory<T> {
-		CachingInternalPriorityQueue<T> createCache(int keyGroupId, Comparator<T> elementComparator);
+	public interface CachingInternalPriorityQueueSetFactory<T> {
+		CachingInternalPriorityQueueSet<T> createCache(int keyGroupId, Comparator<T> elementComparator);
 	}
 
 	/**
 	 * Function to extract the key from contained elements.
 	 */
 	@Nonnull
-	private final HeapPriorityQueue<CachingInternalPriorityQueue<T>> keyGroupHeap;
+	private final HeapPriorityQueue<CachingInternalPriorityQueueSet<T>> keyGroupHeap;
+	@Nonnull
 	private final KeyExtractorFunction<T> keyExtractor;
-	private final CachingInternalPriorityQueue<T>[] keyGroupLists;
+	@Nonnull
+	private final CachingInternalPriorityQueueSet<T>[] keyGroupLists;
+
 	private final int totalKeyGroups;
 	private final int firstKeyGroup;
 
 	@SuppressWarnings("unchecked")
 	public PartitionedOrderedSet(
-		KeyExtractorFunction<T> keyExtractor,
-		Comparator<T> elementComparator,
-		SortedFetchingCacheFactory<T> fetchingCacheFactory,
-		KeyGroupRange keyGroupRange,
+		@Nonnull KeyExtractorFunction<T> keyExtractor,
+		@Nonnull Comparator<T> elementComparator,
+		@Nonnull CachingInternalPriorityQueueSetFactory<T> orderedCacheFactory,
+		@Nonnull KeyGroupRange keyGroupRange,
 		int totalKeyGroups) {
 
 		this.keyExtractor = keyExtractor;
 		this.totalKeyGroups = totalKeyGroups;
 		this.firstKeyGroup = keyGroupRange.getStartKeyGroup();
-		this.keyGroupLists = new CachingInternalPriorityQueue[keyGroupRange.getNumberOfKeyGroups()];
+		this.keyGroupLists = new CachingInternalPriorityQueueSet[keyGroupRange.getNumberOfKeyGroups()];
 		this.keyGroupHeap = new HeapPriorityQueue<>(
 			new SortedCacheComparator<>(elementComparator),
 			keyGroupRange.getNumberOfKeyGroups());
 		for (int i = 0; i < keyGroupLists.length; i++) {
-			final CachingInternalPriorityQueue<T> keyGroupCache =
-				fetchingCacheFactory.createCache(firstKeyGroup + i, elementComparator);
+			final CachingInternalPriorityQueueSet<T> keyGroupCache =
+				orderedCacheFactory.createCache(firstKeyGroup + i, elementComparator);
 			keyGroupLists[i] = keyGroupCache;
 			keyGroupHeap.add(keyGroupCache);
 		}
@@ -94,7 +101,7 @@ public class PartitionedOrderedSet<T> implements InternalPriorityQueue<T> {
 	@Nullable
 	@Override
 	public T poll() {
-		final CachingInternalPriorityQueue<T> headList = keyGroupHeap.peek();
+		final CachingInternalPriorityQueueSet<T> headList = keyGroupHeap.peek();
 		final T head = headList.poll();
 		keyGroupHeap.adjustElement(headList);
 //		keyGroupHeap.validate();
@@ -109,26 +116,30 @@ public class PartitionedOrderedSet<T> implements InternalPriorityQueue<T> {
 
 	@Override
 	public boolean add(@Nonnull T toAdd) {
-		final CachingInternalPriorityQueue<T> list = getListForElementKeyGroup(toAdd);
+		final CachingInternalPriorityQueueSet<T> list = getListForElementKeyGroup(toAdd);
 		if (list.add(toAdd)) {
 			keyGroupHeap.adjustElement(list);
 //			keyGroupHeap.validate();
+			// do we have a new head?
 			return list == keyGroupHeap.peek();
 		} else {
 //			keyGroupHeap.validate();
+			// head unchanged
 			return false;
 		}
 	}
 
 	@Override
 	public boolean remove(@Nonnull T toRemove) {
-		final CachingInternalPriorityQueue<T> list = getListForElementKeyGroup(toRemove);
+		final CachingInternalPriorityQueueSet<T> list = getListForElementKeyGroup(toRemove);
 		if (list.remove(toRemove)) {
 			keyGroupHeap.adjustElement(list);
 //			keyGroupHeap.validate();
+			// do we have a new head?
 			return list == keyGroupHeap.peek();
 		} else {
 //			keyGroupHeap.validate();
+			// head unchanged
 			return false;
 		}
 	}
@@ -141,15 +152,10 @@ public class PartitionedOrderedSet<T> implements InternalPriorityQueue<T> {
 	@Override
 	public int size() {
 		int sizeSum = 0;
-		for (CachingInternalPriorityQueue<T> list : keyGroupLists) {
+		for (CachingInternalPriorityQueueSet<T> list : keyGroupLists) {
 			sizeSum += list.size();
 		}
 		return sizeSum;
-	}
-
-	@Override
-	public void clear() {
-		throw new UnsupportedOperationException();
 	}
 
 	@Override
@@ -159,24 +165,19 @@ public class PartitionedOrderedSet<T> implements InternalPriorityQueue<T> {
 			return;
 		}
 
+		// TODO we can bulk load the lists and then "heapify" after all elements have been inserted.
 		for (T element : toAdd) {
 			add(element);
 		}
+//		keyGroupHeap.validate();
 	}
 
 	@Override
-	public Iterator<T> iterator() {
-		throw new UnsupportedOperationException();
+	public CloseableIterator<T> iterator() {
+		return new KeyGroupConcatenationIterator<>(keyGroupLists);
 	}
 
-	@Override
-	public String toString() {
-		return "RocksDBOrderedSetStefan{" +
-			"keyGroupLists=" + Arrays.toString(keyGroupLists) +
-			'}';
-	}
-
-	private CachingInternalPriorityQueue<T> getListForElementKeyGroup(T element) {
+	private CachingInternalPriorityQueueSet<T> getListForElementKeyGroup(T element) {
 		return keyGroupLists[computeKeyGroupIndex(element)];
 	}
 
@@ -184,4 +185,45 @@ public class PartitionedOrderedSet<T> implements InternalPriorityQueue<T> {
 		return KeyGroupRangeAssignment.assignToKeyGroup(keyExtractor.extractKeyFromElement(element), totalKeyGroups) - firstKeyGroup;
 	}
 
+	/**
+	 *
+	 * @param <T>
+	 */
+	private static final class KeyGroupConcatenationIterator<T> implements CloseableIterator<T> {
+
+		@Nonnull
+		private final CachingInternalPriorityQueueSet<T>[] keyGroupLists;
+
+		@Nonnegative
+		private int index;
+
+		@Nonnull
+		private CloseableIterator<T> current;
+
+		private KeyGroupConcatenationIterator(@Nonnull CachingInternalPriorityQueueSet<T>[] keyGroupLists) {
+			this.keyGroupLists = keyGroupLists;
+			this.index = 0;
+			this.current = CloseableIterator.empty();
+		}
+
+		@Override
+		public boolean hasNext() {
+			boolean currentHasNext = current.hasNext();
+			while (!currentHasNext && index < keyGroupLists.length) {
+				current = keyGroupLists[index++].iterator();
+				currentHasNext = current.hasNext();
+			}
+			return currentHasNext;
+		}
+
+		@Override
+		public T next() {
+			return current.next();
+		}
+
+		@Override
+		public void close() throws Exception {
+			current.close();
+		}
+	}
 }

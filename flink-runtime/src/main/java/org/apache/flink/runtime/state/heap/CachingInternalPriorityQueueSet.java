@@ -19,29 +19,31 @@
 package org.apache.flink.runtime.state.heap;
 
 import org.apache.flink.runtime.state.InternalPriorityQueue;
+import org.apache.flink.util.CloseableIterator;
+import org.apache.flink.util.FlinkRuntimeException;
+import org.apache.flink.util.Preconditions;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
 import java.util.Collection;
-import java.util.Iterator;
 
 /**
  * @param <E>
  */
-public class CachingInternalPriorityQueue<E> implements InternalPriorityQueue<E>, HeapPriorityQueueElement {
+public class CachingInternalPriorityQueueSet<E> implements InternalPriorityQueue<E>, HeapPriorityQueueElement {
 
-	private final OrderedCache<E> orderedCache;
-	private final OrderedStore<E> orderedStore;
+	private final OrderedSetCache<E> orderedCache;
+	private final OrderedSetStore<E> orderedStore;
 
 	private boolean backendOnlyElements;
 
 	private int pqManagedIndex;
 
 	@SuppressWarnings("unchecked")
-	public CachingInternalPriorityQueue(
-		OrderedCache<E> orderedCache,
-		OrderedStore<E> orderedStore) {
+	public CachingInternalPriorityQueueSet(
+		OrderedSetCache<E> orderedCache,
+		OrderedSetStore<E> orderedStore) {
 
 		this.pqManagedIndex = HeapPriorityQueueElement.NOT_CONTAINED;
 		this.orderedCache = orderedCache;
@@ -71,7 +73,18 @@ public class CachingInternalPriorityQueue<E> implements InternalPriorityQueue<E>
 			orderedStore.remove(first);
 		}
 
+		validate();
 		return first;
+	}
+
+	private void validate() {
+		if(!orderedCache.isEmpty()) {
+			try(final CloseableIterator<E> iterator = orderedStore.orderedIterator()) {
+				Preconditions.checkState(orderedCache.peekFirst().equals(iterator.next()));
+			} catch (Exception e) {
+				e.printStackTrace();
+			}
+		}
 	}
 
 
@@ -82,17 +95,43 @@ public class CachingInternalPriorityQueue<E> implements InternalPriorityQueue<E>
 
 		orderedStore.add(toAdd);
 
-		if (!backendOnlyElements || orderedCache.isInLowerBound(toAdd)) {
-			if (orderedCache.isFull()) {
-				orderedCache.removeLast();
-				backendOnlyElements = true;
+		if (backendOnlyElements) {
+			if (orderedCache.isInLowerBound(toAdd)) {
+				if (orderedCache.isFull()) {
+					orderedCache.removeLast();
+				}
+				orderedCache.add(toAdd);
+				return toAdd.equals(orderedCache.peekFirst());
+			} else {
+				return false;
 			}
-			orderedCache.add(toAdd);
-			return toAdd.equals(orderedCache.peekFirst());
 		} else {
-			backendOnlyElements = true;
-			return false;
+			if (orderedCache.isFull()) {
+				if (orderedCache.isInLowerBound(toAdd)) {
+					orderedCache.removeLast();
+					orderedCache.add(toAdd);
+					backendOnlyElements = true;
+				} else {
+					return false;
+				}
+			} else {
+				orderedCache.add(toAdd);
+			}
+			return toAdd.equals(orderedCache.peekFirst());
 		}
+//		if (!backendOnlyElements || orderedCache.isInLowerBound(toAdd)) {
+//			if (orderedCache.isFull()) {
+//				orderedCache.removeLast();
+//				backendOnlyElements = true;
+//			}
+//			orderedCache.add(toAdd);
+//			validate();
+//			return toAdd.equals(orderedCache.peekFirst()) ;
+//		} else {
+//			backendOnlyElements = true;
+//			validate();
+//			return false;
+//		}
 	}
 
 	@Override
@@ -101,8 +140,9 @@ public class CachingInternalPriorityQueue<E> implements InternalPriorityQueue<E>
 		checkRefillCacheFromBackend();
 
 		boolean newHead = toRemove.equals(orderedCache.peekFirst());
-		orderedCache.remove(toRemove);
 		orderedStore.remove(toRemove);
+		orderedCache.remove(toRemove);
+		validate();
 		return newHead;
 	}
 
@@ -118,7 +158,6 @@ public class CachingInternalPriorityQueue<E> implements InternalPriorityQueue<E>
 		}
 	}
 
-	@Override
 	public void clear() {
 		while (poll() != null) ;
 	}
@@ -136,8 +175,8 @@ public class CachingInternalPriorityQueue<E> implements InternalPriorityQueue<E>
 
 	@Nonnull
 	@Override
-	public Iterator<E> iterator() {
-		throw new UnsupportedOperationException("TODO / remove");
+	public CloseableIterator<E> iterator() {
+		return orderedStore.orderedIterator();
 	}
 
 	@Override
@@ -152,11 +191,18 @@ public class CachingInternalPriorityQueue<E> implements InternalPriorityQueue<E>
 
 	private void checkRefillCacheFromBackend() {
 		if (backendOnlyElements && orderedCache.isEmpty()) {
-			backendOnlyElements = orderedStore.refillCacheFromBackend(orderedCache);
+			try (final CloseableIterator<E> iterator = orderedStore.orderedIterator()) {
+				while (iterator.hasNext() && !orderedCache.isFull()) {
+					orderedCache.add(iterator.next());
+				}
+				backendOnlyElements = iterator.hasNext();
+			} catch (Exception e) {
+				throw new FlinkRuntimeException("Exception while closing RocksDB iterator.", e);
+			}
 		}
 	}
 
-	public interface OrderedCache<E> {
+	public interface OrderedSetCache<E> {
 
 		void add(E element);
 
@@ -177,14 +223,24 @@ public class CachingInternalPriorityQueue<E> implements InternalPriorityQueue<E>
 		E peekLast();
 	}
 
-	public interface OrderedStore<E> {
+	public interface OrderedSetStore<E> {
 
+		/**
+		 *
+		 * @param element
+		 * @return true if head changed or unknown. false iff not changed.
+		 */
 		void add(E element);
 
+		/**
+		 *
+		 * @param element
+		 * @return true if head changed or unknown. false iff not changed.
+		 */
 		void remove(E element);
 
-		boolean refillCacheFromBackend(OrderedCache<E> cacheToFill);
-
 		int size();
+
+		CloseableIterator<E> orderedIterator();
 	}
 }

@@ -1,22 +1,37 @@
-//package org.apache.flink.runtime.state.heap;
-//
-//import org.apache.flink.runtime.state.KeyGroupRange;
-//
-//import org.junit.Assert;
-//import org.junit.Test;
-//
-//import java.util.ArrayList;
-//import java.util.Arrays;
-//import java.util.Collections;
-//import java.util.Comparator;
-//import java.util.HashSet;
-//import java.util.Iterator;
-//import java.util.List;
-//import java.util.Random;
-//import java.util.TreeSet;
-//
-//public class PartitionedOrderedSetTest {
-//
+package org.apache.flink.runtime.state.heap;
+
+import org.apache.flink.runtime.state.InternalPriorityQueue;
+import org.apache.flink.runtime.state.InternalPriorityQueueTestBase;
+
+/**
+ * Test for {@link PartitionedOrderedSet}.
+ */
+public class PartitionedOrderedSetTest extends InternalPriorityQueueTestBase {
+
+	@Override
+	protected InternalPriorityQueue<TestElement> newPriorityQueue(int initialCapacity) {
+
+		PartitionedOrderedSet.CachingInternalPriorityQueueSetFactory<TestElement> factory =
+			(keyGroupId, elementComparator) -> {
+				CachingInternalPriorityQueueSet.OrderedSetCache<TestElement> cache =
+					new TreeOrderedSetCache<>(TEST_ELEMENT_COMPARATOR, 4);
+				CachingInternalPriorityQueueSet.OrderedSetStore<TestElement> store =
+					new CachingInternalPriorityQueueSetTest.TestOrderedStore();
+				return new CachingInternalPriorityQueueSet<>(cache, store);
+			};
+
+		return new PartitionedOrderedSet<>(
+			KEY_EXTRACTOR_FUNCTION,
+			TEST_ELEMENT_COMPARATOR,
+			factory,
+			KEY_GROUP_RANGE, KEY_GROUP_RANGE.getNumberOfKeyGroups());
+	}
+
+	@Override
+	protected boolean testSetSemantics() {
+		return true;
+	}
+
 //	@Test
 //	public void test() {
 //		KeyGroupRange keyGroupRange = KeyGroupRange.of(0, 3);
@@ -136,5 +151,5 @@
 ////		Assert.assertEquals(testSize, count);
 ////		System.out.println(instance);
 //	}
-//
-//}
+
+}
