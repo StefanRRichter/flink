@@ -4,13 +4,16 @@ import org.apache.flink.api.common.typeutils.base.IntSerializer;
 import org.apache.flink.core.memory.ByteArrayOutputStreamWithPos;
 import org.apache.flink.core.memory.DataOutputViewStreamWrapper;
 import org.apache.flink.runtime.state.KeyGroupRange;
-import org.apache.flink.runtime.state.heap.CachingOrderedSetPartition;
+import org.apache.flink.runtime.state.heap.CachingInternalPriorityQueue;
 import org.apache.flink.runtime.state.heap.PartitionedOrderedSet;
 import org.apache.flink.runtime.state.heap.TreeOrderedCache;
 import org.apache.flink.util.FileUtils;
+import org.apache.flink.util.function.ThrowingConsumer;
 
 import org.junit.Assert;
+import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.TemporaryFolder;
 import org.rocksdb.ColumnFamilyDescriptor;
 import org.rocksdb.ColumnFamilyHandle;
 import org.rocksdb.ColumnFamilyOptions;
@@ -26,7 +29,72 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Random;
 
-public class RocksDBOrderedSetTest {
+public class RocksDBOrderedStoreTest {
+
+	@Rule
+	public TemporaryFolder temporaryFolder = new TemporaryFolder();
+
+	private void runTestWithRocksInstance(
+		ThrowingConsumer<CachingInternalPriorityQueue.OrderedStore<Integer>, Exception> testMethod) throws Exception {
+
+		final File rocksFolder = temporaryFolder.newFolder();
+		final List<ColumnFamilyHandle> columnFamilyHandles = new ArrayList<>(1);
+
+		try (final DBOptions dbOptions = PredefinedOptions.FLASH_SSD_OPTIMIZED.createDBOptions().setCreateIfMissing(true);
+			 final ColumnFamilyOptions columnFamilyOptions = PredefinedOptions.FLASH_SSD_OPTIMIZED.createColumnOptions();
+			 final WriteOptions writeOptions = new WriteOptions();
+			 final ReadOptions readOptions = new ReadOptions();
+			 final RocksDB rocksDB = RocksDB.open(
+				 dbOptions,
+				 rocksFolder.getAbsolutePath(),
+				 Collections.singletonList(new ColumnFamilyDescriptor("default".getBytes(), columnFamilyOptions)),
+				 columnFamilyHandles);
+			 final ColumnFamilyHandle defaultColumnFamily = columnFamilyHandles.get(0);
+			 final RocksDBWriteBatchWrapper batchWrapper = new RocksDBWriteBatchWrapper(rocksDB, writeOptions);
+			 final ByteArrayOutputStreamWithPos outputStreamWithPos = new ByteArrayOutputStreamWithPos(32);
+			 final DataOutputViewStreamWrapper outputView = new DataOutputViewStreamWrapper(outputStreamWithPos)) {
+
+			writeOptions.disableWAL();
+
+			final CachingInternalPriorityQueue.OrderedStore<Integer> store = new RocksDBOrderedStore<>(
+				0,
+				rocksDB,
+				defaultColumnFamily,
+				readOptions,
+				IntSerializer.INSTANCE,
+				outputStreamWithPos,
+				outputView,
+				batchWrapper);
+
+			testMethod.accept(store);
+		}
+	}
+
+	private void testAddImpl(CachingInternalPriorityQueue.OrderedStore<Integer> store) {
+		Assert.assertEquals(0, store.size());
+		store.remove(41);
+		Assert.assertEquals(0, store.size());
+		store.add(41);
+		Assert.assertEquals(1, store.size());
+		store.add(42);
+		Assert.assertEquals(2, store.size());
+		store.add(43);
+		Assert.assertEquals(3, store.size());
+		store.add(44);
+		Assert.assertEquals(4, store.size());
+		store.add(45);
+		Assert.assertEquals(4, store.size());
+
+	}
+
+	@Test
+	public void testAdd() throws Exception {
+		runTestWithRocksInstance(this::testAddImpl);
+	}
+
+//	void remove(E element);
+//
+//	boolean refillCacheFromBackend(OrderedCache<E> cacheToFill);
 
 	@Test
 	public void test() throws Exception {
@@ -41,7 +109,7 @@ public class RocksDBOrderedSetTest {
 		final RocksDB rocksDB = RocksDB.open(dbOptions, file.getAbsolutePath(), descriptors, handles);
 		final ColumnFamilyHandle columnFamily = handles.get(0);
 		WriteOptions writeOptions = new WriteOptions();
-		writeOptions.disableWAL();
+
 		ReadOptions readOptions = new ReadOptions();
 		RocksDBWriteBatchWrapper batchWrapper = new RocksDBWriteBatchWrapper(rocksDB, writeOptions);
 		KeyGroupRange keyGroupRange = KeyGroupRange.of(0, 3);
@@ -53,10 +121,10 @@ public class RocksDBOrderedSetTest {
 
 			PartitionedOrderedSet.SortedFetchingCacheFactory<Integer> factory = new PartitionedOrderedSet.SortedFetchingCacheFactory<Integer>() {
 				@Override
-				public CachingOrderedSetPartition<Integer> createCache(int keyGroup, Comparator<Integer> elementComparator) {
+				public CachingInternalPriorityQueue<Integer> createCache(int keyGroup, Comparator<Integer> elementComparator) {
 
-					final CachingOrderedSetPartition.OrderedCache<Integer> cache = new TreeOrderedCache<>(elementComparator, cacheCapacity);
-					final CachingOrderedSetPartition.OrderedStore<Integer> store = new RocksDBOrderedSet<>(
+					final CachingInternalPriorityQueue.OrderedCache<Integer> cache = new TreeOrderedCache<>(elementComparator, cacheCapacity);
+					final CachingInternalPriorityQueue.OrderedStore<Integer> store = new RocksDBOrderedStore<>(
 						keyGroup,
 						rocksDB,
 						columnFamily,
@@ -65,7 +133,7 @@ public class RocksDBOrderedSetTest {
 						outputStreamWithPos,
 						outputView,
 						batchWrapper);
-					return new CachingOrderedSetPartition<>(cache, store);
+					return new CachingInternalPriorityQueue<>(cache, store);
 				}
 			};
 

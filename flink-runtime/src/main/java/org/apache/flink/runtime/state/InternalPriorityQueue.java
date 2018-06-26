@@ -32,7 +32,7 @@ import java.util.Collection;
  * @param <T> type of elements in the ordered set.
  */
 @Internal
-public interface InternalPriorityQueue<T> extends Iterable<T>{
+public interface InternalPriorityQueue<T> extends Iterable<T> {
 
 	/**
 	 * Retrieves and removes the first element (w.r.t. the order) of this set,

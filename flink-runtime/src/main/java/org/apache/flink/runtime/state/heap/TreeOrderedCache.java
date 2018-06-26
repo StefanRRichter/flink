@@ -26,7 +26,7 @@ import java.util.Comparator;
  *
  * @param <E>
  */
-public class TreeOrderedCache<E> implements CachingOrderedSetPartition.OrderedCache<E> {
+public class TreeOrderedCache<E> implements CachingInternalPriorityQueue.OrderedCache<E> {
 
 	private final ObjectAVLTreeSet<E> avlTree;
 	private final Comparator<E> elementComparator;

@@ -27,10 +27,9 @@ import java.util.Collection;
 import java.util.Iterator;
 
 /**
- *
  * @param <E>
  */
-public class CachingOrderedSetPartition<E> implements InternalPriorityQueue<E>, HeapPriorityQueueElement {
+public class CachingInternalPriorityQueue<E> implements InternalPriorityQueue<E>, HeapPriorityQueueElement {
 
 	private final OrderedCache<E> orderedCache;
 	private final OrderedStore<E> orderedStore;
@@ -40,7 +39,7 @@ public class CachingOrderedSetPartition<E> implements InternalPriorityQueue<E>, 
 	private int pqManagedIndex;
 
 	@SuppressWarnings("unchecked")
-	public CachingOrderedSetPartition(
+	public CachingInternalPriorityQueue(
 		OrderedCache<E> orderedCache,
 		OrderedStore<E> orderedStore) {
 
@@ -121,18 +120,18 @@ public class CachingOrderedSetPartition<E> implements InternalPriorityQueue<E>, 
 
 	@Override
 	public void clear() {
-		throw new UnsupportedOperationException("TODO / remove");
+		while (poll() != null) ;
 	}
 
 	@Override
 	public int size() {
-//		return orderedStore.size();
-		throw new UnsupportedOperationException("TODO / remove");
+		return orderedStore.size();
 	}
 
 	@Override
 	public boolean isEmpty() {
-		throw new UnsupportedOperationException("TODO / remove");
+		checkRefillCacheFromBackend();
+		return orderedCache.isEmpty();
 	}
 
 	@Nonnull

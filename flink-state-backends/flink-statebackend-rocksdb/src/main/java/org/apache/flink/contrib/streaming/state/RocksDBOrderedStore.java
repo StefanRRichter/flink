@@ -24,7 +24,7 @@ import org.apache.flink.core.memory.ByteArrayInputStreamWithPos;
 import org.apache.flink.core.memory.ByteArrayOutputStreamWithPos;
 import org.apache.flink.core.memory.DataInputViewStreamWrapper;
 import org.apache.flink.core.memory.DataOutputViewStreamWrapper;
-import org.apache.flink.runtime.state.heap.CachingOrderedSetPartition;
+import org.apache.flink.runtime.state.heap.CachingInternalPriorityQueue;
 import org.apache.flink.util.FlinkRuntimeException;
 
 import org.rocksdb.ColumnFamilyHandle;
@@ -34,7 +34,10 @@ import org.rocksdb.RocksDBException;
 
 import java.io.IOException;
 
-public class RocksDBOrderedSet<T> implements CachingOrderedSetPartition.OrderedStore<T> {
+/**
+ * @param <T>
+ */
+public class RocksDBOrderedStore<T> implements CachingInternalPriorityQueue.OrderedStore<T> {
 
 	private static final byte[] DUMMY_BYTES = "0".getBytes(ConfigConstants.DEFAULT_CHARSET);
 
@@ -48,7 +51,7 @@ public class RocksDBOrderedSet<T> implements CachingOrderedSetPartition.OrderedS
 	private final byte[] groupPrefixBytes;
 	private final int keyGroupId;
 
-	public RocksDBOrderedSet(
+	public RocksDBOrderedStore(
 		int keyGroupId,
 		RocksDB db,
 		ColumnFamilyHandle columnFamilyHandle,
@@ -103,20 +106,18 @@ public class RocksDBOrderedSet<T> implements CachingOrderedSetPartition.OrderedS
 	}
 
 	@Override
-	public boolean refillCacheFromBackend(CachingOrderedSetPartition.OrderedCache<T> orderedCache) {
-		try {
-			batchWrapper.flush();
-		} catch (RocksDBException e) {
-			throw new FlinkRuntimeException(e);
-		}
-		try (RocksIteratorWrapper iterator = new RocksIteratorWrapper(db.newIterator(columnFamilyHandle, readOptions))) {
+	public boolean refillCacheFromBackend(CachingInternalPriorityQueue.OrderedCache<T> orderedCache) {
 
-			iterator.seek(groupPrefixBytes);
-			boolean valid = iterator.isValid();
+		flushWriteBatch();
+
+		try (RocksIteratorWrapper iter = new RocksIteratorWrapper(db.newIterator(columnFamilyHandle, readOptions))) {
+
+			iter.seek(groupPrefixBytes);
+			boolean valid = iter.isValid();
 
 			while (valid && !orderedCache.isFull()) {
 
-				byte[] elementBytes = iterator.key();
+				byte[] elementBytes = iter.key();
 
 				if (!isPrefixWith(elementBytes, groupPrefixBytes)) {
 					break;
@@ -124,8 +125,8 @@ public class RocksDBOrderedSet<T> implements CachingOrderedSetPartition.OrderedS
 
 				orderedCache.add(deserializeTimer(elementBytes));
 
-				iterator.next();
-				valid = iterator.isValid();
+				iter.next();
+				valid = iter.isValid();
 			}
 
 			return valid;
@@ -134,7 +135,26 @@ public class RocksDBOrderedSet<T> implements CachingOrderedSetPartition.OrderedS
 
 	@Override
 	public int size() {
-		throw new UnsupportedOperationException("TODO");
+
+		flushWriteBatch();
+
+		int count = 0;
+		try (RocksIteratorWrapper iter = new RocksIteratorWrapper(db.newIterator(columnFamilyHandle, readOptions))) {
+			iter.seek(groupPrefixBytes);
+			while (iter.isValid() && isPrefixWith(iter.key(), groupPrefixBytes)) {
+				++count;
+				iter.next();
+			}
+		}
+		return count;
+	}
+
+	private void flushWriteBatch() {
+		try {
+			batchWrapper.flush();
+		} catch (RocksDBException e) {
+			throw new FlinkRuntimeException(e);
+		}
 	}
 
 	private static boolean isPrefixWith(byte[] bytes, byte[] prefixBytes) {
