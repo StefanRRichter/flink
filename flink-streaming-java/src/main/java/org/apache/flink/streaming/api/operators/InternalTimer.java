@@ -57,12 +57,12 @@ public interface InternalTimer<K, N> {
 	N getNamespace();
 
 	@SuppressWarnings("unchecked")
-	static <T extends InternalTimer> PriorityComparator<T> getTimerComparator() {
+	static <T extends InternalTimer<?, ?>> PriorityComparator<T> getTimerComparator() {
 		return (PriorityComparator<T>) TIMER_COMPARATOR;
 	}
 
 	@SuppressWarnings("unchecked")
-	static <T extends InternalTimer> KeyExtractorFunction<T> getKeyExtractorFunction() {
+	static <T extends InternalTimer<?, ?>> KeyExtractorFunction<T> getKeyExtractorFunction() {
 		return (KeyExtractorFunction<T>) KEY_EXTRACTOR_FUNCTION;
 	}
 }
