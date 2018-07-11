@@ -25,7 +25,6 @@
 //import org.apache.flink.api.java.tuple.Tuple2;
 //import org.apache.flink.core.memory.DataInputView;
 //import org.apache.flink.core.memory.DataOutputView;
-//import org.apache.flink.runtime.state.metainfo.StateMetaInfo;
 //import org.apache.flink.util.Preconditions;
 //
 //import java.io.IOException;
@@ -45,7 +44,7 @@
 //	// -------------------------------------------------------------------------------
 //
 //	public static <N, S> KeyedBackendStateMetaInfoWriter getWriterForVersion(
-//		int version, StateMetaInfo.Snapshot stateMetaInfo) {
+//		int version, RegisteredKeyedBackendStateMetaInfo.Snapshot<N, S> stateMetaInfo) {
 //
 //		switch (version) {
 //			case 1:
@@ -68,11 +67,11 @@
 //		void writeStateMetaInfo(DataOutputView out) throws IOException;
 //	}
 //
-//	static abstract class AbstractKeyedBackendStateMetaInfoWriter implements KeyedBackendStateMetaInfoWriter {
+//	static abstract class AbstractKeyedBackendStateMetaInfoWriter<N, S> implements KeyedBackendStateMetaInfoWriter {
 //
-//		protected final StateMetaInfo.Snapshot stateMetaInfo;
+//		protected final RegisteredKeyedBackendStateMetaInfo.Snapshot<N, S> stateMetaInfo;
 //
-//		public AbstractKeyedBackendStateMetaInfoWriter(StateMetaInfo.Snapshot stateMetaInfo) {
+//		public AbstractKeyedBackendStateMetaInfoWriter(RegisteredKeyedBackendStateMetaInfo.Snapshot<N, S> stateMetaInfo) {
 //			this.stateMetaInfo = Preconditions.checkNotNull(stateMetaInfo);
 //		}
 //
@@ -80,7 +79,7 @@
 //
 //	static class KeyedBackendStateMetaInfoWriterV1V2<N, S> extends AbstractKeyedBackendStateMetaInfoWriter<N, S> {
 //
-//		public KeyedBackendStateMetaInfoWriterV1V2(StateMetaInfo.Snapshot stateMetaInfo) {
+//		public KeyedBackendStateMetaInfoWriterV1V2(RegisteredKeyedBackendStateMetaInfo.Snapshot<N, S> stateMetaInfo) {
 //			super(stateMetaInfo);
 //		}
 //

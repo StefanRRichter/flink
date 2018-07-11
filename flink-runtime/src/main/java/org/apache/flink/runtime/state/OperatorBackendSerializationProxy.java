@@ -21,7 +21,7 @@ package org.apache.flink.runtime.state;
 import org.apache.flink.core.io.VersionedIOReadableWritable;
 import org.apache.flink.core.memory.DataInputView;
 import org.apache.flink.core.memory.DataOutputView;
-import org.apache.flink.runtime.state.metainfo.StateMetaInfo;
+import org.apache.flink.runtime.state.metainfo.StateMetaInfoSnapshot;
 import org.apache.flink.runtime.state.metainfo.StateMetaInfoReader;
 import org.apache.flink.runtime.state.metainfo.StateMetaInfoSnapshotReadersWriters;
 import org.apache.flink.util.Preconditions;
@@ -40,8 +40,8 @@ public class OperatorBackendSerializationProxy extends VersionedIOReadableWritab
 
 	public static final int VERSION = 4;
 
-	private List<StateMetaInfo.Snapshot> operatorStateMetaInfoSnapshots;
-	private List<StateMetaInfo.Snapshot> broadcastStateMetaInfoSnapshots;
+	private List<StateMetaInfoSnapshot> operatorStateMetaInfoSnapshots;
+	private List<StateMetaInfoSnapshot> broadcastStateMetaInfoSnapshots;
 	private ClassLoader userCodeClassLoader;
 
 	public OperatorBackendSerializationProxy(ClassLoader userCodeClassLoader) {
@@ -49,8 +49,8 @@ public class OperatorBackendSerializationProxy extends VersionedIOReadableWritab
 	}
 
 	public OperatorBackendSerializationProxy(
-			List<StateMetaInfo.Snapshot> operatorStateMetaInfoSnapshots,
-			List<StateMetaInfo.Snapshot> broadcastStateMetaInfoSnapshots) {
+			List<StateMetaInfoSnapshot> operatorStateMetaInfoSnapshots,
+			List<StateMetaInfoSnapshot> broadcastStateMetaInfoSnapshots) {
 
 		this.operatorStateMetaInfoSnapshots = Preconditions.checkNotNull(operatorStateMetaInfoSnapshots);
 		this.broadcastStateMetaInfoSnapshots = Preconditions.checkNotNull(broadcastStateMetaInfoSnapshots);
@@ -78,10 +78,10 @@ public class OperatorBackendSerializationProxy extends VersionedIOReadableWritab
 	}
 
 	private void writeStateMetaInfoSnapshots(
-		List<StateMetaInfo.Snapshot> snapshots,
+		List<StateMetaInfoSnapshot> snapshots,
 		DataOutputView out) throws IOException {
 		out.writeShort(snapshots.size());
-		for (StateMetaInfo.Snapshot state : snapshots) {
+		for (StateMetaInfoSnapshot state : snapshots) {
 			StateMetaInfoSnapshotReadersWriters.getWriter().writeStateMetaInfoSnapshot(state, out);
 		}
 	}
@@ -118,11 +118,11 @@ public class OperatorBackendSerializationProxy extends VersionedIOReadableWritab
 		}
 	}
 
-	public List<StateMetaInfo.Snapshot> getOperatorStateMetaInfoSnapshots() {
+	public List<StateMetaInfoSnapshot> getOperatorStateMetaInfoSnapshots() {
 		return operatorStateMetaInfoSnapshots;
 	}
 
-	public List<StateMetaInfo.Snapshot> getBroadcastStateMetaInfoSnapshots() {
+	public List<StateMetaInfoSnapshot> getBroadcastStateMetaInfoSnapshots() {
 		return broadcastStateMetaInfoSnapshots;
 	}
 }

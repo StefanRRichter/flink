@@ -25,7 +25,7 @@ import javax.annotation.Nonnull;
 import java.io.IOException;
 
 /**
- * Functional interface to write {@link StateMetaInfo}.
+ * Functional interface to write {@link StateMetaInfoSnapshot}.
  */
 @FunctionalInterface
 public interface StateMetaInfoWriter {
@@ -38,6 +38,6 @@ public interface StateMetaInfoWriter {
 	 * @throws IOException on write problems.
 	 */
 	void writeStateMetaInfoSnapshot(
-		@Nonnull StateMetaInfo.Snapshot snapshot,
+		@Nonnull StateMetaInfoSnapshot snapshot,
 		@Nonnull DataOutputView outputView) throws IOException;
 }

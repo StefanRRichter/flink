@@ -20,12 +20,11 @@ package org.apache.flink.runtime.state.heap;
 
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.typeutils.TypeSerializer;
+import org.apache.flink.runtime.state.RegisteredKeyedBackendStateMetaInfo;
+import org.apache.flink.runtime.state.RegisteredStateMetaInfoBase;
 import org.apache.flink.runtime.state.StateSnapshot;
 import org.apache.flink.runtime.state.StateTransformationFunction;
-import org.apache.flink.runtime.state.metainfo.StateMetaInfo;
 import org.apache.flink.util.Preconditions;
-
-import javax.annotation.Nonnull;
 
 import java.util.stream.Stream;
 
@@ -42,35 +41,21 @@ public abstract class StateTable<K, N, S> {
 	/**
 	 * The key context view on the backend. This provides information, such as the currently active key.
 	 */
-	@Nonnull
 	protected final InternalKeyContext<K> keyContext;
 
 	/**
 	 * Combined meta information such as name and serializers for this state
 	 */
-	@Nonnull
-	protected StateMetaInfo metaInfo;
-
-	/**
-	 * Serializer for the namespace. Cached value, extracted from metaInfo.
-	 */
-	@Nonnull
-	protected TypeSerializer<N> namespaceSerializer;
-
-	/**
-	 * Serializer for the state value. Cached value, extracted from metaInfo.
-	 */
-	@Nonnull
-	protected TypeSerializer<S> valueSerializer;
+	protected RegisteredKeyedBackendStateMetaInfo<N, S> metaInfo;
 
 	/**
 	 *
 	 * @param keyContext the key context provides the key scope for all put/get/delete operations.
 	 * @param metaInfo the meta information, including the type serializer for state copy-on-write.
 	 */
-	public StateTable(@Nonnull InternalKeyContext<K> keyContext, @Nonnull StateMetaInfo metaInfo) {
-		this.keyContext = keyContext;
-		setMetaInfo(metaInfo);
+	public StateTable(InternalKeyContext<K> keyContext, RegisteredKeyedBackendStateMetaInfo<N, S> metaInfo) {
+		this.keyContext = Preconditions.checkNotNull(keyContext);
+		this.metaInfo = Preconditions.checkNotNull(metaInfo);
 	}
 
 	// Main interface methods of StateTable -------------------------------------------------------
@@ -181,33 +166,24 @@ public abstract class StateTable<K, N, S> {
 
 	// Meta data setter / getter and toString -----------------------------------------------------
 
-	@Nonnull
 	public TypeSerializer<S> getStateSerializer() {
-		return valueSerializer;
+		return metaInfo.getStateSerializer();
 	}
 
-	@Nonnull
 	public TypeSerializer<N> getNamespaceSerializer() {
-		return namespaceSerializer;
+		return metaInfo.getNamespaceSerializer();
 	}
 
-	@Nonnull
-	public StateMetaInfo getMetaInfo() {
+	public RegisteredStateMetaInfoBase getMetaInfo() {
 		return metaInfo;
 	}
 
-	@SuppressWarnings("unchecked")
-	public void setMetaInfo(StateMetaInfo metaInfo) {
-		this.metaInfo = Preconditions.checkNotNull(metaInfo);
-		this.namespaceSerializer = (TypeSerializer<N>) Preconditions.checkNotNull(
-			metaInfo.getTypeSerializer(StateMetaInfo.CommonSerializerKeys.NAMESPACE_SERIALIZER));
-		this.valueSerializer = (TypeSerializer<S>) Preconditions.checkNotNull(
-			metaInfo.getTypeSerializer(StateMetaInfo.CommonSerializerKeys.VALUE_SERIALIZER));
+	public void setMetaInfo(RegisteredKeyedBackendStateMetaInfo<N, S> metaInfo) {
+		this.metaInfo = metaInfo;
 	}
 
 	// Snapshot / Restore -------------------------------------------------------------------------
 
-	@Nonnull
 	abstract StateSnapshot createSnapshot();
 
 	public abstract void put(K key, int keyGroup, N namespace, S state);

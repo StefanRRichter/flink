@@ -34,12 +34,13 @@ import javax.annotation.Nonnull;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 /**
- * Static factory that gives out the write and readers for different versions of {@link StateMetaInfo}.
+ * Static factory that gives out the write and readers for different versions of {@link StateMetaInfoSnapshot}.
  */
 public class StateMetaInfoSnapshotReadersWriters {
 
@@ -51,7 +52,7 @@ public class StateMetaInfoSnapshotReadersWriters {
 
 	/**
 	 * Enum for backeards compatibility. This gives a hint about the expected state type for which a
-	 * {@link StateMetaInfo.Snapshot} should be deserialized.
+	 * {@link StateMetaInfoSnapshot} should be deserialized.
 	 *
 	 * TODO this can go away after we eventually drop backwards compatibility with all versions < 5.
 	 */
@@ -61,14 +62,14 @@ public class StateMetaInfoSnapshotReadersWriters {
 	}
 
 	/**
-	 * Returns the writer for {@link StateMetaInfo.Snapshot}.
+	 * Returns the writer for {@link StateMetaInfoSnapshot}.
 	 */
 	public static StateMetaInfoWriter getWriter() {
 		return CurrentWriterImpl.INSTANCE;
 	}
 
 	/**
-	 * Returns a reader for {@link StateMetaInfo.Snapshot} with the requested state type and version number.
+	 * Returns a reader for {@link StateMetaInfoSnapshot} with the requested state type and version number.
 	 *
 	 * @param readVersion the format version to read.
 	 * @param stateTypeHint a hint about the expected type to read.
@@ -135,7 +136,7 @@ public class StateMetaInfoSnapshotReadersWriters {
 
 		@Override
 		public void writeStateMetaInfoSnapshot(
-			@Nonnull StateMetaInfo.Snapshot snapshot,
+			@Nonnull StateMetaInfoSnapshot snapshot,
 			@Nonnull DataOutputView outputView) throws IOException {
 			final Map<String, String> optionsMap = snapshot.getOptionsImmutable();
 			final Map<String, TypeSerializer<?>> serializerMap = snapshot.getSerializersImmutable();
@@ -177,7 +178,7 @@ public class StateMetaInfoSnapshotReadersWriters {
 
 		@Nonnull
 		@Override
-		public StateMetaInfo.Snapshot readStateMetaInfoSnapshot(
+		public StateMetaInfoSnapshot readStateMetaInfoSnapshot(
 			@Nonnull DataInputView inputView,
 			@Nonnull ClassLoader userCodeClassLoader) throws IOException {
 
@@ -208,7 +209,7 @@ public class StateMetaInfoSnapshotReadersWriters {
 				serializerConfigsMap.put(key, serializerConfigTuple.f1);
 			}
 
-			return new StateMetaInfo.Snapshot(stateName, optionsMap, serializerConfigsMap, serializerMap);
+			return new StateMetaInfoSnapshot(stateName, optionsMap, serializerConfigsMap, serializerMap);
 		}
 	}
 
@@ -224,32 +225,32 @@ public class StateMetaInfoSnapshotReadersWriters {
 
 		@Nonnull
 		@Override
-		public StateMetaInfo.Snapshot readStateMetaInfoSnapshot(
+		public StateMetaInfoSnapshot readStateMetaInfoSnapshot(
 			@Nonnull DataInputView in, @Nonnull ClassLoader userCodeClassLoader) throws IOException {
 
 			final StateDescriptor.Type stateDescType = StateDescriptor.Type.values()[in.readInt()];
 			final String stateName = in.readUTF();
-			final StateMetaInfo.Snapshot metaInfoSnapshot = new StateMetaInfo.Snapshot(stateName);
-			metaInfoSnapshot.setOption(StateMetaInfoBase.CommonOptionsKeys.KEYED_STATE_TYPE, stateDescType.toString());
-
 			List<Tuple2<TypeSerializer<?>, TypeSerializerConfigSnapshot>> serializersAndConfigs =
 				TypeSerializerSerializationUtil.readSerializersAndConfigsWithResilience(in, userCodeClassLoader);
 
-			metaInfoSnapshot.setTypeSerializer(
-				StateMetaInfo.CommonSerializerKeys.NAMESPACE_SERIALIZER,
-				serializersAndConfigs.get(0).f0);
-			metaInfoSnapshot.setTypeSerializerConfigSnapshot(
-				StateMetaInfo.CommonSerializerKeys.NAMESPACE_SERIALIZER,
-				serializersAndConfigs.get(0).f1);
+			Map<String, String> optionsMap = Collections.singletonMap(
+				StateMetaInfoSnapshot.CommonOptionsKeys.KEYED_STATE_TYPE.toString(),
+				stateDescType.toString());
 
-			metaInfoSnapshot.setTypeSerializer(
-				StateMetaInfo.CommonSerializerKeys.VALUE_SERIALIZER,
+
+			Map<String, TypeSerializer<?>> serializerMap = new HashMap<>(2);
+			serializerMap.put(StateMetaInfoSnapshot.CommonSerializerKeys.NAMESPACE_SERIALIZER.toString(),
+				serializersAndConfigs.get(0).f0);
+			serializerMap.put(StateMetaInfoSnapshot.CommonSerializerKeys.VALUE_SERIALIZER.toString(),
 				serializersAndConfigs.get(1).f0);
-			metaInfoSnapshot.setTypeSerializerConfigSnapshot(
-				StateMetaInfo.CommonSerializerKeys.VALUE_SERIALIZER,
+
+			Map<String, TypeSerializerConfigSnapshot> serializerConfigSnapshotMap = new HashMap<>(2);
+			serializerConfigSnapshotMap.put(StateMetaInfoSnapshot.CommonSerializerKeys.NAMESPACE_SERIALIZER.toString(),
+				serializersAndConfigs.get(0).f1);
+			serializerConfigSnapshotMap.put(StateMetaInfoSnapshot.CommonSerializerKeys.VALUE_SERIALIZER.toString(),
 				serializersAndConfigs.get(1).f1);
 
-			return metaInfoSnapshot;
+			return new StateMetaInfoSnapshot(stateName, optionsMap, serializerConfigSnapshotMap, serializerMap);
 		}
 	}
 
@@ -264,23 +265,26 @@ public class StateMetaInfoSnapshotReadersWriters {
 
 		@Nonnull
 		@Override
-		public StateMetaInfo.Snapshot readStateMetaInfoSnapshot(
+		public StateMetaInfoSnapshot readStateMetaInfoSnapshot(
 			@Nonnull DataInputView in,
 			@Nonnull ClassLoader userCodeClassLoader) throws IOException {
 
 			final StateDescriptor.Type stateDescType = StateDescriptor.Type.values()[in.readInt()];
 			final String stateName = in.readUTF();
-			final StateMetaInfo.Snapshot metaInfoSnapshot = new StateMetaInfo.Snapshot(stateName);
-			metaInfoSnapshot.setOption(StateMetaInfoBase.CommonOptionsKeys.KEYED_STATE_TYPE, stateDescType.toString());
 
-			metaInfoSnapshot.setTypeSerializer(
-				StateMetaInfo.CommonSerializerKeys.NAMESPACE_SERIALIZER,
-				TypeSerializerSerializationUtil.tryReadSerializer(in, userCodeClassLoader, true));
-			metaInfoSnapshot.setTypeSerializer(
-				StateMetaInfo.CommonSerializerKeys.VALUE_SERIALIZER,
-				TypeSerializerSerializationUtil.tryReadSerializer(in, userCodeClassLoader, true));
+			Map<String, String> optionsMap = Collections.singletonMap(
+				StateMetaInfoSnapshot.CommonOptionsKeys.KEYED_STATE_TYPE.toString(),
+				stateDescType.toString());
 
-			return metaInfoSnapshot;
+
+			Map<String, TypeSerializer<?>> serializerMap = new HashMap<>(2);
+			serializerMap.put(
+				StateMetaInfoSnapshot.CommonSerializerKeys.NAMESPACE_SERIALIZER.toString(),
+				TypeSerializerSerializationUtil.tryReadSerializer(in, userCodeClassLoader, true));
+			serializerMap.put(
+				StateMetaInfoSnapshot.CommonSerializerKeys.VALUE_SERIALIZER.toString(),
+				TypeSerializerSerializationUtil.tryReadSerializer(in, userCodeClassLoader, true));
+			return new StateMetaInfoSnapshot(stateName, optionsMap, Collections.emptyMap(), serializerMap);
 		}
 	}
 
@@ -294,41 +298,46 @@ public class StateMetaInfoSnapshotReadersWriters {
 
 		static final  OperatorBackendStateMetaInfoReaderV2V3 INSTANCE = new OperatorBackendStateMetaInfoReaderV2V3();
 
-		private static final StateMetaInfo.CommonSerializerKeys[] ORDERED_KEYS =
-			new StateMetaInfo.CommonSerializerKeys[]{
-				StateMetaInfo.CommonSerializerKeys.KEY_SERIALIZER,
-				StateMetaInfo.CommonSerializerKeys.VALUE_SERIALIZER};
+		private static final String[] ORDERED_KEY_STRINGS =
+			new String[]{
+				StateMetaInfoSnapshot.CommonSerializerKeys.KEY_SERIALIZER.toString(),
+				StateMetaInfoSnapshot.CommonSerializerKeys.VALUE_SERIALIZER.toString()};
 
 		@Nonnull
 		@Override
-		public StateMetaInfo.Snapshot readStateMetaInfoSnapshot(
+		public StateMetaInfoSnapshot readStateMetaInfoSnapshot(
 			@Nonnull DataInputView in,
 			@Nonnull ClassLoader userCodeClassLoader) throws IOException {
 
-			StateMetaInfo.Snapshot snapshot = new StateMetaInfo.Snapshot(in.readUTF());
+			final String name = in.readUTF();
 			final OperatorStateHandle.Mode mode = OperatorStateHandle.Mode.values()[in.readByte()];
-			snapshot.setOption(StateMetaInfoBase.CommonOptionsKeys.OPERATOR_STATE_DISTRIBUTION_MODE, mode.toString());
+
+			Map<String, String> optionsMap = Collections.singletonMap(
+				StateMetaInfoSnapshot.CommonOptionsKeys.OPERATOR_STATE_DISTRIBUTION_MODE.toString(),
+				mode.toString());
 
 			List<Tuple2<TypeSerializer<?>, TypeSerializerConfigSnapshot>> stateSerializerAndConfigList =
 				TypeSerializerSerializationUtil.readSerializersAndConfigsWithResilience(in, userCodeClassLoader);
 
 			final int listSize = stateSerializerAndConfigList.size();
+			Map<String, TypeSerializer<?>> serializerMap = new HashMap<>(listSize);
+			Map<String, TypeSerializerConfigSnapshot> serializerConfigsMap = new HashMap<>(listSize);
 			for (int i = 0; i < listSize; ++i) {
 				Tuple2<TypeSerializer<?>, TypeSerializerConfigSnapshot> serializerAndConf =
 					stateSerializerAndConfigList.get(i);
 
 				// this particular mapping happens to support both, V2 and V3
-				StateMetaInfo.CommonSerializerKeys serializerKey = ORDERED_KEYS[ORDERED_KEYS.length - 1 - i];
+				String serializerKey = ORDERED_KEY_STRINGS[ORDERED_KEY_STRINGS.length - 1 - i];
 
-				snapshot.setTypeSerializer(
+				serializerMap.put(
 					serializerKey,
 					serializerAndConf.f0);
-				snapshot.setTypeSerializerConfigSnapshot(
+				serializerConfigsMap.put(
 					serializerKey,
 					serializerAndConf.f1);
 			}
 
-			return snapshot;
+			return new StateMetaInfoSnapshot(name, optionsMap, serializerConfigsMap, serializerMap);
 		}
 	}
 
@@ -342,30 +351,37 @@ public class StateMetaInfoSnapshotReadersWriters {
 
 		@Nonnull
 		@Override
-		public StateMetaInfo.Snapshot readStateMetaInfoSnapshot(
+		public StateMetaInfoSnapshot readStateMetaInfoSnapshot(
 			@Nonnull DataInputView in,
 			@Nonnull ClassLoader userCodeClassLoader) throws IOException {
 
-			StateMetaInfo.Snapshot snapshot = new StateMetaInfo.Snapshot(in.readUTF());
+			final String name = in.readUTF();
 			final OperatorStateHandle.Mode mode = OperatorStateHandle.Mode.values()[in.readByte()];
-			snapshot.setOption(StateMetaInfoBase.CommonOptionsKeys.OPERATOR_STATE_DISTRIBUTION_MODE, mode.toString());
+			final Map<String, String> optionsMap = Collections.singletonMap(
+				StateMetaInfoSnapshot.CommonOptionsKeys.OPERATOR_STATE_DISTRIBUTION_MODE.toString(),
+				mode.toString());
 
 			DataInputViewStream dis = new DataInputViewStream(in);
 			ClassLoader previousClassLoader = Thread.currentThread().getContextClassLoader();
+
 			try (
 				InstantiationUtil.FailureTolerantObjectInputStream ois =
 					new InstantiationUtil.FailureTolerantObjectInputStream(dis, userCodeClassLoader)) {
-
 				Thread.currentThread().setContextClassLoader(userCodeClassLoader);
 				TypeSerializer<?> stateSerializer = (TypeSerializer<?>) ois.readObject();
-				snapshot.setTypeSerializer(StateMetaInfo.CommonSerializerKeys.VALUE_SERIALIZER, stateSerializer);
+				return new StateMetaInfoSnapshot(
+					name,
+					optionsMap,
+					Collections.emptyMap(),
+					Collections.singletonMap(
+						StateMetaInfoSnapshot.CommonSerializerKeys.VALUE_SERIALIZER.toString(),
+						stateSerializer));
 			} catch (ClassNotFoundException exception) {
 				throw new IOException(exception);
 			} finally {
 				Thread.currentThread().setContextClassLoader(previousClassLoader);
 			}
 
-			return snapshot;
 		}
 	}
 }

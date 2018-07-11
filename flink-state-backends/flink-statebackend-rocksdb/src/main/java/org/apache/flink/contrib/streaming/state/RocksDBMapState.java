@@ -30,8 +30,8 @@ import org.apache.flink.core.memory.DataInputViewStreamWrapper;
 import org.apache.flink.core.memory.DataOutputViewStreamWrapper;
 import org.apache.flink.queryablestate.client.state.serialization.KvStateSerializer;
 import org.apache.flink.runtime.state.KeyGroupRangeAssignment;
+import org.apache.flink.runtime.state.RegisteredKeyedBackendStateMetaInfo;
 import org.apache.flink.runtime.state.internal.InternalMapState;
-import org.apache.flink.runtime.state.metainfo.StateMetaInfo;
 import org.apache.flink.util.FlinkRuntimeException;
 import org.apache.flink.util.Preconditions;
 
@@ -616,18 +616,12 @@ class RocksDBMapState<K, N, UK, UV>
 	@SuppressWarnings("unchecked")
 	static <UK, UV, K, N, SV, S extends State, IS extends S> IS create(
 		StateDescriptor<S, SV> stateDesc,
-		Tuple2<ColumnFamilyHandle, StateMetaInfo> registerResult,
+		Tuple2<ColumnFamilyHandle, RegisteredKeyedBackendStateMetaInfo<N, SV>> registerResult,
 		RocksDBKeyedStateBackend<K> backend) {
-		final StateMetaInfo stateMetaInfo = registerResult.f1;
-		TypeSerializer<N> namespaceSerializer =
-			(TypeSerializer<N>) stateMetaInfo.getTypeSerializer(StateMetaInfo.CommonSerializerKeys.NAMESPACE_SERIALIZER);
-		TypeSerializer<SV> valueSerializer =
-			(TypeSerializer<SV>) stateMetaInfo.getTypeSerializer(StateMetaInfo.CommonSerializerKeys.VALUE_SERIALIZER);
-		stateMetaInfo.getTypeSerializer(StateMetaInfo.CommonSerializerKeys.VALUE_SERIALIZER);
 		return (IS) new RocksDBMapState<>(
 			registerResult.f0,
-			namespaceSerializer,
-			(TypeSerializer<Map<UK, UV>>) valueSerializer,
+			registerResult.f1.getNamespaceSerializer(),
+			(TypeSerializer<Map<UK, UV>>) registerResult.f1.getStateSerializer(),
 			(Map<UK, UV>) stateDesc.getDefaultValue(),
 			backend);
 	}

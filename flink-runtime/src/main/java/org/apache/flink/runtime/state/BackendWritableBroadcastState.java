@@ -20,7 +20,6 @@ package org.apache.flink.runtime.state;
 
 import org.apache.flink.api.common.state.BroadcastState;
 import org.apache.flink.core.fs.FSDataOutputStream;
-import org.apache.flink.runtime.state.metainfo.StateMetaInfo;
 
 import java.io.IOException;
 
@@ -37,7 +36,7 @@ public interface BackendWritableBroadcastState<K, V> extends BroadcastState<K, V
 
 	long write(FSDataOutputStream out) throws IOException;
 
-	void setStateMetaInfo(StateMetaInfo stateMetaInfo);
+	void setStateMetaInfo(RegisteredBroadcastBackendStateMetaInfo<K, V> stateMetaInfo);
 
-	StateMetaInfo getStateMetaInfo();
+	RegisteredBroadcastBackendStateMetaInfo<K, V> getStateMetaInfo();
 }

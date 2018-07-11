@@ -63,7 +63,7 @@ import org.apache.flink.runtime.state.StateSnapshot;
 import org.apache.flink.runtime.state.StreamCompressionDecorator;
 import org.apache.flink.runtime.state.StreamStateHandle;
 import org.apache.flink.runtime.state.UncompressedStreamCompressionDecorator;
-import org.apache.flink.runtime.state.metainfo.StateMetaInfo;
+import org.apache.flink.runtime.state.metainfo.StateMetaInfoSnapshot;
 import org.apache.flink.util.FlinkRuntimeException;
 import org.apache.flink.util.Preconditions;
 import org.apache.flink.util.StateMigrationException;
@@ -145,7 +145,7 @@ public class HeapKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 	 * <p>TODO this map can be removed when eager-state registration is in place.
 	 * TODO we currently need this cached to check state migration strategies when new serializers are registered.
 	 */
-	private final Map<String, StateMetaInfo.Snapshot> restoredKvStateMetaInfos;
+	private final Map<String, StateMetaInfoSnapshot> restoredKvStateMetaInfos;
 
 	/**
 	 * The configuration for local recovery.
@@ -196,11 +196,11 @@ public class HeapKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 		@SuppressWarnings("unchecked")
 		StateTable<K, N, V> stateTable = (StateTable<K, N, V>) stateTables.get(stateDesc.getName());
 
-		StateMetaInfo newMetaInfo;
-
+		RegisteredKeyedBackendStateMetaInfo<N, V> newMetaInfo;
 		if (stateTable != null) {
 			@SuppressWarnings("unchecked")
-			StateMetaInfo.Snapshot restoredMetaInfoSnapshot = restoredKvStateMetaInfos.get(stateDesc.getName());
+			StateMetaInfoSnapshot restoredMetaInfoSnapshot =
+				restoredKvStateMetaInfos.get(stateDesc.getName());
 
 			Preconditions.checkState(
 				restoredMetaInfoSnapshot != null,
@@ -214,11 +214,12 @@ public class HeapKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 
 			stateTable.setMetaInfo(newMetaInfo);
 		} else {
-			newMetaInfo = StateMetaInfo.Builder.forKeyedState(
-				stateDesc.getName(),
+			newMetaInfo = new RegisteredKeyedBackendStateMetaInfo<>(
 				stateDesc.getType(),
+				stateDesc.getName(),
 				namespaceSerializer,
 				stateDesc.getSerializer());
+
 			stateTable = snapshotStrategy.newStateTable(newMetaInfo);
 			stateTables.put(stateDesc.getName(), stateTable);
 		}
@@ -226,7 +227,6 @@ public class HeapKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 		return stateTable;
 	}
 
-	@SuppressWarnings("unchecked")
 	@Override
 	public <N> Stream<K> getKeys(String state, N namespace) {
 		if (!stateTables.containsKey(state)) {
@@ -333,17 +333,21 @@ public class HeapKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 					keySerializerRestored = true;
 				}
 
-				List<StateMetaInfo.Snapshot> restoredMetaInfos =
+				List<StateMetaInfoSnapshot> restoredMetaInfos =
 						serializationProxy.getStateMetaInfoSnapshots();
 
-				for (StateMetaInfo.Snapshot restoredMetaInfo : restoredMetaInfos) {
+				for (StateMetaInfoSnapshot restoredMetaInfo : restoredMetaInfos) {
 					restoredKvStateMetaInfos.put(restoredMetaInfo.getName(), restoredMetaInfo);
 
 					StateTable<K, ?, ?> stateTable = stateTables.get(restoredMetaInfo.getName());
 
 					//important: only create a new table we did not already create it previously
 					if (null == stateTable) {
-						stateTable = snapshotStrategy.newStateTable(restoredMetaInfo.toStateMetaInfo());
+
+						RegisteredKeyedBackendStateMetaInfo<?, ?> registeredKeyedBackendStateMetaInfo =
+								new RegisteredKeyedBackendStateMetaInfo<>(restoredMetaInfo);
+
+						stateTable = snapshotStrategy.newStateTable(registeredKeyedBackendStateMetaInfo);
 						stateTables.put(restoredMetaInfo.getName(), stateTable);
 						kvStatesById.put(numRegisteredKvStates, restoredMetaInfo.getName());
 						++numRegisteredKvStates;
@@ -479,7 +483,7 @@ public class HeapKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 
 		boolean isAsynchronous();
 
-		<N, V> StateTable<K, N, V> newStateTable(StateMetaInfo newMetaInfo);
+		<N, V> StateTable<K, N, V> newStateTable(RegisteredKeyedBackendStateMetaInfo<N, V> newMetaInfo);
 	}
 
 	private class AsyncSnapshotStrategySynchronicityBehavior implements SnapshotStrategySynchronicityBehavior<K> {
@@ -496,7 +500,7 @@ public class HeapKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 		}
 
 		@Override
-		public <N, V> StateTable<K, N, V> newStateTable(StateMetaInfo newMetaInfo) {
+		public <N, V> StateTable<K, N, V> newStateTable(RegisteredKeyedBackendStateMetaInfo<N, V> newMetaInfo) {
 			return new CopyOnWriteStateTable<>(HeapKeyedStateBackend.this, newMetaInfo);
 		}
 	}
@@ -515,7 +519,7 @@ public class HeapKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 		}
 
 		@Override
-		public <N, V> StateTable<K, N, V> newStateTable(StateMetaInfo newMetaInfo) {
+		public <N, V> StateTable<K, N, V> newStateTable(RegisteredKeyedBackendStateMetaInfo<N, V> newMetaInfo) {
 			return new NestedMapsStateTable<>(HeapKeyedStateBackend.this, newMetaInfo);
 		}
 	}
@@ -551,7 +555,7 @@ public class HeapKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 				"Too many KV-States: " + stateTables.size() +
 					". Currently at most " + Short.MAX_VALUE + " states are supported");
 
-			List<StateMetaInfo.Snapshot> metaInfoSnapshots =
+			List<StateMetaInfoSnapshot> metaInfoSnapshots =
 				new ArrayList<>(stateTables.size());
 
 			final Map<String, Integer> kVStateToId = new HashMap<>(stateTables.size());
@@ -698,7 +702,7 @@ public class HeapKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 		}
 
 		@Override
-		public <N, V> StateTable<K, N, V> newStateTable(StateMetaInfo newMetaInfo) {
+		public <N, V> StateTable<K, N, V> newStateTable(RegisteredKeyedBackendStateMetaInfo<N, V> newMetaInfo) {
 			return snapshotStrategySynchronicityTrait.newStateTable(newMetaInfo);
 		}
 	}

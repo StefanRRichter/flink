@@ -26,7 +26,7 @@ import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.core.io.VersionedIOReadableWritable;
 import org.apache.flink.core.memory.DataInputView;
 import org.apache.flink.core.memory.DataOutputView;
-import org.apache.flink.runtime.state.metainfo.StateMetaInfo;
+import org.apache.flink.runtime.state.metainfo.StateMetaInfoSnapshot;
 import org.apache.flink.runtime.state.metainfo.StateMetaInfoReader;
 import org.apache.flink.runtime.state.metainfo.StateMetaInfoSnapshotReadersWriters;
 import org.apache.flink.util.Preconditions;
@@ -56,7 +56,7 @@ public class KeyedBackendSerializationProxy<K> extends VersionedIOReadableWritab
 	private TypeSerializer<K> keySerializer;
 	private TypeSerializerConfigSnapshot keySerializerConfigSnapshot;
 
-	private List<StateMetaInfo.Snapshot> stateMetaInfoSnapshots;
+	private List<StateMetaInfoSnapshot> stateMetaInfoSnapshots;
 
 	private ClassLoader userCodeClassLoader;
 
@@ -67,7 +67,7 @@ public class KeyedBackendSerializationProxy<K> extends VersionedIOReadableWritab
 
 	public KeyedBackendSerializationProxy(
 			TypeSerializer<K> keySerializer,
-			List<StateMetaInfo.Snapshot> stateMetaInfoSnapshots,
+			List<StateMetaInfoSnapshot> stateMetaInfoSnapshots,
 			boolean compression) {
 
 		this.usingKeyGroupCompression = compression;
@@ -80,7 +80,7 @@ public class KeyedBackendSerializationProxy<K> extends VersionedIOReadableWritab
 		this.stateMetaInfoSnapshots = stateMetaInfoSnapshots;
 	}
 
-	public List<StateMetaInfo.Snapshot> getStateMetaInfoSnapshots() {
+	public List<StateMetaInfoSnapshot> getStateMetaInfoSnapshots() {
 		return stateMetaInfoSnapshots;
 	}
 
@@ -120,7 +120,7 @@ public class KeyedBackendSerializationProxy<K> extends VersionedIOReadableWritab
 
 		// write individual registered keyed state metainfos
 		out.writeShort(stateMetaInfoSnapshots.size());
-		for (StateMetaInfo.Snapshot metaInfoSnapshot : stateMetaInfoSnapshots) {
+		for (StateMetaInfoSnapshot metaInfoSnapshot : stateMetaInfoSnapshots) {
 			StateMetaInfoSnapshotReadersWriters.getWriter().writeStateMetaInfoSnapshot(metaInfoSnapshot, out);
 		}
 	}
@@ -161,13 +161,13 @@ public class KeyedBackendSerializationProxy<K> extends VersionedIOReadableWritab
 		int numKvStates = in.readShort();
 		stateMetaInfoSnapshots = new ArrayList<>(numKvStates);
 		for (int i = 0; i < numKvStates; i++) {
-			StateMetaInfo.Snapshot snapshot = stateMetaInfoReader.readStateMetaInfoSnapshot(in, userCodeClassLoader);
+			StateMetaInfoSnapshot snapshot = stateMetaInfoReader.readStateMetaInfoSnapshot(in, userCodeClassLoader);
 
 			if (isSerializerPresenceRequired) {
 				checkSerializerPresence(
-					snapshot.getTypeSerializer(StateMetaInfo.CommonSerializerKeys.NAMESPACE_SERIALIZER));
+					snapshot.getTypeSerializer(StateMetaInfoSnapshot.CommonSerializerKeys.NAMESPACE_SERIALIZER));
 				checkSerializerPresence(
-					snapshot.getTypeSerializer(StateMetaInfo.CommonSerializerKeys.VALUE_SERIALIZER));
+					snapshot.getTypeSerializer(StateMetaInfoSnapshot.CommonSerializerKeys.VALUE_SERIALIZER));
 			}
 			stateMetaInfoSnapshots.add(snapshot);
 		}

@@ -22,7 +22,7 @@ import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.typeutils.TypeSerializer;
 import org.apache.flink.core.memory.DataOutputView;
 import org.apache.flink.runtime.state.KeyGroupRangeAssignment;
-import org.apache.flink.runtime.state.metainfo.StateMetaInfo;
+import org.apache.flink.runtime.state.RegisteredKeyedBackendStateMetaInfo;
 import org.apache.flink.runtime.state.StateSnapshot;
 import org.apache.flink.runtime.state.StateTransformationFunction;
 import org.apache.flink.util.Preconditions;
@@ -69,7 +69,7 @@ public class NestedMapsStateTable<K, N, S> extends StateTable<K, N, S> {
 	 * @param keyContext the key context.
 	 * @param metaInfo the meta information for this state table.
 	 */
-	public NestedMapsStateTable(InternalKeyContext<K> keyContext, StateMetaInfo metaInfo) {
+	public NestedMapsStateTable(InternalKeyContext<K> keyContext, RegisteredKeyedBackendStateMetaInfo<N, S> metaInfo) {
 		super(keyContext, metaInfo);
 		this.keyGroupOffset = keyContext.getKeyGroupRange().getStartKeyGroup();
 
@@ -290,7 +290,7 @@ public class NestedMapsStateTable<K, N, S> extends StateTable<K, N, S> {
 	}
 
 	@Override
-	public <T> void transform(N namespace, T value, @Nonnull StateTransformationFunction<S, T> transformation) throws Exception {
+	public <T> void transform(N namespace, T value, StateTransformationFunction<S, T> transformation) throws Exception {
 		final K key = keyContext.getCurrentKey();
 		checkKeyNamespacePreconditions(key, namespace);
 		final int keyGroupIndex = keyContext.getCurrentKeyGroupIndex();
@@ -323,7 +323,6 @@ public class NestedMapsStateTable<K, N, S> extends StateTable<K, N, S> {
 		return count;
 	}
 
-	@Nonnull
 	@Override
 	public NestedMapsStateTableSnapshot<K, N, S> createSnapshot() {
 		return new NestedMapsStateTableSnapshot<>(this);
@@ -364,8 +363,8 @@ public class NestedMapsStateTable<K, N, S> extends StateTable<K, N, S> {
 			final Map<N, Map<K, S>> keyGroupMap = owningStateTable.getMapForKeyGroup(keyGroupId);
 			if (null != keyGroupMap) {
 				TypeSerializer<K> keySerializer = owningStateTable.keyContext.getKeySerializer();
-				TypeSerializer<N> namespaceSerializer = owningStateTable.getNamespaceSerializer();
-				TypeSerializer<S> stateSerializer = owningStateTable.getStateSerializer();
+				TypeSerializer<N> namespaceSerializer = owningStateTable.metaInfo.getNamespaceSerializer();
+				TypeSerializer<S> stateSerializer = owningStateTable.metaInfo.getStateSerializer();
 				dov.writeInt(countMappingsInKeyGroup(keyGroupMap));
 				for (Map.Entry<N, Map<K, S>> namespaceEntry : keyGroupMap.entrySet()) {
 					final N namespace = namespaceEntry.getKey();
