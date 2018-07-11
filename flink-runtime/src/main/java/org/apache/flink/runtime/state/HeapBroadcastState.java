@@ -19,10 +19,12 @@
 package org.apache.flink.runtime.state;
 
 import org.apache.flink.api.common.state.BroadcastState;
+import org.apache.flink.api.common.typeutils.TypeSerializer;
 import org.apache.flink.api.common.typeutils.base.MapSerializer;
 import org.apache.flink.core.fs.FSDataOutputStream;
 import org.apache.flink.core.memory.DataOutputView;
 import org.apache.flink.core.memory.DataOutputViewStreamWrapper;
+import org.apache.flink.runtime.state.metainfo.StateMetaInfo;
 import org.apache.flink.util.Preconditions;
 
 import java.io.IOException;
@@ -42,7 +44,7 @@ public class HeapBroadcastState<K, V> implements BackendWritableBroadcastState<K
 	/**
 	 * Meta information of the state, including state name, assignment mode, and serializer.
 	 */
-	private RegisteredBroadcastBackendStateMetaInfo<K, V> stateMetaInfo;
+	private StateMetaInfo stateMetaInfo;
 
 	/**
 	 * The internal map the holds the elements of the state.
@@ -52,30 +54,36 @@ public class HeapBroadcastState<K, V> implements BackendWritableBroadcastState<K
 	/**
 	 * A serializer that allows to perform deep copies of internal map state.
 	 */
-	private final MapSerializer<K, V> internalMapCopySerializer;
+	private MapSerializer<K, V> internalMapCopySerializer;
 
-	HeapBroadcastState(RegisteredBroadcastBackendStateMetaInfo<K, V> stateMetaInfo) {
+	HeapBroadcastState(StateMetaInfo stateMetaInfo) {
 		this(stateMetaInfo, new HashMap<>());
 	}
 
-	private HeapBroadcastState(final RegisteredBroadcastBackendStateMetaInfo<K, V> stateMetaInfo, final Map<K, V> internalMap) {
+	private HeapBroadcastState(final StateMetaInfo stateMetaInfo, final Map<K, V> internalMap) {
 
 		this.stateMetaInfo = Preconditions.checkNotNull(stateMetaInfo);
 		this.backingMap = Preconditions.checkNotNull(internalMap);
-		this.internalMapCopySerializer = new MapSerializer<>(stateMetaInfo.getKeySerializer(), stateMetaInfo.getValueSerializer());
+		setStateMetaInfo(stateMetaInfo);
 	}
 
 	private HeapBroadcastState(HeapBroadcastState<K, V> toCopy) {
 		this(toCopy.stateMetaInfo.deepCopy(), toCopy.internalMapCopySerializer.copy(toCopy.backingMap));
 	}
 
+	@SuppressWarnings("unchecked")
 	@Override
-	public void setStateMetaInfo(RegisteredBroadcastBackendStateMetaInfo<K, V> stateMetaInfo) {
+	public void setStateMetaInfo(StateMetaInfo stateMetaInfo) {
 		this.stateMetaInfo = stateMetaInfo;
+		final TypeSerializer<K> keySerializer = (TypeSerializer<K>) stateMetaInfo.getTypeSerializer(
+			StateMetaInfo.CommonSerializerKeys.KEY_SERIALIZER);
+		final TypeSerializer<V> valueSerializer = (TypeSerializer<V>) stateMetaInfo.getTypeSerializer(
+			StateMetaInfo.CommonSerializerKeys.VALUE_SERIALIZER);
+		this.internalMapCopySerializer = new MapSerializer<>(keySerializer, valueSerializer);
 	}
 
 	@Override
-	public RegisteredBroadcastBackendStateMetaInfo<K, V> getStateMetaInfo() {
+	public StateMetaInfo getStateMetaInfo() {
 		return stateMetaInfo;
 	}
 
@@ -105,8 +113,8 @@ public class HeapBroadcastState<K, V> implements BackendWritableBroadcastState<K
 		DataOutputView dov = new DataOutputViewStreamWrapper(out);
 		dov.writeInt(backingMap.size());
 		for (Map.Entry<K, V> entry: backingMap.entrySet()) {
-			getStateMetaInfo().getKeySerializer().serialize(entry.getKey(), dov);
-			getStateMetaInfo().getValueSerializer().serialize(entry.getValue(), dov);
+			internalMapCopySerializer.getKeySerializer().serialize(entry.getKey(), dov);
+			internalMapCopySerializer.getValueSerializer().serialize(entry.getValue(), dov);
 		}
 
 		return partitionOffset;

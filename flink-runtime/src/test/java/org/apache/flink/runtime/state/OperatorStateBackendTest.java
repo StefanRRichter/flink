@@ -38,6 +38,7 @@ import org.apache.flink.runtime.operators.testutils.DummyEnvironment;
 import org.apache.flink.runtime.state.DefaultOperatorStateBackend.PartitionableListState;
 import org.apache.flink.runtime.state.memory.MemCheckpointStreamFactory;
 import org.apache.flink.runtime.state.memory.MemoryStateBackend;
+import org.apache.flink.runtime.state.metainfo.StateMetaInfo;
 import org.apache.flink.runtime.util.BlockerCheckpointStreamFactory;
 import org.apache.flink.runtime.util.BlockingCheckpointOutputStream;
 import org.apache.flink.testutils.ArtificialCNFExceptionThrowingClassLoader;
@@ -115,7 +116,8 @@ public class OperatorStateBackendTest {
 		assertEquals(2, operatorStateBackend.getRegisteredStateNames().size());
 
 		// make sure that type registrations are forwarded
-		TypeSerializer<?> serializer = ((PartitionableListState<?>) listState).getStateMetaInfo().getPartitionStateSerializer();
+		TypeSerializer<?> serializer = ((PartitionableListState<?>) listState).getStateMetaInfo().
+			getTypeSerializer(StateMetaInfo.CommonSerializerKeys.VALUE_SERIALIZER);
 		assertTrue(serializer instanceof KryoSerializer);
 		assertTrue(((KryoSerializer<?>) serializer).getKryo().getSerializer(registeredType)
 				instanceof com.esotericsoftware.kryo.serializers.JavaSerializer);

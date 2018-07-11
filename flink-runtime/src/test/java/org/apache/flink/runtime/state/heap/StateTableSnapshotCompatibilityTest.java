@@ -26,9 +26,8 @@ import org.apache.flink.core.memory.DataInputViewStreamWrapper;
 import org.apache.flink.core.memory.DataOutputViewStreamWrapper;
 import org.apache.flink.runtime.state.ArrayListSerializer;
 import org.apache.flink.runtime.state.KeyGroupRange;
-import org.apache.flink.runtime.state.KeyedBackendSerializationProxy;
-import org.apache.flink.runtime.state.RegisteredKeyedBackendStateMetaInfo;
 import org.apache.flink.runtime.state.StateSnapshot;
+import org.apache.flink.runtime.state.metainfo.StateMetaInfo;
 
 import org.junit.Assert;
 import org.junit.Test;
@@ -36,6 +35,8 @@ import org.junit.Test;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Random;
+
+import static org.apache.flink.runtime.state.metainfo.StateMetaInfoSnapshotReadersWriters.CURRENT_STATE_META_INFO_SNAPSHOT_VERSION;
 
 public class StateTableSnapshotCompatibilityTest {
 
@@ -46,10 +47,9 @@ public class StateTableSnapshotCompatibilityTest {
 	@Test
 	public void checkCompatibleSerializationFormats() throws IOException {
 		final Random r = new Random(42);
-		RegisteredKeyedBackendStateMetaInfo<Integer, ArrayList<Integer>> metaInfo =
-				new RegisteredKeyedBackendStateMetaInfo<>(
-						StateDescriptor.Type.UNKNOWN,
+		StateMetaInfo metaInfo = StateMetaInfo.Builder.forKeyedState(
 						"test",
+						StateDescriptor.Type.UNKNOWN,
 						IntSerializer.INSTANCE,
 						new ArrayListSerializer<>(IntSerializer.INSTANCE));
 
@@ -111,7 +111,7 @@ public class StateTableSnapshotCompatibilityTest {
 		final DataInputViewStreamWrapper div = new DataInputViewStreamWrapper(in);
 
 		final StateTableByKeyGroupReader keyGroupReader =
-				StateTableByKeyGroupReaders.readerForVersion(stateTable, KeyedBackendSerializationProxy.VERSION);
+				StateTableByKeyGroupReaders.readerForVersion(stateTable, CURRENT_STATE_META_INFO_SNAPSHOT_VERSION);
 
 		for (Integer keyGroup : keyGroupRange) {
 			keyGroupReader.readMappingsInKeyGroup(div, keyGroup);

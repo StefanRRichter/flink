@@ -31,10 +31,11 @@ import org.apache.flink.core.memory.DataOutputView;
 import org.apache.flink.core.memory.DataOutputViewStreamWrapper;
 import org.apache.flink.runtime.state.ArrayListSerializer;
 import org.apache.flink.runtime.state.KeyGroupRange;
-import org.apache.flink.runtime.state.RegisteredKeyedBackendStateMetaInfo;
 import org.apache.flink.runtime.state.StateSnapshot;
 import org.apache.flink.runtime.state.StateTransformationFunction;
+import org.apache.flink.runtime.state.metainfo.StateMetaInfo;
 import org.apache.flink.util.TestLogger;
+
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -53,12 +54,8 @@ public class CopyOnWriteStateTableTest extends TestLogger {
 	 */
 	@Test
 	public void testPutGetRemoveContainsTransform() throws Exception {
-		RegisteredKeyedBackendStateMetaInfo<Integer, ArrayList<Integer>> metaInfo =
-				new RegisteredKeyedBackendStateMetaInfo<>(
-						StateDescriptor.Type.UNKNOWN,
-						"test",
-						IntSerializer.INSTANCE,
-						new ArrayListSerializer<>(IntSerializer.INSTANCE)); // we use mutable state objects.
+
+		StateMetaInfo metaInfo = createTestStateMetaInfo();
 
 		final MockInternalKeyContext<Integer> keyContext = new MockInternalKeyContext<>(IntSerializer.INSTANCE);
 
@@ -125,12 +122,8 @@ public class CopyOnWriteStateTableTest extends TestLogger {
 	 */
 	@Test
 	public void testIncrementalRehash() {
-		RegisteredKeyedBackendStateMetaInfo<Integer, ArrayList<Integer>> metaInfo =
-				new RegisteredKeyedBackendStateMetaInfo<>(
-						StateDescriptor.Type.UNKNOWN,
-						"test",
-						IntSerializer.INSTANCE,
-						new ArrayListSerializer<>(IntSerializer.INSTANCE)); // we use mutable state objects.
+
+		StateMetaInfo metaInfo = createTestStateMetaInfo();
 
 		final MockInternalKeyContext<Integer> keyContext = new MockInternalKeyContext<>(IntSerializer.INSTANCE);
 
@@ -170,12 +163,7 @@ public class CopyOnWriteStateTableTest extends TestLogger {
 	@Test
 	public void testRandomModificationsAndCopyOnWriteIsolation() throws Exception {
 
-		final RegisteredKeyedBackendStateMetaInfo<Integer, ArrayList<Integer>> metaInfo =
-				new RegisteredKeyedBackendStateMetaInfo<>(
-						StateDescriptor.Type.UNKNOWN,
-						"test",
-						IntSerializer.INSTANCE,
-						new ArrayListSerializer<>(IntSerializer.INSTANCE)); // we use mutable state objects.
+		StateMetaInfo metaInfo = createTestStateMetaInfo();
 
 		final MockInternalKeyContext<Integer> keyContext = new MockInternalKeyContext<>(IntSerializer.INSTANCE);
 
@@ -325,12 +313,8 @@ public class CopyOnWriteStateTableTest extends TestLogger {
 	 */
 	@Test
 	public void testCopyOnWriteContracts() {
-		RegisteredKeyedBackendStateMetaInfo<Integer, ArrayList<Integer>> metaInfo =
-				new RegisteredKeyedBackendStateMetaInfo<>(
-						StateDescriptor.Type.UNKNOWN,
-						"test",
-						IntSerializer.INSTANCE,
-						new ArrayListSerializer<>(IntSerializer.INSTANCE)); // we use mutable state objects.
+
+		StateMetaInfo metaInfo = createTestStateMetaInfo();
 
 		final MockInternalKeyContext<Integer> keyContext = new MockInternalKeyContext<>(IntSerializer.INSTANCE);
 
@@ -400,10 +384,10 @@ public class CopyOnWriteStateTableTest extends TestLogger {
 		final TestDuplicateSerializer stateSerializer = new TestDuplicateSerializer();
 		final TestDuplicateSerializer keySerializer = new TestDuplicateSerializer();
 
-		RegisteredKeyedBackendStateMetaInfo<Integer, Integer> metaInfo =
-			new RegisteredKeyedBackendStateMetaInfo<>(
-				StateDescriptor.Type.VALUE,
+		StateMetaInfo stateMetaInfo =
+			StateMetaInfo.Builder.forKeyedState(
 				"test",
+				StateDescriptor.Type.VALUE,
 				namespaceSerializer,
 				stateSerializer);
 
@@ -436,7 +420,7 @@ public class CopyOnWriteStateTableTest extends TestLogger {
 		};
 
 		CopyOnWriteStateTable<Integer, Integer, Integer> table =
-			new CopyOnWriteStateTable<>(mockKeyContext, metaInfo);
+			new CopyOnWriteStateTable<>(mockKeyContext, stateMetaInfo);
 
 		table.put(0, 0, 0, 0);
 		table.put(1, 0, 0, 1);
@@ -662,5 +646,13 @@ public class CopyOnWriteStateTableTest extends TestLogger {
 		public CompatibilityResult<Integer> ensureCompatibility(TypeSerializerConfigSnapshot configSnapshot) {
 			throw new UnsupportedOperationException();
 		}
+	}
+
+	private StateMetaInfo createTestStateMetaInfo() {
+		return StateMetaInfo.Builder.forKeyedState(
+			"test",
+			StateDescriptor.Type.UNKNOWN,
+			IntSerializer.INSTANCE,
+			new ArrayListSerializer<>(IntSerializer.INSTANCE));
 	}
 }

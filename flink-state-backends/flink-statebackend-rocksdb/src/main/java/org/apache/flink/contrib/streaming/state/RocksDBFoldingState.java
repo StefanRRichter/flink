@@ -25,8 +25,8 @@ import org.apache.flink.api.common.state.State;
 import org.apache.flink.api.common.state.StateDescriptor;
 import org.apache.flink.api.common.typeutils.TypeSerializer;
 import org.apache.flink.api.java.tuple.Tuple2;
-import org.apache.flink.runtime.state.RegisteredKeyedBackendStateMetaInfo;
 import org.apache.flink.runtime.state.internal.InternalFoldingState;
+import org.apache.flink.runtime.state.metainfo.StateMetaInfo;
 
 import org.rocksdb.ColumnFamilyHandle;
 
@@ -102,12 +102,18 @@ class RocksDBFoldingState<K, N, T, ACC>
 	@SuppressWarnings("unchecked")
 	static <K, N, SV, S extends State, IS extends S> IS create(
 		StateDescriptor<S, SV> stateDesc,
-		Tuple2<ColumnFamilyHandle, RegisteredKeyedBackendStateMetaInfo<N, SV>> registerResult,
+		Tuple2<ColumnFamilyHandle, StateMetaInfo> registerResult,
 		RocksDBKeyedStateBackend<K> backend) {
+		final StateMetaInfo stateMetaInfo = registerResult.f1;
+		TypeSerializer<N> namespaceSerializer =
+			(TypeSerializer<N>) stateMetaInfo.getTypeSerializer(StateMetaInfo.CommonSerializerKeys.NAMESPACE_SERIALIZER);
+		TypeSerializer<SV> valueSerializer =
+			(TypeSerializer<SV>) stateMetaInfo.getTypeSerializer(StateMetaInfo.CommonSerializerKeys.VALUE_SERIALIZER);
+		stateMetaInfo.getTypeSerializer(StateMetaInfo.CommonSerializerKeys.VALUE_SERIALIZER);
 		return (IS) new RocksDBFoldingState<>(
 			registerResult.f0,
-			registerResult.f1.getNamespaceSerializer(),
-			registerResult.f1.getStateSerializer(),
+			namespaceSerializer,
+			valueSerializer,
 			stateDesc.getDefaultValue(),
 			((FoldingStateDescriptor<?, SV>) stateDesc).getFoldFunction(),
 			backend);
