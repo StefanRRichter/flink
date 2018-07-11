@@ -19,8 +19,7 @@
 package org.apache.flink.runtime.state.heap;
 
 import org.apache.flink.annotation.VisibleForTesting;
-import org.apache.flink.api.common.typeutils.TypeSerializer;
-import org.apache.flink.runtime.state.RegisteredKeyedBackendStateMetaInfo;
+import org.apache.flink.runtime.state.metainfo.StateMetaInfo;
 import org.apache.flink.runtime.state.StateTransformationFunction;
 import org.apache.flink.util.MathUtils;
 import org.apache.flink.util.Preconditions;
@@ -204,7 +203,7 @@ public class CopyOnWriteStateTable<K, N, S> extends StateTable<K, N, S> implemen
 	 * @param keyContext the key context.
 	 * @param metaInfo   the meta information, including the type serializer for state copy-on-write.
 	 */
-	CopyOnWriteStateTable(InternalKeyContext<K> keyContext, RegisteredKeyedBackendStateMetaInfo<N, S> metaInfo) {
+	CopyOnWriteStateTable(InternalKeyContext<K> keyContext, StateMetaInfo metaInfo) {
 		this(keyContext, metaInfo, 1024);
 	}
 
@@ -217,7 +216,7 @@ public class CopyOnWriteStateTable<K, N, S> extends StateTable<K, N, S> implemen
 	 * @throws IllegalArgumentException when the capacity is less than zero.
 	 */
 	@SuppressWarnings("unchecked")
-	private CopyOnWriteStateTable(InternalKeyContext<K> keyContext, RegisteredKeyedBackendStateMetaInfo<N, S> metaInfo, int capacity) {
+	private CopyOnWriteStateTable(InternalKeyContext<K> keyContext, StateMetaInfo metaInfo, int capacity) {
 		super(keyContext, metaInfo);
 
 		// initialized tables to EMPTY_TABLE.
@@ -337,7 +336,7 @@ public class CopyOnWriteStateTable<K, N, S> extends StateTable<K, N, S> implemen
 	}
 
 	@Override
-	public <T> void transform(N namespace, T value, StateTransformationFunction<S, T> transformation) throws Exception {
+	public <T> void transform(N namespace, T value, @Nonnull StateTransformationFunction<S, T> transformation) throws Exception {
 		transform(keyContext.getCurrentKey(), namespace, value, transformation);
 	}
 
@@ -532,28 +531,6 @@ public class CopyOnWriteStateTable<K, N, S> extends StateTable<K, N, S> implemen
 	private void checkKeyNamespacePreconditions(K key, N namespace) {
 		Preconditions.checkNotNull(key, "No key set. This method should not be called outside of a keyed context.");
 		Preconditions.checkNotNull(namespace, "Provided namespace is null.");
-	}
-
-	// Meta data setter / getter and toString --------------------------------------------------------------------------
-
-	@Override
-	public TypeSerializer<S> getStateSerializer() {
-		return metaInfo.getStateSerializer();
-	}
-
-	@Override
-	public TypeSerializer<N> getNamespaceSerializer() {
-		return metaInfo.getNamespaceSerializer();
-	}
-
-	@Override
-	public RegisteredKeyedBackendStateMetaInfo<N, S> getMetaInfo() {
-		return metaInfo;
-	}
-
-	@Override
-	public void setMetaInfo(RegisteredKeyedBackendStateMetaInfo<N, S> metaInfo) {
-		this.metaInfo = metaInfo;
 	}
 
 	// Iteration  ------------------------------------------------------------------------------------------------------
@@ -871,6 +848,7 @@ public class CopyOnWriteStateTable<K, N, S> extends StateTable<K, N, S> implemen
 	 *
 	 * @return a snapshot from this {@link CopyOnWriteStateTable}, for checkpointing.
 	 */
+	@Nonnull
 	@Override
 	public CopyOnWriteStateTableSnapshot<K, N, S> createSnapshot() {
 		return new CopyOnWriteStateTableSnapshot<>(this);

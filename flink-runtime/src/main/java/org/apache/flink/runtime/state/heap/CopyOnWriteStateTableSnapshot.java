@@ -109,8 +109,8 @@ public class CopyOnWriteStateTableSnapshot<K, N, S>
 		// We create duplicates of the serializers for the async snapshot, because TypeSerializer
 		// might be stateful and shared with the event processing thread.
 		this.localKeySerializer = owningStateTable.keyContext.getKeySerializer().duplicate();
-		this.localNamespaceSerializer = owningStateTable.metaInfo.getNamespaceSerializer().duplicate();
-		this.localStateSerializer = owningStateTable.metaInfo.getStateSerializer().duplicate();
+		this.localNamespaceSerializer = owningStateTable.getNamespaceSerializer().duplicate();
+		this.localStateSerializer = owningStateTable.getStateSerializer().duplicate();
 
 		this.partitionedStateTableSnapshot = null;
 	}
