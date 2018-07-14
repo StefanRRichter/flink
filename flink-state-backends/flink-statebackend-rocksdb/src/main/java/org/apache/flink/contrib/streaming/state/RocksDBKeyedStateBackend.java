@@ -322,8 +322,8 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 
 		switch (priorityQueueStateType) {
 			case HEAP:
-				this.priorityQueueFactory = new HeapPriorityQueueSetFactory(keyGroupRange, numberOfKeyGroups, 128);
-				break;
+//				this.priorityQueueFactory = new HeapPriorityQueueSetFactory(keyGroupRange, numberOfKeyGroups, 128);
+//				break;
 			case ROCKS:
 				this.priorityQueueFactory = new RocksDBPriorityQueueSetFactory();
 				break;
