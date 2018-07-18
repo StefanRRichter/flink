@@ -55,6 +55,7 @@ public class TestOrderedStore<T> implements CachingInternalPriorityQueueSet.Orde
 	@Nonnull
 	@Override
 	public CloseableIterator<T> orderedIterator() {
-		return CloseableIterator.adapterForIterator(treeSet.iterator());
+		// "snapshot iterator", so that we don't suffer from concurrent modification exceptions in the test.
+		return CloseableIterator.adapterForIterator(new TreeSet<>(treeSet).iterator());
 	}
 }

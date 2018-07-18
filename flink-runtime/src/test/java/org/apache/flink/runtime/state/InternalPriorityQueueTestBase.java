@@ -36,9 +36,11 @@ import javax.annotation.Nonnull;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.Set;
@@ -104,6 +106,43 @@ public abstract class InternalPriorityQueueTestBase extends TestLogger {
 	}
 
 	@Test
+	public void testBulkPollPerKeyOrdered() {
+		final int initialCapacity = 4;
+		final int testSize = 1000;
+		InternalPriorityQueue<TestElement> priorityQueue =
+			newPriorityQueue(initialCapacity);
+		HashSet<TestElement> checkSet = new HashSet<>(testSize);
+		insertRandomElements(priorityQueue, checkSet, testSize);
+
+		Map<Long, Long> keyWithPrioHighWatermarks = new HashMap<>();
+
+		long minPrio = Long.MAX_VALUE;
+		long maxPrio = Long.MIN_VALUE;
+		for (TestElement element : checkSet) {
+			maxPrio = Math.max(maxPrio, element.priority);
+			minPrio = Math.min(minPrio, element.priority);
+		}
+
+		int numSegments = 4;
+		long segSize = (maxPrio - minPrio) / numSegments;
+		for (int i = 1; i <= numSegments; ++i) {
+			long upperBound = minPrio + i * segSize;
+			priorityQueue.bulkPoll(
+				(e) -> e.priority <= upperBound,
+				(e) -> {
+					Assert.assertTrue(e.priority <= upperBound);
+					long previousHighWatermark = keyWithPrioHighWatermarks.getOrDefault(e.key, Long.MIN_VALUE);
+					keyWithPrioHighWatermarks.put(e.key, e.priority);
+					Assert.assertTrue(checkSet.remove(e));
+					Assert.assertTrue(previousHighWatermark <= e.priority);
+				});
+		}
+
+		Assert.assertTrue(priorityQueue.isEmpty());
+		Assert.assertTrue(checkSet.isEmpty());
+	}
+
+	@Test
 	public void testPeekPollOrder() {
 		final int initialCapacity = 4;
 		final int testSize = 1000;
@@ -160,7 +199,27 @@ public abstract class InternalPriorityQueueTestBase extends TestLogger {
 				priorityQueue.remove(element);
 			}
 
-			long lastPriorityValue = removesHead ? element.getPriority() : Long.MIN_VALUE;
+			long lastPriorityValue;
+
+			// test some bulk polling from time to time
+			if (random.nextInt(20) == 0 && iterator.hasNext()) {
+				Map<Long, Long> keyWithPrioHighWatermarks = new HashMap<>();
+				TestElement bulkBoundElement = iterator.next();
+				priorityQueue.bulkPoll(
+					(e) -> e.priority <= bulkBoundElement.priority,
+					(e) -> {
+						Assert.assertTrue(e.priority <= bulkBoundElement.priority);
+						long previousHighWatermark = keyWithPrioHighWatermarks.getOrDefault(e.key, Long.MIN_VALUE);
+						keyWithPrioHighWatermarks.put(e.key, e.priority);
+						Assert.assertTrue(previousHighWatermark <= e.priority);
+					});
+
+				lastPriorityValue = bulkBoundElement.priority;
+			} else if (removesHead) {
+				lastPriorityValue = element.getPriority();
+			} else {
+				lastPriorityValue = Long.MIN_VALUE;
+			}
 
 			while ((element = priorityQueue.poll()) != null) {
 				Assert.assertTrue(element.getPriority() >= lastPriorityValue);

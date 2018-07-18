@@ -121,9 +121,11 @@ public class CachingInternalPriorityQueueSet<E> implements InternalPriorityQueue
 					orderedStore.remove(next);
 					consumer.accept(next);
 				} else {
-					orderedCache.add(next);
-					while (iterator.hasNext() && !orderedCache.isFull()) {
-						orderedCache.add(iterator.next());
+					if (!orderedCache.isFull()) {
+						orderedCache.add(next);
+						while (iterator.hasNext() && !orderedCache.isFull()) {
+							orderedCache.add(iterator.next());
+						}
 					}
 					break;
 				}
@@ -348,7 +350,7 @@ public class CachingInternalPriorityQueueSet<E> implements InternalPriorityQueue
 
 		/**
 		 * Returns an iterator over the store that returns element in order. The iterator must be closed by the client
-		 * after usage.
+		 * after usage. This iterator should tolerate concurrent modifications to elements before the current position.
 		 */
 		@Nonnull
 		CloseableIterator<E> orderedIterator();
