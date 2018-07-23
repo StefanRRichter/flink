@@ -20,6 +20,7 @@ package org.apache.flink.runtime.state.heap;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.util.Objects;
 import java.util.Random;
 import java.util.TreeSet;
 
@@ -34,19 +35,19 @@ public abstract class OrderedSetCacheTestBase {
 		final Random random = new Random(0x42);
 		final int capacity = 5000;
 		final int keySpaceUpperBound = 100 * capacity;
-		final TreeSet<Integer> checkSet = new TreeSet<>(Integer::compareTo);
-		final CachingInternalPriorityQueueSet.OrderedSetCache<Integer> testInstance = createInstance(capacity);
+		final TreeSet<HeapPQInteger> checkSet = new TreeSet<>(HeapPQInteger::compareTo);
+		final CachingInternalPriorityQueueSet.OrderedSetCache<HeapPQInteger> testInstance = createInstance(capacity);
 
 		Assert.assertTrue(testInstance.isEmpty());
 
 		while (checkSet.size() < capacity) {
 			Assert.assertEquals(checkSet.size() >= capacity, testInstance.isFull());
 			if (!checkSet.isEmpty() && random.nextInt(10) == 0) {
-				final int toDelete = pickContainedRandomElement(checkSet, random);
+				final HeapPQInteger toDelete = pickContainedRandomElement(checkSet, random);
 				Assert.assertTrue(checkSet.remove(toDelete));
 				testInstance.remove(toDelete);
 			} else {
-				final int randomValue = random.nextInt(keySpaceUpperBound);
+				final HeapPQInteger randomValue = new HeapPQInteger(random.nextInt(keySpaceUpperBound));
 				checkSet.add(randomValue);
 				testInstance.add(randomValue);
 			}
@@ -55,18 +56,18 @@ public abstract class OrderedSetCacheTestBase {
 			Assert.assertEquals(checkSet.first(), testInstance.peekFirst());
 			Assert.assertEquals(checkSet.last(), testInstance.peekLast());
 
-			Assert.assertFalse(testInstance.isInLowerBound(checkSet.last()));
-			Assert.assertTrue(testInstance.isInLowerBound(checkSet.last() - 1));
+			Assert.assertFalse(testInstance.isInLowerBound(new HeapPQInteger(checkSet.last().value +1)));
+			Assert.assertTrue(testInstance.isInLowerBound(checkSet.last()));
 		}
 
 		Assert.assertTrue(testInstance.isFull());
-		Assert.assertFalse(testInstance.isInLowerBound(checkSet.last()));
-		Assert.assertTrue(testInstance.isInLowerBound(checkSet.last() - 1));
+		Assert.assertFalse(testInstance.isInLowerBound(new HeapPQInteger(checkSet.last().value +1)));
+		Assert.assertTrue(testInstance.isInLowerBound(checkSet.last()));
 
 		testInstance.remove(pickNotContainedRandomElement(checkSet, random, keySpaceUpperBound));
 		Assert.assertTrue(testInstance.isFull());
 
-		int containedKey = pickContainedRandomElement(checkSet, random);
+		HeapPQInteger containedKey = pickContainedRandomElement(checkSet, random);
 
 		Assert.assertTrue(checkSet.remove(containedKey));
 		testInstance.remove(containedKey);
@@ -85,18 +86,66 @@ public abstract class OrderedSetCacheTestBase {
 		Assert.assertTrue(testInstance.isEmpty());
 	}
 
-	private int pickNotContainedRandomElement(TreeSet<Integer> checkSet, Random random, int upperBound) {
-		int notContainedKey;
+	private HeapPQInteger pickNotContainedRandomElement(TreeSet<HeapPQInteger> checkSet, Random random, int upperBound) {
+		HeapPQInteger notContainedKey;
 		do {
-			notContainedKey = random.nextInt(upperBound);
+			notContainedKey = new HeapPQInteger(random.nextInt(upperBound));
 		} while (checkSet.contains(notContainedKey));
 		return notContainedKey;
 	}
 
-	private int pickContainedRandomElement(TreeSet<Integer> checkSet, Random random) {
+	private HeapPQInteger pickContainedRandomElement(TreeSet<HeapPQInteger> checkSet, Random random) {
 		assert !checkSet.isEmpty();
-		return checkSet.ceiling(1 + random.nextInt(checkSet.last()));
+		return checkSet.ceiling(new HeapPQInteger(1 + random.nextInt(checkSet.last().value)));
 	}
 
-	protected abstract CachingInternalPriorityQueueSet.OrderedSetCache<Integer> createInstance(int capacity);
+	protected abstract CachingInternalPriorityQueueSet.OrderedSetCache<HeapPQInteger> createInstance(int capacity);
+
+	class HeapPQInteger implements HeapPriorityQueueElement, Comparable<HeapPQInteger> {
+
+		private final int value;
+		private int idx;
+
+		HeapPQInteger(int value) {
+			this.value = value;
+			this.idx = Integer.MIN_VALUE;
+		}
+
+		@Override
+		public int getInternalIndex() {
+			return idx;
+		}
+
+		@Override
+		public void setInternalIndex(int newIndex) {
+			this.idx = newIndex;
+		}
+
+		public int getValue() {
+			return value;
+		}
+
+		@Override
+		public boolean equals(Object o) {
+			if (this == o) {
+				return true;
+			}
+			if (o == null || getClass() != o.getClass()) {
+				return false;
+			}
+			HeapPQInteger that = (HeapPQInteger) o;
+			return getValue() == that.getValue();
+		}
+
+		@Override
+		public int hashCode() {
+
+			return Objects.hash(getValue());
+		}
+
+		@Override
+		public int compareTo(HeapPQInteger o) {
+			return Integer.compare(value, o.value);
+		}
+	}
 }

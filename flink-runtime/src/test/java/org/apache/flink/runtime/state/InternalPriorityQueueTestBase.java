@@ -35,6 +35,7 @@ import javax.annotation.Nonnull;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -63,6 +64,14 @@ public abstract class InternalPriorityQueueTestBase extends TestLogger {
 		// to fully comply with compareTo/equals contract.
 		return Long.compare(o1.getKey(), o2.getKey());
 	};
+
+	protected Comparator<Long> getTestElementPriorityComparator() {
+		return Long::compareTo;
+	}
+
+	private long getHighestPriorityValueForComparator() {
+		return getTestElementPriorityComparator().compare(-1L , 1L) > 0 ? Long.MAX_VALUE : Long.MIN_VALUE;
+	}
 
 	protected static void insertRandomElements(
 		@Nonnull InternalPriorityQueue<TestElement> priorityQueue,
@@ -107,6 +116,8 @@ public abstract class InternalPriorityQueueTestBase extends TestLogger {
 
 	@Test
 	public void testBulkPollPerKeyOrdered() {
+		final Comparator<Long> comparator = getTestElementPriorityComparator();
+		final long highestPriorityValue = getHighestPriorityValueForComparator();
 		final int initialCapacity = 4;
 		final int testSize = 1000;
 		InternalPriorityQueue<TestElement> priorityQueue =
@@ -116,25 +127,25 @@ public abstract class InternalPriorityQueueTestBase extends TestLogger {
 
 		Map<Long, Long> keyWithPrioHighWatermarks = new HashMap<>();
 
-		long minPrio = Long.MAX_VALUE;
-		long maxPrio = Long.MIN_VALUE;
+		long highestPrio = highestPriorityValue;
+		long lowestPrio = highestPrio == Long.MAX_VALUE ? Long.MIN_VALUE : Long.MAX_VALUE;
 		for (TestElement element : checkSet) {
-			maxPrio = Math.max(maxPrio, element.priority);
-			minPrio = Math.min(minPrio, element.priority);
+			highestPrio = comparator.compare(highestPrio, element.priority) > 0 ? element.priority : highestPrio;
+			lowestPrio = comparator.compare(lowestPrio, element.priority) > 0 ? lowestPrio : element.priority;
 		}
 
 		int numSegments = 4;
-		long segSize = (maxPrio - minPrio) / numSegments;
+		long segSize = (highestPrio - lowestPrio) / numSegments;
 		for (int i = 1; i <= numSegments; ++i) {
-			long upperBound = minPrio + i * segSize;
+			long upperBound = lowestPrio + i * segSize;
 			priorityQueue.bulkPoll(
-				(e) -> e.priority <= upperBound,
+				(e) -> comparator.compare(e.priority, upperBound) <= 0,
 				(e) -> {
-					Assert.assertTrue(e.priority <= upperBound);
-					long previousHighWatermark = keyWithPrioHighWatermarks.getOrDefault(e.key, Long.MIN_VALUE);
+					Assert.assertTrue(comparator.compare(e.priority, upperBound) <= 0);
+					long previousHighWatermark = keyWithPrioHighWatermarks.getOrDefault(e.key, highestPriorityValue);
 					keyWithPrioHighWatermarks.put(e.key, e.priority);
 					Assert.assertTrue(checkSet.remove(e));
-					Assert.assertTrue(previousHighWatermark <= e.priority);
+					Assert.assertTrue(comparator.compare(previousHighWatermark, e.priority) <= 0);
 				});
 		}
 
@@ -146,13 +157,14 @@ public abstract class InternalPriorityQueueTestBase extends TestLogger {
 	public void testPeekPollOrder() {
 		final int initialCapacity = 4;
 		final int testSize = 1000;
+		final Comparator<Long> comparator = getTestElementPriorityComparator();
 		InternalPriorityQueue<TestElement> priorityQueue =
 			newPriorityQueue(initialCapacity);
 		HashSet<TestElement> checkSet = new HashSet<>(testSize);
 
 		insertRandomElements(priorityQueue, checkSet, testSize);
 
-		long lastPriorityValue = Long.MIN_VALUE;
+		long lastPriorityValue = getHighestPriorityValueForComparator();
 		int lastSize = priorityQueue.size();
 		Assert.assertEquals(testSize, lastSize);
 		TestElement testElement;
@@ -161,7 +173,7 @@ public abstract class InternalPriorityQueueTestBase extends TestLogger {
 			Assert.assertEquals(lastSize, priorityQueue.size());
 			Assert.assertEquals(testElement, priorityQueue.poll());
 			Assert.assertTrue(checkSet.remove(testElement));
-			Assert.assertTrue(testElement.getPriority() >= lastPriorityValue);
+			Assert.assertTrue(comparator.compare(testElement.getPriority(), lastPriorityValue) >= 0);
 			lastPriorityValue = testElement.getPriority();
 			--lastSize;
 		}
@@ -175,7 +187,7 @@ public abstract class InternalPriorityQueueTestBase extends TestLogger {
 	public void testRemoveInsertMixKeepsOrder() {
 
 		InternalPriorityQueue<TestElement> priorityQueue = newPriorityQueue(3);
-
+		final Comparator<Long> comparator = getTestElementPriorityComparator();
 		final ThreadLocalRandom random = ThreadLocalRandom.current();
 		final int testSize = 300;
 		final int addCounterMax = testSize / 4;
@@ -186,6 +198,8 @@ public abstract class InternalPriorityQueueTestBase extends TestLogger {
 
 		// check that the whole set is still in order
 		while (!checkSet.isEmpty()) {
+
+			final long highestPrioValue = getHighestPriorityValueForComparator();
 
 			Iterator<TestElement> iterator = checkSet.iterator();
 			TestElement element = iterator.next();
@@ -199,36 +213,35 @@ public abstract class InternalPriorityQueueTestBase extends TestLogger {
 				priorityQueue.remove(element);
 			}
 
-			long lastPriorityValue;
+			long currentPriorityWatermark;
 
 			// test some bulk polling from time to time
 			if (random.nextInt(20) == 0 && iterator.hasNext()) {
 				Map<Long, Long> keyWithPrioHighWatermarks = new HashMap<>();
 				TestElement bulkBoundElement = iterator.next();
 				priorityQueue.bulkPoll(
-					(e) -> e.priority <= bulkBoundElement.priority,
+					(e) -> comparator.compare(e.priority, bulkBoundElement.priority) <= 0,
 					(e) -> {
-						Assert.assertTrue(e.priority <= bulkBoundElement.priority);
-						long previousHighWatermark = keyWithPrioHighWatermarks.getOrDefault(e.key, Long.MIN_VALUE);
+						Assert.assertTrue(comparator.compare(e.priority, bulkBoundElement.priority) <= 0);
+						long previousHighWatermark = keyWithPrioHighWatermarks.getOrDefault(e.key, highestPrioValue);
 						keyWithPrioHighWatermarks.put(e.key, e.priority);
-						Assert.assertTrue(previousHighWatermark <= e.priority);
+						Assert.assertTrue(comparator.compare(previousHighWatermark, e.priority) <= 0);
 					});
-
-				lastPriorityValue = bulkBoundElement.priority;
+				currentPriorityWatermark = bulkBoundElement.priority;
 			} else if (removesHead) {
-				lastPriorityValue = element.getPriority();
+				currentPriorityWatermark = element.getPriority();
 			} else {
-				lastPriorityValue = Long.MIN_VALUE;
+				currentPriorityWatermark = highestPrioValue;
 			}
 
 			while ((element = priorityQueue.poll()) != null) {
-				Assert.assertTrue(element.getPriority() >= lastPriorityValue);
-				lastPriorityValue = element.getPriority();
+				Assert.assertTrue(comparator.compare(element.getPriority(), currentPriorityWatermark) >= 0);
+				currentPriorityWatermark = element.getPriority();
 				if (--iterationsTillNextAdds == 0) {
 					// some random adds
 					iterationsTillNextAdds = random.nextInt(addCounterMax);
 					insertRandomElements(priorityQueue, new HashSet<>(checkSet), 1 + random.nextInt(3));
-					lastPriorityValue = priorityQueue.peek().getPriority();
+					currentPriorityWatermark = priorityQueue.peek().getPriority();
 				}
 			}
 
@@ -241,6 +254,7 @@ public abstract class InternalPriorityQueueTestBase extends TestLogger {
 	@Test
 	public void testPoll() {
 		InternalPriorityQueue<TestElement> priorityQueue = newPriorityQueue(3);
+		final Comparator<Long> comparator = getTestElementPriorityComparator();
 
 		Assert.assertNull(priorityQueue.poll());
 
@@ -248,12 +262,12 @@ public abstract class InternalPriorityQueueTestBase extends TestLogger {
 		HashSet<TestElement> checkSet = new HashSet<>(testSize);
 		insertRandomElements(priorityQueue, checkSet, testSize);
 
-		long lastPriorityValue = Long.MIN_VALUE;
+		long lastPriorityValue = getHighestPriorityValueForComparator();
 		while (!priorityQueue.isEmpty()) {
 			TestElement removed = priorityQueue.poll();
 			Assert.assertNotNull(removed);
 			Assert.assertTrue(checkSet.remove(removed));
-			Assert.assertTrue(removed.getPriority() >= lastPriorityValue);
+			Assert.assertTrue(comparator.compare(removed.getPriority(), lastPriorityValue) >= 0);
 			lastPriorityValue = removed.getPriority();
 		}
 		Assert.assertTrue(checkSet.isEmpty());
@@ -345,18 +359,21 @@ public abstract class InternalPriorityQueueTestBase extends TestLogger {
 		InternalPriorityQueue<TestElement> priorityQueue =
 			newPriorityQueue(1);
 
-		TestElement lowPrioElement = new TestElement(4711L, 42L);
-		TestElement highPrioElement = new TestElement(815L, 23L);
-		Assert.assertTrue(priorityQueue.add(lowPrioElement));
+		final List<TestElement> testElements =
+			Arrays.asList(new TestElement(4711L, 42L), new TestElement(815L, 23L));
+
+		testElements.sort((l, r) -> getTestElementPriorityComparator().compare(r.priority, l.priority));
+
+		Assert.assertTrue(priorityQueue.add(testElements.get(0)));
 		if (testSetSemanticsAgainstDuplicateElements()) {
-			priorityQueue.add(lowPrioElement.deepCopy());
+			priorityQueue.add(testElements.get(0).deepCopy());
 		}
 		Assert.assertEquals(1, priorityQueue.size());
-		Assert.assertTrue(priorityQueue.add(highPrioElement));
+		Assert.assertTrue(priorityQueue.add(testElements.get(1)));
 		Assert.assertEquals(2, priorityQueue.size());
-		Assert.assertEquals(highPrioElement, priorityQueue.poll());
+		Assert.assertEquals(testElements.get(1), priorityQueue.poll());
 		Assert.assertEquals(1, priorityQueue.size());
-		Assert.assertEquals(lowPrioElement, priorityQueue.poll());
+		Assert.assertEquals(testElements.get(0), priorityQueue.poll());
 		Assert.assertEquals(0, priorityQueue.size());
 	}
 

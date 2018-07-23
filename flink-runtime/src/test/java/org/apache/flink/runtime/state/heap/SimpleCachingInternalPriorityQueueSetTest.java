@@ -30,6 +30,6 @@ public class SimpleCachingInternalPriorityQueueSetTest extends CachingInternalPr
 
 	@Override
 	protected CachingInternalPriorityQueueSet.OrderedSetCache<TestElement> createOrderedSetCache() {
-		return new TreeOrderedSetCache<>(TEST_ELEMENT_COMPARATOR, 3);
+		return new MinMaxPriorityQueueOrderedSetCache<>(TEST_ELEMENT_PRIORITY_COMPARATOR, 3);
 	}
 }

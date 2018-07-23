@@ -22,7 +22,7 @@ import org.apache.flink.core.memory.ByteArrayOutputStreamWithPos;
 import org.apache.flink.core.memory.DataOutputViewStreamWrapper;
 import org.apache.flink.runtime.state.heap.CachingInternalPriorityQueueSet;
 import org.apache.flink.runtime.state.heap.CachingInternalPriorityQueueSetTestBase;
-import org.apache.flink.runtime.state.heap.TreeOrderedSetCache;
+import org.apache.flink.runtime.state.heap.MinMaxPriorityQueueOrderedSetCache;
 
 import org.junit.Rule;
 
@@ -42,7 +42,7 @@ public class CachingInternalPriorityQueueSetWithRocksDBStoreTest extends Caching
 
 	@Override
 	protected CachingInternalPriorityQueueSet.OrderedSetCache<TestElement> createOrderedSetCache() {
-		return new TreeOrderedSetCache<>(TEST_ELEMENT_COMPARATOR, 32);
+		return new MinMaxPriorityQueueOrderedSetCache<>(TEST_ELEMENT_PRIORITY_COMPARATOR, 32);
 	}
 
 	public static CachingInternalPriorityQueueSet.OrderedSetStore<TestElement> createRocksDBStore(

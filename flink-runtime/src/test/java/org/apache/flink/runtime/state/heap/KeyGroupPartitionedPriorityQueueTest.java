@@ -39,7 +39,7 @@ public class KeyGroupPartitionedPriorityQueueTest extends InternalPriorityQueueT
 
 		return (keyGroupId, numKeyGroups, elementComparator) -> {
 			CachingInternalPriorityQueueSet.OrderedSetCache<TestElement> cache =
-				new TreeOrderedSetCache<>(TEST_ELEMENT_COMPARATOR, 32);
+				new MinMaxPriorityQueueOrderedSetCache<>(TEST_ELEMENT_PRIORITY_COMPARATOR, 32);
 			CachingInternalPriorityQueueSet.OrderedSetStore<TestElement> store =
 				new TestOrderedStore<>(TEST_ELEMENT_COMPARATOR);
 			return new CachingInternalPriorityQueueSet<>(cache, store);

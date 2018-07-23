@@ -21,7 +21,7 @@ package org.apache.flink.contrib.streaming.state;
 import org.apache.flink.runtime.state.heap.CachingInternalPriorityQueueSet;
 import org.apache.flink.runtime.state.heap.KeyGroupPartitionedPriorityQueue;
 import org.apache.flink.runtime.state.heap.KeyGroupPartitionedPriorityQueueTest;
-import org.apache.flink.runtime.state.heap.TreeOrderedSetCache;
+import org.apache.flink.runtime.state.heap.MinMaxPriorityQueueOrderedSetCache;
 
 import org.junit.Rule;
 
@@ -40,7 +40,7 @@ public class KeyGroupPartitionedPriorityQueueWithRocksDBStoreTest extends KeyGro
 
 		return (keyGroupId, numKeyGroups, elementComparator) -> {
 			CachingInternalPriorityQueueSet.OrderedSetCache<TestElement> cache =
-				new TreeOrderedSetCache<>(TEST_ELEMENT_COMPARATOR, 32);
+				new MinMaxPriorityQueueOrderedSetCache<>(TEST_ELEMENT_PRIORITY_COMPARATOR, 32);
 			CachingInternalPriorityQueueSet.OrderedSetStore<TestElement> store =
 				RocksDBOrderedSetStoreTest.createRocksDBOrderedStore(
 					rocksDBResource,

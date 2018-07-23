@@ -19,12 +19,12 @@
 package org.apache.flink.runtime.state.heap;
 
 /**
- * Test for {@link TreeOrderedSetCache}.
+ * Test for {@link MinMaxPriorityQueueOrderedSetCache}.
  */
-public class TreeOrderedSetCacheTest extends OrderedSetCacheTestBase {
+public class MinMaxPriorityQueueOrderedSetCacheTest extends OrderedSetCacheTestBase {
 
 	@Override
-	protected CachingInternalPriorityQueueSet.OrderedSetCache<Integer> createInstance(int capacity) {
-		return new TreeOrderedSetCache<>(Integer::compareTo, capacity);
+	protected CachingInternalPriorityQueueSet.OrderedSetCache<HeapPQInteger> createInstance(int capacity) {
+		return new MinMaxPriorityQueueOrderedSetCache<>(HeapPQInteger::compareTo, capacity);
 	}
 }
