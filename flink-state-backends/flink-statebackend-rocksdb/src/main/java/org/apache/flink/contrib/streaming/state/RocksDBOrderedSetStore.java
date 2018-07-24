@@ -27,6 +27,8 @@ import org.apache.flink.runtime.state.heap.CachingInternalPriorityQueueSet;
 import org.apache.flink.util.CloseableIterator;
 import org.apache.flink.util.FlinkRuntimeException;
 
+import org.apache.flink.shaded.guava18.com.google.common.primitives.UnsignedBytes;
+
 import org.rocksdb.ColumnFamilyHandle;
 import org.rocksdb.RocksDB;
 import org.rocksdb.RocksDBException;
@@ -36,6 +38,7 @@ import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
 import java.io.IOException;
+import java.util.Comparator;
 import java.util.NoSuchElementException;
 
 /**
@@ -51,6 +54,9 @@ public class RocksDBOrderedSetStore<T> implements CachingInternalPriorityQueueSe
 
 	/** Serialized empty value to insert into RocksDB. */
 	private static final byte[] DUMMY_BYTES = new byte[] {0};
+
+	/** Comparator for byte arrays. */
+	private static final Comparator<byte[]> LEXICOGRAPIC_BYTE_COMPARATOR = UnsignedBytes.lexicographicalComparator();
 
 	/** The RocksDB instance that serves as store. */
 	@Nonnull
@@ -83,6 +89,10 @@ public class RocksDBOrderedSetStore<T> implements CachingInternalPriorityQueueSe
 	@Nonnull
 	private final DataOutputViewStreamWrapper outputView;
 
+	/** A lower bound for the first element in RocksDB in this key-group. */
+	@Nonnull
+	private byte[] lowerBoundSeekKey;
+
 	public RocksDBOrderedSetStore(
 		@Nonnegative int keyGroupId,
 		@Nonnegative int keyGroupPrefixBytes,
@@ -99,6 +109,7 @@ public class RocksDBOrderedSetStore<T> implements CachingInternalPriorityQueueSe
 		this.outputView = outputView;
 		this.batchWrapper = batchWrapper;
 		this.groupPrefixBytes = createKeyGroupBytes(keyGroupId, keyGroupPrefixBytes);
+		this.lowerBoundSeekKey = groupPrefixBytes;
 	}
 
 	private byte[] createKeyGroupBytes(int keyGroupId, int numPrefixBytes) {
@@ -117,6 +128,10 @@ public class RocksDBOrderedSetStore<T> implements CachingInternalPriorityQueueSe
 	@Override
 	public void add(@Nonnull T element) {
 		byte[] elementBytes = serializeElement(element);
+		if (LEXICOGRAPIC_BYTE_COMPARATOR.compare(elementBytes, lowerBoundSeekKey) < 0) {
+			// a smaller element means a new lower bound.
+			lowerBoundSeekKey = elementBytes;
+		}
 		try {
 			batchWrapper.put(columnFamilyHandle, elementBytes, DUMMY_BYTES);
 		} catch (RocksDBException e) {
@@ -228,8 +243,13 @@ public class RocksDBOrderedSetStore<T> implements CachingInternalPriorityQueueSe
 				// that is lexicographically closer the first expected element in the key-group. I wonder if this could
 				// help to improve the seek if there are many tombstones for elements at the beginning of the key-group
 				// (like for elements that have been removed in previous polling, before they are compacted away).
-				iterator.seek(groupPrefixBytes);
-				deserializeNextElementIfAvailable();
+				iterator.seek(lowerBoundSeekKey);
+				final byte[] elementBytes = nextElementIfAvailable();
+				if (elementBytes != null) {
+					// we can update the lower bound because this is the exactly the smallest element.
+					lowerBoundSeekKey = elementBytes;
+					currentElement = deserializeElement(elementBytes);
+				}
 			} catch (Exception ex) {
 				// ensure resource cleanup also in the face of (runtime) exceptions in the constructor.
 				iterator.close();
@@ -254,21 +274,15 @@ public class RocksDBOrderedSetStore<T> implements CachingInternalPriorityQueueSe
 				throw new NoSuchElementException("Iterator has no more elements!");
 			}
 			iterator.next();
-			deserializeNextElementIfAvailable();
+			final byte[] bytes = nextElementIfAvailable();
+			currentElement = bytes != null ? deserializeElement(bytes) : null;
 			return returnElement;
 		}
 
-		private void deserializeNextElementIfAvailable() {
-			if (iterator.isValid()) {
-				final byte[] elementBytes = iterator.key();
-				if (isPrefixWith(elementBytes, groupPrefixBytes)) {
-					this.currentElement = deserializeElement(elementBytes);
-				} else {
-					this.currentElement = null;
-				}
-			} else {
-				this.currentElement = null;
-			}
+		private byte[] nextElementIfAvailable() {
+			byte[] elementBytes;
+			return iterator.isValid()
+				&& isPrefixWith((elementBytes = iterator.key()), groupPrefixBytes) ? elementBytes : null;
 		}
 	}
 }
