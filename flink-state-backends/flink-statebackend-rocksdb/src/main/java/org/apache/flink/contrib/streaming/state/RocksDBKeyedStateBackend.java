@@ -457,6 +457,11 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 		return keyGroupPrefixBytes;
 	}
 
+	@VisibleForTesting
+	PriorityQueueSetFactory getPriorityQueueFactory() {
+		return priorityQueueFactory;
+	}
+
 	public WriteOptions getWriteOptions() {
 		return writeOptions;
 	}
