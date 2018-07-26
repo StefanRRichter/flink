@@ -42,7 +42,7 @@ public class CachingInternalPriorityQueueSetWithRocksDBStoreTest extends Caching
 
 	@Override
 	protected CachingInternalPriorityQueueSet.OrderedSetCache<TestElement> createOrderedSetCache() {
-		return new MinMaxPriorityQueueOrderedSetCache<>(TEST_ELEMENT_PRIORITY_COMPARATOR, 32);
+		return new MinMaxPriorityQueueOrderedSetCache<>(TEST_ELEMENT_PRIORITY_COMPARATOR, 2);
 	}
 
 	public static CachingInternalPriorityQueueSet.OrderedSetStore<TestElement> createRocksDBStore(

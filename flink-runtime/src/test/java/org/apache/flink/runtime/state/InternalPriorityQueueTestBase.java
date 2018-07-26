@@ -21,12 +21,16 @@ package org.apache.flink.runtime.state;
 import org.apache.flink.api.common.typeutils.CompatibilityResult;
 import org.apache.flink.api.common.typeutils.TypeSerializer;
 import org.apache.flink.api.common.typeutils.TypeSerializerConfigSnapshot;
+import org.apache.flink.core.memory.ByteArrayOutputStreamWithPos;
 import org.apache.flink.core.memory.DataInputView;
 import org.apache.flink.core.memory.DataOutputView;
+import org.apache.flink.core.memory.DataOutputViewStreamWrapper;
 import org.apache.flink.runtime.state.heap.HeapPriorityQueueElement;
 import org.apache.flink.util.CloseableIterator;
 import org.apache.flink.util.MathUtils;
 import org.apache.flink.util.TestLogger;
+
+import org.apache.flink.shaded.guava18.com.google.common.primitives.UnsignedBytes;
 
 import org.junit.Assert;
 import org.junit.Test;
@@ -36,6 +40,7 @@ import javax.annotation.Nonnull;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -44,8 +49,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Objects;
+import java.util.PriorityQueue;
+import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.function.Consumer;
 
 /**
  * Testbase for implementations of {@link InternalPriorityQueue}.
@@ -56,14 +64,7 @@ public abstract class InternalPriorityQueueTestBase extends TestLogger {
 	protected static final KeyExtractorFunction<TestElement> KEY_EXTRACTOR_FUNCTION = TestElement::getKey;
 	protected static final PriorityComparator<TestElement> TEST_ELEMENT_PRIORITY_COMPARATOR =
 		(left, right) -> Long.compare(left.getPriority(), right.getPriority());
-	protected static final Comparator<TestElement> TEST_ELEMENT_COMPARATOR = (o1, o2) -> {
-		int priorityCmp = TEST_ELEMENT_PRIORITY_COMPARATOR.comparePriority(o1, o2);
-		if (priorityCmp != 0) {
-			return priorityCmp;
-		}
-		// to fully comply with compareTo/equals contract.
-		return Long.compare(o1.getKey(), o2.getKey());
-	};
+	protected static final Comparator<TestElement> TEST_ELEMENT_COMPARATOR = new TestElementComparator();
 
 	protected Comparator<Long> getTestElementPriorityComparator() {
 		return Long::compareTo;
@@ -151,6 +152,98 @@ public abstract class InternalPriorityQueueTestBase extends TestLogger {
 
 		Assert.assertTrue(priorityQueue.isEmpty());
 		Assert.assertTrue(checkSet.isEmpty());
+	}
+
+	@Test
+	public void testModificationInBulkPollCallback() {
+
+		final Random random = new Random(3);
+		for (int k = 0; k < 100; ++k) {
+			final InternalPriorityQueue<TestElement> priorityQueue =
+				newPriorityQueue(1);
+
+			final Map<Long, PriorityQueue<TestElement>> reference = new HashMap<>();
+
+			final List<TestElement> testElements =
+				Arrays.asList(
+					new TestElement(1L, 1L),
+					new TestElement(2L, 2L),
+					new TestElement(3L, 3L),
+					new TestElement(4L, 4L),
+
+					new TestElement(1L, 5L),
+					new TestElement(2L, 6L),
+					new TestElement(3L, 7L),
+					new TestElement(4L, 8L),
+
+					new TestElement(1L, 9L),
+					new TestElement(2L, 10L),
+					new TestElement(3L, 11L),
+					new TestElement(4L, 12L),
+
+					new TestElement(42L, 13L));
+
+			Collections.shuffle(testElements, random);
+
+			final int initialSize = testElements.size() / 4;
+
+			for (int i = 0; i < testElements.size() / 4; ++i) {
+				TestElement testElement = testElements.get(i);
+				priorityQueue.add(testElement.deepCopy());
+
+				PriorityQueue<TestElement> keyQueue =
+					reference.computeIfAbsent(testElement.getKey(), (e) -> new PriorityQueue<>(TEST_ELEMENT_COMPARATOR));
+				if (!testSetSemanticsAgainstDuplicateElements() || !keyQueue.contains(testElement)) {
+					keyQueue.add(testElement);
+				}
+			}
+
+			Collections.shuffle(testElements, random);
+
+			Assert.assertEquals(initialSize, priorityQueue.size());
+			Map<Long, List<Long>> expectedSeqs = new HashMap<>();
+			Map<Long, List<Long>> actualSeqs = new HashMap<>();
+
+			Consumer<TestElement> statefulConsumer = new Consumer<TestElement>() {
+
+				@Override
+				public void accept(TestElement testElement) {
+
+					List<Long> actSeq = actualSeqs.computeIfAbsent(testElement.getKey(), k -> new ArrayList<>());
+					actSeq.add(testElement.getPriority());
+
+					PriorityQueue<TestElement> keyQueue =
+						reference.computeIfAbsent(testElement.getKey(), (e) -> new PriorityQueue<>(TEST_ELEMENT_COMPARATOR));
+					TestElement referenceElement = keyQueue.poll();
+					List<Long> expSeq = expectedSeqs.computeIfAbsent(referenceElement.getKey(), k -> new ArrayList<>());
+					expSeq.add(referenceElement.getPriority());
+
+					Assert.assertEquals(expectedSeqs, actualSeqs);
+
+					int modCount = 1 + random.nextInt(testElements.size());
+
+					for (int i = 0; i < modCount; ++i) {
+						boolean insertOrDelete = random.nextBoolean();
+
+						TestElement element = testElements.get(random.nextInt(testElements.size()));
+						PriorityQueue<TestElement> keyInsertQueue =
+							reference.computeIfAbsent(element.getKey(), (e) -> new PriorityQueue<>(TEST_ELEMENT_COMPARATOR));
+						if (insertOrDelete) {
+							if (!testSetSemanticsAgainstDuplicateElements() || !keyInsertQueue.contains(element)) {
+								keyInsertQueue.add(element);
+							}
+							priorityQueue.add(element.deepCopy());
+						} else {
+							keyInsertQueue.remove(element);
+							priorityQueue.remove(element);
+						}
+					}
+				}
+			};
+
+			priorityQueue.bulkPoll((e) -> e.priority < 13L, statefulConsumer);
+			Assert.assertEquals(expectedSeqs, actualSeqs);
+		}
 	}
 
 	@Test
@@ -454,6 +547,14 @@ public abstract class InternalPriorityQueueTestBase extends TestLogger {
 		public TestElement deepCopy() {
 			return new TestElement(key, priority);
 		}
+
+		@Override
+		public String toString() {
+			return "TestElement{" +
+				"key=" + key +
+				", priority=" + priority +
+				'}';
+		}
 	}
 
 	/**
@@ -545,6 +646,29 @@ public abstract class InternalPriorityQueueTestBase extends TestLogger {
 		@Override
 		public CompatibilityResult<TestElement> ensureCompatibility(TypeSerializerConfigSnapshot configSnapshot) {
 			throw new UnsupportedOperationException();
+		}
+	}
+
+	/**
+	 * Comparator for test elements, operating on the serialized bytes of the elements.
+	 */
+	protected static class TestElementComparator implements Comparator<TestElement> {
+
+		@Override
+		public int compare(TestElement o1, TestElement o2) {
+
+			ByteArrayOutputStreamWithPos os = new ByteArrayOutputStreamWithPos();
+			DataOutputViewStreamWrapper ow = new DataOutputViewStreamWrapper(os);
+			try {
+				TestElementSerializer.INSTANCE.serialize(o1, ow);
+				byte[] a1 = os.toByteArray();
+				os.reset();
+				TestElementSerializer.INSTANCE.serialize(o2, ow);
+				byte[] a2 = os.toByteArray();
+				return UnsignedBytes.lexicographicalComparator().compare(a1, a2);
+			} catch (Exception e) {
+				throw new RuntimeException(e);
+			}
 		}
 	}
 }

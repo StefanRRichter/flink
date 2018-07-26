@@ -23,6 +23,7 @@ import org.apache.flink.util.CloseableIterator;
 import javax.annotation.Nonnull;
 
 import java.util.Comparator;
+import java.util.NoSuchElementException;
 import java.util.TreeSet;
 
 /**
@@ -56,6 +57,30 @@ public class TestOrderedStore<T> implements CachingInternalPriorityQueueSet.Orde
 	@Override
 	public CloseableIterator<T> orderedIterator() {
 		// "snapshot iterator", so that we don't suffer from concurrent modification exceptions in the test.
-		return CloseableIterator.adapterForIterator(new TreeSet<>(treeSet).iterator());
+		return new CloseableIterator<T>() {
+
+			T next = treeSet.isEmpty() ? null : treeSet.first();
+
+			@Override
+			public boolean hasNext() {
+				return next != null;
+			}
+
+			@Override
+			public T next() {
+				T res = next;
+				if (res == null) {
+					throw new NoSuchElementException();
+				}
+				next = treeSet.higher(next);
+				return res;
+			}
+
+			@Override
+			public void close() {
+				next = null;
+			}
+		};
+//		return CloseableIterator.adapterForIterator(new TreeSet<>(treeSet).iterator());
 	}
 }

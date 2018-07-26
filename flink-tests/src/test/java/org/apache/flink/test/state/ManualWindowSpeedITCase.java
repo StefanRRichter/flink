@@ -131,12 +131,13 @@ public class ManualWindowSpeedITCase extends AbstractTestBase {
 
 		env.setStreamTimeCharacteristic(TimeCharacteristic.IngestionTime);
 		env.setParallelism(1);
+		env.setMaxParallelism(1);
 
 		env.setStateBackend(new RocksDBStateBackend(new MemoryStateBackend()));
 
-		env.addSource(new InfiniteTupleSource(10_000))
+		env.addSource(new InfiniteTupleSource(1_000_000))
 				.keyBy(0)
-				.timeWindow(Time.seconds(3))
+				.timeWindow(Time.seconds(10))
 				.reduce(new ReduceFunction<Tuple2<String, Integer>>() {
 					private static final long serialVersionUID = 1L;
 
@@ -246,9 +247,17 @@ public class ManualWindowSpeedITCase extends AbstractTestBase {
 		@Override
 		public void run(SourceContext<Tuple2<String, Integer>> out) throws Exception {
 			Random random = new Random(42);
+			long t = System.currentTimeMillis();
+			int count = 0;
 			while (running) {
 				Tuple2<String, Integer> tuple = new Tuple2<String, Integer>("Tuple " + (random.nextInt(numKeys)), 1);
 				out.collect(tuple);
+				if(++count == 100000) {
+					long ts = System.currentTimeMillis();
+					System.out.println((count *1000 / (ts -t))+" (e/s)");
+					t=ts;
+					count = 0;
+				}
 			}
 		}
 
