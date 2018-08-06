@@ -48,21 +48,23 @@ public class ArchivedExecution implements AccessExecution, Serializable {
 	private final IOMetrics ioMetrics;
 
 	public ArchivedExecution(Execution execution) {
-		this.userAccumulators = execution.getUserAccumulatorsStringified();
-		this.attemptId = execution.getAttemptId();
-		this.attemptNumber = execution.getAttemptNumber();
-		this.stateTimestamps = execution.getStateTimestamps();
-		this.parallelSubtaskIndex = execution.getVertex().getParallelSubtaskIndex();
-		this.state = execution.getState();
-		this.failureCause = ExceptionUtils.stringifyException(execution.getFailureCause());
-		this.assignedResourceLocation = execution.getAssignedResourceLocation();
-		this.ioMetrics = execution.getIOMetrics();
+		this(
+			execution.getUserAccumulatorsStringified(),
+			execution.getIOMetrics(),
+			execution.getAttemptId(),
+			execution.getAttemptNumber(),
+			execution.getState(),
+			ExceptionUtils.stringifyException(execution.getFailureCause()),
+			execution.getAssignedResourceLocation(),
+			execution.getVertex().getParallelSubtaskIndex(),
+			execution.getStateTimestamps());
 	}
 
 	public ArchivedExecution(
 			StringifiedAccumulatorResult[] userAccumulators, IOMetrics ioMetrics,
 			ExecutionAttemptID attemptId, int attemptNumber, ExecutionState state, String failureCause,
-			TaskManagerLocation assignedResourceLocation, int parallelSubtaskIndex, long[] stateTimestamps) {
+			TaskManagerLocation assignedResourceLocation, int parallelSubtaskIndex,
+			long[] stateTimestamps) {
 		this.userAccumulators = userAccumulators;
 		this.ioMetrics = ioMetrics;
 		this.failureCause = failureCause;
