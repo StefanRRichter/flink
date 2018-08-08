@@ -52,16 +52,16 @@ import org.apache.flink.runtime.state.memory.ByteStreamStateHandle;
 import org.apache.flink.runtime.testutils.CommonTestUtils;
 import org.apache.flink.runtime.testutils.RecoverableCompletedCheckpointStore;
 import org.apache.flink.runtime.util.TestByteStreamStateHandleDeepCompare;
-import org.apache.flink.shaded.guava18.com.google.common.collect.Iterables;
 import org.apache.flink.util.InstantiationUtil;
 import org.apache.flink.util.Preconditions;
 import org.apache.flink.util.TestLogger;
+
+import org.apache.flink.shaded.guava18.com.google.common.collect.Iterables;
 
 import org.junit.Assert;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
-
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
 import org.mockito.verification.VerificationMode;
@@ -2731,7 +2731,7 @@ public class CheckpointCoordinatorTest extends TestLogger {
 		OperatorStateHandle osh = new OperatorStateHandle(metaInfoMap, new ByteStreamStateHandle("test", new byte[100]));
 
 		OperatorStateRepartitioner repartitioner = RoundRobinOperatorStateRepartitioner.INSTANCE;
-		List<Collection<OperatorStateHandle>> repartitionedStates =
+		List<List<OperatorStateHandle>> repartitionedStates =
 				repartitioner.repartitionState(Collections.singletonList(osh), 3);
 
 		Map<String, Integer> checkCounts = new HashMap<>(3);
@@ -3282,7 +3282,7 @@ public class CheckpointCoordinatorTest extends TestLogger {
 
 		OperatorStateRepartitioner repartitioner = RoundRobinOperatorStateRepartitioner.INSTANCE;
 
-		List<Collection<OperatorStateHandle>> pshs =
+		List<List<OperatorStateHandle>> pshs =
 				repartitioner.repartitionState(previousParallelOpInstanceStates, newParallelism);
 
 		Map<StreamStateHandle, Map<String, List<Long>>> actual = new HashMap<>();

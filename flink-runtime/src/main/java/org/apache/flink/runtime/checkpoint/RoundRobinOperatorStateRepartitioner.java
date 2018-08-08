@@ -25,11 +25,11 @@ import org.apache.flink.util.Preconditions;
 
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collection;
 import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Current default implementation of {@link OperatorStateRepartitioner} that redistributes state in round robin fashion.
@@ -40,7 +40,7 @@ public class RoundRobinOperatorStateRepartitioner implements OperatorStateRepart
 	private static final boolean OPTIMIZE_MEMORY_USE = false;
 
 	@Override
-	public List<Collection<OperatorStateHandle>> repartitionState(
+	public List<List<OperatorStateHandle>> repartitionState(
 			List<OperatorStateHandle> previousParallelSubtaskStates,
 			int parallelism) {
 
@@ -55,7 +55,7 @@ public class RoundRobinOperatorStateRepartitioner implements OperatorStateRepart
 		}
 
 		// Assemble result from all merge maps
-		List<Collection<OperatorStateHandle>> result = new ArrayList<>(parallelism);
+		List<List<OperatorStateHandle>> result = new ArrayList<>(parallelism);
 
 		// Do the actual repartitioning for all named states
 		List<Map<StreamStateHandle, OperatorStateHandle>> mergeMapList =
@@ -93,20 +93,19 @@ public class RoundRobinOperatorStateRepartitioner implements OperatorStateRepart
 				continue;
 			}
 
-			for (Map.Entry<String, OperatorStateHandle.StateMetaInfo> e :
-					psh.getStateNameToPartitionOffsets().entrySet()) {
+			final Set<Map.Entry<String, OperatorStateHandle.StateMetaInfo>> partitionOffsetEntries =
+				psh.getStateNameToPartitionOffsets().entrySet();
+
+			for (Map.Entry<String, OperatorStateHandle.StateMetaInfo> e : partitionOffsetEntries) {
 				OperatorStateHandle.StateMetaInfo metaInfo = e.getValue();
 
 				Map<String, List<Tuple2<StreamStateHandle, OperatorStateHandle.StateMetaInfo>>> nameToState =
 						nameToStateByMode.get(metaInfo.getDistributionMode());
 
 				List<Tuple2<StreamStateHandle, OperatorStateHandle.StateMetaInfo>> stateLocations =
-						nameToState.get(e.getKey());
-
-				if (stateLocations == null) {
-					stateLocations = new ArrayList<>();
-					nameToState.put(e.getKey(), stateLocations);
-				}
+					nameToState.computeIfAbsent(
+						e.getKey(),
+						k -> new ArrayList<>(previousParallelSubtaskStates.size() * partitionOffsetEntries.size()));
 
 				stateLocations.add(new Tuple2<>(psh.getDelegateStateHandle(), e.getValue()));
 			}
@@ -210,7 +209,7 @@ public class RoundRobinOperatorStateRepartitioner implements OperatorStateRepart
 					OperatorStateHandle operatorStateHandle = mergeMap.get(handleWithOffsets.f0);
 					if (operatorStateHandle == null) {
 						operatorStateHandle = new OperatorStateHandle(
-								new HashMap<String, OperatorStateHandle.StateMetaInfo>(),
+								new HashMap<String, OperatorStateHandle.StateMetaInfo>(distributeNameToState.size()),
 								handleWithOffsets.f0);
 
 						mergeMap.put(handleWithOffsets.f0, operatorStateHandle);
@@ -241,7 +240,7 @@ public class RoundRobinOperatorStateRepartitioner implements OperatorStateRepart
 					OperatorStateHandle operatorStateHandle = mergeMap.get(handleWithMetaInfo.f0);
 					if (operatorStateHandle == null) {
 						operatorStateHandle = new OperatorStateHandle(
-								new HashMap<String, OperatorStateHandle.StateMetaInfo>(),
+								new HashMap<String, OperatorStateHandle.StateMetaInfo>(broadcastNameToState.size()),
 								handleWithMetaInfo.f0);
 
 						mergeMap.put(handleWithMetaInfo.f0, operatorStateHandle);
