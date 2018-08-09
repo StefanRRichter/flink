@@ -71,7 +71,6 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.FutureTask;
 import java.util.concurrent.RunnableFuture;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.apache.flink.contrib.streaming.state.snapshot.RocksSnapshotUtil.END_OF_KEY_GROUP_MARK;
 import static org.apache.flink.contrib.streaming.state.snapshot.RocksSnapshotUtil.hasMetaDataFollowsFlag;
@@ -129,7 +128,6 @@ public class RocksFullSnapshotStrategy<K> extends SnapshotStrategyBase<K> {
 				LOG.debug("Asynchronous RocksDB snapshot performed on empty keyed state at {}. Returning null.",
 					timestamp);
 			}
-
 			return DoneFuture.of(SnapshotResult.empty());
 		}
 
@@ -153,6 +151,9 @@ public class RocksFullSnapshotStrategy<K> extends SnapshotStrategyBase<K> {
 		final RocksDBFullSnapshotCallable snapshotOperation =
 			new RocksDBFullSnapshotCallable(supplier, snapshotCloseableRegistry);
 
+		LOG.info("Asynchronous RocksDB snapshot ({}, synchronous part) in thread {} took {} ms.",
+			primaryStreamFactory, Thread.currentThread(), (System.currentTimeMillis() - startTime));
+
 		return new SnapshotTask(snapshotOperation);
 	}
 
@@ -168,7 +169,7 @@ public class RocksFullSnapshotStrategy<K> extends SnapshotStrategyBase<K> {
 
 		/** Reference to the callable for cancellation. */
 		@Nonnull
-		private final AutoCloseable callableClose;
+		private final RocksDBFullSnapshotCallable callableClose;
 
 		SnapshotTask(@Nonnull RocksDBFullSnapshotCallable callable) {
 			super(callable);
@@ -177,8 +178,13 @@ public class RocksFullSnapshotStrategy<K> extends SnapshotStrategyBase<K> {
 
 		@Override
 		public boolean cancel(boolean mayInterruptIfRunning) {
-			IOUtils.closeQuietly(callableClose);
+			callableClose.cancel();
 			return super.cancel(mayInterruptIfRunning);
+		}
+
+		@Override
+		protected void done() {
+			callableClose.cleanupWhenDone();
 		}
 	}
 
@@ -186,7 +192,7 @@ public class RocksFullSnapshotStrategy<K> extends SnapshotStrategyBase<K> {
 	 * Encapsulates the process to perform a full snapshot of a RocksDBKeyedStateBackend.
 	 */
 	@VisibleForTesting
-	private class RocksDBFullSnapshotCallable implements Callable<SnapshotResult<KeyedStateHandle>>, AutoCloseable {
+	private class RocksDBFullSnapshotCallable implements Callable<SnapshotResult<KeyedStateHandle>> {
 
 		@Nonnull
 		private final KeyGroupRangeOffsets keyGroupRangeOffsets;
@@ -218,13 +224,10 @@ public class RocksFullSnapshotStrategy<K> extends SnapshotStrategyBase<K> {
 		@Nonnull
 		private List<Tuple2<ColumnFamilyHandle, RegisteredStateMetaInfoBase>> metaDataCopy;
 
-		private final AtomicBoolean ownedForCleanup;
-
 		RocksDBFullSnapshotCallable(
 			@Nonnull SupplierWithException<CheckpointStreamWithResultProvider, Exception> checkpointStreamSupplier,
 			@Nonnull CloseableRegistry registry) throws IOException {
 
-			this.ownedForCleanup = new AtomicBoolean(false);
 			this.checkpointStreamSupplier = checkpointStreamSupplier;
 			this.keyGroupRangeOffsets = new KeyGroupRangeOffsets(keyGroupRange);
 			this.snapshotCloseableRegistry = registry;
@@ -239,17 +242,13 @@ public class RocksFullSnapshotStrategy<K> extends SnapshotStrategyBase<K> {
 
 			this.dbLease = rocksDBResourceGuard.acquireResource();
 
-			this.readOptions = new ReadOptions();
 			this.snapshot = db.getSnapshot();
+			this.readOptions = new ReadOptions();
 			this.readOptions.setSnapshot(snapshot);
 		}
 
 		@Override
 		public SnapshotResult<KeyedStateHandle> call() throws Exception {
-
-			if (!ownedForCleanup.compareAndSet(false, true)) {
-				throw new CancellationException("Snapshot task was already cancelled, stopping execution.");
-			}
 
 			final long startTime = System.currentTimeMillis();
 			final List<Tuple2<RocksIteratorWrapper, Integer>> kvStateIterators = new ArrayList<>(metaDataCopy.size());
@@ -258,7 +257,9 @@ public class RocksFullSnapshotStrategy<K> extends SnapshotStrategyBase<K> {
 
 				cancelStreamRegistry.registerCloseable(snapshotCloseableRegistry);
 
-				final CheckpointStreamWithResultProvider checkpointStreamWithResultProvider = checkpointStreamSupplier.get();
+				final CheckpointStreamWithResultProvider checkpointStreamWithResultProvider =
+					checkpointStreamSupplier.get();
+
 				snapshotCloseableRegistry.registerCloseable(checkpointStreamWithResultProvider);
 
 				final DataOutputView outputView =
@@ -275,17 +276,25 @@ public class RocksFullSnapshotStrategy<K> extends SnapshotStrategyBase<K> {
 
 				return snapshotResult;
 
+			} catch (Exception e) {
+				if (snapshotCloseableRegistry.isClosed()) {
+					// It is expected that closing the registry probably causes an IOException to quickly cancel execution.
+					throw new CancellationException("Snapshot was canceled and stopped.");
+				} else {
+					// Seems something really went wrong unexpectedly.
+					throw e;
+				}
 			} finally {
-
 				for (Tuple2<RocksIteratorWrapper, Integer> kvStateIterator : kvStateIterators) {
 					IOUtils.closeQuietly(kvStateIterator.f0);
 				}
-
-				cleanupSynchronousStepResources();
 			}
 		}
 
-		private void cleanupSynchronousStepResources() {
+		/**
+		 * To be called by the executing {@link FutureTask} on {@link FutureTask#done()} -> completed or cancelled.
+		 */
+		void cleanupWhenDone() {
 			IOUtils.closeQuietly(readOptions);
 
 			db.releaseSnapshot(snapshot);
@@ -294,11 +303,7 @@ public class RocksFullSnapshotStrategy<K> extends SnapshotStrategyBase<K> {
 			IOUtils.closeQuietly(dbLease);
 
 			if (cancelStreamRegistry.unregisterCloseable(snapshotCloseableRegistry)) {
-				try {
-					snapshotCloseableRegistry.close();
-				} catch (Exception ex) {
-					LOG.warn("Error closing local registry", ex);
-				}
+				IOUtils.closeQuietly(snapshotCloseableRegistry);
 			}
 		}
 
@@ -446,15 +451,9 @@ public class RocksFullSnapshotStrategy<K> extends SnapshotStrategyBase<K> {
 			}
 		}
 
-		@Override
-		public void close() throws Exception {
-
-			if (ownedForCleanup.compareAndSet(false, true)) {
-				cleanupSynchronousStepResources();
-			}
-
+		public void cancel() {
 			if (cancelStreamRegistry.unregisterCloseable(snapshotCloseableRegistry)) {
-				snapshotCloseableRegistry.close();
+				IOUtils.closeQuietly(snapshotCloseableRegistry);
 			}
 		}
 	}

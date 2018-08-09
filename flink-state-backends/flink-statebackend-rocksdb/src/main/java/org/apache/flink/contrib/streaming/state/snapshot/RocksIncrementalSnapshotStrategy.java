@@ -226,14 +226,10 @@ public class RocksIncrementalSnapshotStrategy<K> extends SnapshotStrategyBase<K>
 	@Override
 	public void notifyCheckpointComplete(long completedCheckpointId) {
 		synchronized (materializedSstFiles) {
-
-			if (completedCheckpointId < lastCompletedCheckpointId) {
-				return;
+			if (completedCheckpointId > lastCompletedCheckpointId) {
+				materializedSstFiles.keySet().removeIf(checkpointId -> checkpointId < completedCheckpointId);
+				lastCompletedCheckpointId = completedCheckpointId;
 			}
-
-			materializedSstFiles.keySet().removeIf(checkpointId -> checkpointId < completedCheckpointId);
-
-			lastCompletedCheckpointId = completedCheckpointId;
 		}
 	}
 
@@ -243,7 +239,7 @@ public class RocksIncrementalSnapshotStrategy<K> extends SnapshotStrategyBase<K>
 	private final class RocksDBIncrementalSnapshotOperation {
 
 		/**
-		 * Stream factory that creates the outpus streams to DFS.
+		 * Stream factory that creates the output streams to DFS.
 		 */
 		private final CheckpointStreamFactory checkpointStreamFactory;
 
