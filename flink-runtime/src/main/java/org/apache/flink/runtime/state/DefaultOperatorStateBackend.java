@@ -154,18 +154,11 @@ public class DefaultOperatorStateBackend implements OperatorStateBackend {
 	// -------------------------------------------------------------------------------------------
 	//  State access methods
 	// -------------------------------------------------------------------------------------------
-	@Override
-	public void removeBroadcastState(String name) {
-		restoredBroadcastStateMetaInfos.remove(name);
-		if (registeredBroadcastStates.remove(name) != null) {
-			accessedBroadcastStatesByName.remove(name);
-		}
-	}
 
 	@Override
 	public void removeOperatorState(String name) {
-		restoredOperatorStateMetaInfos.remove(name);
-		if (registeredOperatorStates.remove(name) != null) {
+		restoredStateMetaInfos.remove(name);
+		if (registeredStates.remove(name) != null) {
 			accessedStatesByName.remove(name);
 		}
 	}

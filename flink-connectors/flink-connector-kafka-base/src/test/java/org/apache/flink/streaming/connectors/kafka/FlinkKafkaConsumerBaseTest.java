@@ -639,7 +639,7 @@ public class FlinkKafkaConsumerBaseTest {
 					Collections.singletonList("dummy-topic"),
 					null,
 					(KeyedDeserializationSchema < T >) mock(KeyedDeserializationSchema.class),
-					PARTITION_DISCOVERY_DISABLED,
+					1L,
 					false);
 
 			this.testFetcher = testFetcher;
@@ -879,12 +879,7 @@ public class FlinkKafkaConsumerBaseTest {
 		}
 
 		@Override
-		public void removeOperatorState(String name) throws Exception {
-
-		}
-
-		@Override
-		public void removeBroadcastState(String name) throws Exception {
+		public void removeOperatorState(String name) {
 
 		}
 
