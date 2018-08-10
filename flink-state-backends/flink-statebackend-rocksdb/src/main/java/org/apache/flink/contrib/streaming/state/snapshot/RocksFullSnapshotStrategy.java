@@ -212,15 +212,11 @@ public class RocksFullSnapshotStrategy<K> extends SnapshotStrategyBase<K> {
 		@Nonnull
 		private final ReadOptions readOptions;
 
-		/**
-		 * The state meta data.
-		 */
+		/** The state meta data. */
 		@Nonnull
 		private List<StateMetaInfoSnapshot> stateMetaInfoSnapshots;
 
-		/**
-		 * The copied column handle.
-		 */
+		/** The copied column handle. */
 		@Nonnull
 		private List<Tuple2<ColumnFamilyHandle, RegisteredStateMetaInfoBase>> metaDataCopy;
 

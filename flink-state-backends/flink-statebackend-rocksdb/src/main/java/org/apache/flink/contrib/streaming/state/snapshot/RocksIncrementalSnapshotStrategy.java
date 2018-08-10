@@ -28,7 +28,6 @@ import org.apache.flink.core.fs.Path;
 import org.apache.flink.core.memory.DataOutputView;
 import org.apache.flink.core.memory.DataOutputViewStreamWrapper;
 import org.apache.flink.runtime.checkpoint.CheckpointOptions;
-import org.apache.flink.runtime.checkpoint.CheckpointType;
 import org.apache.flink.runtime.state.CheckpointStreamFactory;
 import org.apache.flink.runtime.state.CheckpointStreamWithResultProvider;
 import org.apache.flink.runtime.state.CheckpointedStateScope;
@@ -45,7 +44,6 @@ import org.apache.flink.runtime.state.PlaceholderStreamStateHandle;
 import org.apache.flink.runtime.state.RegisteredStateMetaInfoBase;
 import org.apache.flink.runtime.state.SnapshotDirectory;
 import org.apache.flink.runtime.state.SnapshotResult;
-import org.apache.flink.runtime.state.SnapshotStrategy;
 import org.apache.flink.runtime.state.StateHandleID;
 import org.apache.flink.runtime.state.StateObject;
 import org.apache.flink.runtime.state.StateUtil;
@@ -107,10 +105,6 @@ public class RocksIncrementalSnapshotStrategy<K> extends SnapshotStrategyBase<K>
 	/** The identifier of the last completed checkpoint. */
 	private long lastCompletedCheckpointId;
 
-	/** We delegate snapshots that are for savepoints to this. */
-	@Nonnull
-	private final SnapshotStrategy<SnapshotResult<KeyedStateHandle>> savepointDelegate;
-
 	public RocksIncrementalSnapshotStrategy(
 		@Nonnull RocksDB db,
 		@Nonnull ResourceGuard rocksDBResourceGuard,
@@ -123,8 +117,7 @@ public class RocksIncrementalSnapshotStrategy<K> extends SnapshotStrategyBase<K>
 		@Nonnull File instanceBasePath,
 		@Nonnull UUID backendUID,
 		@Nonnull SortedMap<Long, Set<StateHandleID>> materializedSstFiles,
-		long lastCompletedCheckpointId,
-		@Nonnull SnapshotStrategy<SnapshotResult<KeyedStateHandle>> savepointDelegate) {
+		long lastCompletedCheckpointId) {
 
 		super(
 			db,
@@ -140,7 +133,6 @@ public class RocksIncrementalSnapshotStrategy<K> extends SnapshotStrategyBase<K>
 		this.backendUID = backendUID;
 		this.materializedSstFiles = materializedSstFiles;
 		this.lastCompletedCheckpointId = lastCompletedCheckpointId;
-		this.savepointDelegate = savepointDelegate;
 	}
 
 	@Override
@@ -149,15 +141,6 @@ public class RocksIncrementalSnapshotStrategy<K> extends SnapshotStrategyBase<K>
 		long checkpointTimestamp,
 		CheckpointStreamFactory checkpointStreamFactory,
 		CheckpointOptions checkpointOptions) throws Exception {
-
-		// for savepoints, we delegate to the full snapshot strategy because savepoints are always self-contained.
-		if (CheckpointType.SAVEPOINT == checkpointOptions.getCheckpointType()) {
-			return savepointDelegate.performSnapshot(
-				checkpointId,
-				checkpointTimestamp,
-				checkpointStreamFactory,
-				checkpointOptions);
-		}
 
 		if (kvStateInformation.isEmpty()) {
 			if (LOG.isDebugEnabled()) {
