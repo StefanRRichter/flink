@@ -63,6 +63,7 @@ import org.slf4j.LoggerFactory;
 
 import javax.annotation.Nonnegative;
 import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 
 import java.io.File;
 import java.io.IOException;
@@ -221,59 +222,92 @@ public class RocksIncrementalSnapshotStrategy<K> extends SnapshotStrategyBase<K>
 	 */
 	private final class RocksDBIncrementalSnapshotOperation {
 
-		/**
-		 * Stream factory that creates the output streams to DFS.
-		 */
-		private final CheckpointStreamFactory checkpointStreamFactory;
+		private static final int READ_BUFFER_SIZE = 16 * 1024;
 
-		/**
-		 * Id for the current checkpoint.
-		 */
+		/** Id for the current checkpoint. */
 		private final long checkpointId;
 
-		/**
-		 * All sst files that were part of the last previously completed checkpoint.
-		 */
-		private Set<StateHandleID> baseSstFiles;
+		/** Stream factory that creates the output streams to DFS. */
+		@Nonnull
+		private final CheckpointStreamFactory checkpointStreamFactory;
 
-		/**
-		 * The state meta data.
-		 */
+		/** The state meta data. */
+		@Nonnull
 		private final List<StateMetaInfoSnapshot> stateMetaInfoSnapshots;
 
-		/**
-		 * Local directory for the RocksDB native backup.
-		 */
-		private SnapshotDirectory localBackupDirectory;
+		/** Local directory for the RocksDB native backup. */
+		@Nonnull
+		private final SnapshotDirectory localBackupDirectory;
 
-		// Registry for all opened i/o streams
+		/** Registry for all opened i/o streams. */
+		@Nonnull
 		private final CloseableRegistry closeableRegistry;
 
-		// new sst files since the last completed checkpoint
+		/** New sst files since the last completed checkpoint */
+		@Nonnull
 		private final Map<StateHandleID, StreamStateHandle> sstFiles;
 
-		// handles to the misc files in the current snapshot
+		/** Handles to the misc files in the current snapshot */
+		@Nonnull
 		private final Map<StateHandleID, StreamStateHandle> miscFiles;
 
-		// This lease protects from concurrent disposal of the native rocksdb instance.
+		/** This lease protects from concurrent disposal of the native RocksDB instance. */
+		@Nonnull
 		private final ResourceGuard.Lease dbLease;
 
+		/** All sst files that were part of the last previously completed checkpoint. */
+		@Nullable
+		private Set<StateHandleID> baseSstFiles;
+
+		/** State handle to the meta-data file from the RocksDB native checkpoint .*/
+		@Nullable
 		private SnapshotResult<StreamStateHandle> metaStateHandle;
 
 		private RocksDBIncrementalSnapshotOperation(
-			CheckpointStreamFactory checkpointStreamFactory,
-			SnapshotDirectory localBackupDirectory,
+			@Nonnull CheckpointStreamFactory checkpointStreamFactory,
+			@Nonnull SnapshotDirectory localBackupDirectory,
 			long checkpointId) throws IOException {
 
 			this.checkpointStreamFactory = checkpointStreamFactory;
 			this.checkpointId = checkpointId;
 			this.localBackupDirectory = localBackupDirectory;
+			this.metaStateHandle = null;
 			this.stateMetaInfoSnapshots = new ArrayList<>();
-			this.closeableRegistry = new CloseableRegistry();
 			this.sstFiles = new HashMap<>();
 			this.miscFiles = new HashMap<>();
-			this.metaStateHandle = null;
+			this.closeableRegistry = new CloseableRegistry();
 			this.dbLease = rocksDBResourceGuard.acquireResource();
+		}
+
+		void takeSnapshot() throws Exception {
+
+			final long lastCompletedCheckpoint;
+
+			// use the last completed checkpoint as the comparison base.
+			synchronized (materializedSstFiles) {
+				lastCompletedCheckpoint = lastCompletedCheckpointId;
+				baseSstFiles = materializedSstFiles.get(lastCompletedCheckpoint);
+			}
+
+			LOG.trace("Taking incremental snapshot for checkpoint {}. Snapshot is based on last completed checkpoint {} " +
+				"assuming the following (shared) files as base: {}.", checkpointId, lastCompletedCheckpoint, baseSstFiles);
+
+			// save meta data
+			for (Map.Entry<String, Tuple2<ColumnFamilyHandle, RegisteredStateMetaInfoBase>> stateMetaInfoEntry
+				: kvStateInformation.entrySet()) {
+				stateMetaInfoSnapshots.add(stateMetaInfoEntry.getValue().f1.snapshot());
+			}
+
+			LOG.trace("Local RocksDB checkpoint goes to backup path {}.", localBackupDirectory);
+
+			if (localBackupDirectory.exists()) {
+				throw new IllegalStateException("Unexpected existence of the backup directory.");
+			}
+
+			// create hard links of living files in the snapshot path
+			try (Checkpoint checkpoint = Checkpoint.create(db)) {
+				checkpoint.createCheckpoint(localBackupDirectory.getDirectory().getPath());
+			}
 		}
 
 		private StreamStateHandle materializeStateData(Path filePath) throws Exception {
@@ -281,7 +315,7 @@ public class RocksIncrementalSnapshotStrategy<K> extends SnapshotStrategyBase<K>
 			CheckpointStreamFactory.CheckpointStateOutputStream outputStream = null;
 
 			try {
-				final byte[] buffer = new byte[8 * 1024];
+				final byte[] buffer = new byte[READ_BUFFER_SIZE];
 
 				FileSystem backupFileSystem = localBackupDirectory.getFileSystem();
 				inputStream = backupFileSystem.open(filePath);
@@ -366,37 +400,6 @@ public class RocksIncrementalSnapshotStrategy<K> extends SnapshotStrategyBase<K>
 						IOUtils.closeQuietly(streamWithResultProvider);
 					}
 				}
-			}
-		}
-
-		void takeSnapshot() throws Exception {
-
-			final long lastCompletedCheckpoint;
-
-			// use the last completed checkpoint as the comparison base.
-			synchronized (materializedSstFiles) {
-				lastCompletedCheckpoint = lastCompletedCheckpointId;
-				baseSstFiles = materializedSstFiles.get(lastCompletedCheckpoint);
-			}
-
-			LOG.trace("Taking incremental snapshot for checkpoint {}. Snapshot is based on last completed checkpoint {} " +
-				"assuming the following (shared) files as base: {}.", checkpointId, lastCompletedCheckpoint, baseSstFiles);
-
-			// save meta data
-			for (Map.Entry<String, Tuple2<ColumnFamilyHandle, RegisteredStateMetaInfoBase>> stateMetaInfoEntry
-				: kvStateInformation.entrySet()) {
-				stateMetaInfoSnapshots.add(stateMetaInfoEntry.getValue().f1.snapshot());
-			}
-
-			LOG.trace("Local RocksDB checkpoint goes to backup path {}.", localBackupDirectory);
-
-			if (localBackupDirectory.exists()) {
-				throw new IllegalStateException("Unexpected existence of the backup directory.");
-			}
-
-			// create hard links of living files in the snapshot path
-			try (Checkpoint checkpoint = Checkpoint.create(db)) {
-				checkpoint.createCheckpoint(localBackupDirectory.getDirectory().getPath());
 			}
 		}
 

@@ -154,38 +154,24 @@ public class RocksFullSnapshotStrategy<K> extends SnapshotStrategyBase<K> {
 		LOG.info("Asynchronous RocksDB snapshot ({}, synchronous part) in thread {} took {} ms.",
 			primaryStreamFactory, Thread.currentThread(), (System.currentTimeMillis() - startTime));
 
-		return new SnapshotTask(snapshotOperation);
+		return new FutureTask<SnapshotResult<KeyedStateHandle>>(snapshotOperation) {
+
+			@Override
+			public boolean cancel(boolean mayInterruptIfRunning) {
+				snapshotOperation.cancel();
+				return super.cancel(mayInterruptIfRunning);
+			}
+
+			@Override
+			protected void done() {
+				snapshotOperation.cleanupWhenDone();
+			}
+		};
 	}
 
 	@Override
 	public void notifyCheckpointComplete(long checkpointId) {
 		// nothing to do.
-	}
-
-	/**
-	 * Wrapping task to run a {@link RocksDBFullSnapshotCallable} and delegate cancellation.
-	 */
-	private class SnapshotTask extends FutureTask<SnapshotResult<KeyedStateHandle>> {
-
-		/** Reference to the callable for cancellation. */
-		@Nonnull
-		private final RocksDBFullSnapshotCallable callableClose;
-
-		SnapshotTask(@Nonnull RocksDBFullSnapshotCallable callable) {
-			super(callable);
-			this.callableClose = callable;
-		}
-
-		@Override
-		public boolean cancel(boolean mayInterruptIfRunning) {
-			callableClose.cancel();
-			return super.cancel(mayInterruptIfRunning);
-		}
-
-		@Override
-		protected void done() {
-			callableClose.cleanupWhenDone();
-		}
 	}
 
 	/**
