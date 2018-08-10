@@ -38,6 +38,7 @@ import org.apache.flink.runtime.state.memory.MemoryStateBackend;
 import org.apache.flink.runtime.util.BlockerCheckpointStreamFactory;
 import org.apache.flink.util.FutureUtil;
 import org.apache.flink.util.Preconditions;
+
 import org.junit.Assert;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -50,6 +51,7 @@ import java.io.IOException;
 import java.io.Serializable;
 import java.util.Collections;
 import java.util.Iterator;
+import java.util.Set;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
@@ -741,6 +743,29 @@ public class OperatorStateBackendTest {
 		static MutableType of(int value) {
 			return new MutableType(value);
 		}
+	}
+
+	@Test
+	public void testDeleteOperatorState() throws Exception {
+		final OperatorStateBackend operatorStateBackend =
+			new DefaultOperatorStateBackend(classLoader, new ExecutionConfig(), false);
+
+		ListStateDescriptor<Integer> listStateDesc1 = new ListStateDescriptor<>("test-broadcast-1", IntSerializer.INSTANCE);
+		ListStateDescriptor<Integer> listStateDesc2 = new ListStateDescriptor<>("test-broadcast-2", IntSerializer.INSTANCE);
+
+		operatorStateBackend.getListState(listStateDesc1);
+		operatorStateBackend.getUnionListState(listStateDesc2);
+
+		Set<String> registeredStateNames = operatorStateBackend.getRegisteredStateNames();
+
+		Assert.assertEquals(2, registeredStateNames.size());
+
+		operatorStateBackend.removeOperatorState(listStateDesc1.getName());
+		Assert.assertEquals(1, registeredStateNames.size());
+		Assert.assertTrue(registeredStateNames.contains(listStateDesc2.getName()));
+
+		operatorStateBackend.removeOperatorState(listStateDesc2.getName());
+		Assert.assertEquals(0, registeredStateNames.size());
 	}
 
 	// ------------------------------------------------------------------------

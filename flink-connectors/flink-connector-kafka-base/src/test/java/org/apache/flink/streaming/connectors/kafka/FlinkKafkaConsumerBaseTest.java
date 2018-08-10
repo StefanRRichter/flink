@@ -879,6 +879,16 @@ public class FlinkKafkaConsumerBaseTest {
 		}
 
 		@Override
+		public void removeOperatorState(String name) throws Exception {
+
+		}
+
+		@Override
+		public void removeBroadcastState(String name) throws Exception {
+
+		}
+
+		@Override
 		public Set<String> getRegisteredStateNames() {
 			throw new UnsupportedOperationException();
 		}
