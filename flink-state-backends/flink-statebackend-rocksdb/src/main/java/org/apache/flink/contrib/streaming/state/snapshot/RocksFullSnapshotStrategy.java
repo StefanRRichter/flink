@@ -67,11 +67,8 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Objects;
-import java.util.concurrent.Callable;
-import java.util.concurrent.CancellationException;
 import java.util.concurrent.FutureTask;
 import java.util.concurrent.RunnableFuture;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.apache.flink.contrib.streaming.state.snapshot.RocksSnapshotUtil.END_OF_KEY_GROUP_MARK;
 import static org.apache.flink.contrib.streaming.state.snapshot.RocksSnapshotUtil.hasMetaDataFollowsFlag;
@@ -143,16 +140,13 @@ public class RocksFullSnapshotStrategy<K> extends SnapshotStrategyBase<K> {
 			metaDataCopy.add(tuple2);
 		}
 
-		final CloseableRegistry snapshotCloseableRegistry = new CloseableRegistry();
-		cancelStreamRegistry.registerCloseable(snapshotCloseableRegistry);
-
 		final ResourceGuard.Lease lease = rocksDBResourceGuard.acquireResource();
 		final Snapshot snapshot = db.getSnapshot();
 
 		final SnapshotAsynchronousPartCallable asyncSnapshotCallable =
 			new SnapshotAsynchronousPartCallable(
 				checkpointStreamSupplier,
-				snapshotCloseableRegistry,
+				cancelStreamRegistry,
 				lease,
 				snapshot,
 				stateMetaInfoSnapshots,
@@ -196,17 +190,11 @@ public class RocksFullSnapshotStrategy<K> extends SnapshotStrategyBase<K> {
 	 * Encapsulates the process to perform a full snapshot of a RocksDBKeyedStateBackend.
 	 */
 	@VisibleForTesting
-	private class SnapshotAsynchronousPartCallable implements Callable<SnapshotResult<KeyedStateHandle>> {
-
-		private static final String CANCELLATION_EXCEPTION_MSG = "Snapshot was cancelled.";
+	private class SnapshotAsynchronousPartCallable extends AsyncSnapshotCallable<SnapshotResult<KeyedStateHandle>> {
 
 		/** Supplier for the stream into which we write the snapshot. */
 		@Nonnull
 		private final SupplierWithException<CheckpointStreamWithResultProvider, Exception> checkpointStreamSupplier;
-
-		/** {@link CloseableRegistry} for this snapshot that is closed on cancellation to terminate blocking I/O. */
-		@Nonnull
-		private final CloseableRegistry snapshotCloseableRegistry;
 
 		/** This lease protects the native RocksDB resources. */
 		@Nonnull
@@ -222,74 +210,46 @@ public class RocksFullSnapshotStrategy<K> extends SnapshotStrategyBase<K> {
 		@Nonnull
 		private List<Tuple2<ColumnFamilyHandle, RegisteredStateMetaInfoBase>> metaDataCopy;
 
-		/** This boolean is used to atomically claim ownership over the snapshot resources for releasing them. */
-		private final AtomicBoolean resourceOwnershipTaken;
-
 		SnapshotAsynchronousPartCallable(
 			@Nonnull SupplierWithException<CheckpointStreamWithResultProvider, Exception> checkpointStreamSupplier,
-			@Nonnull CloseableRegistry snapshotCloseableRegistry,
+			@Nonnull CloseableRegistry taskCloseableRegistry,
 			@Nonnull ResourceGuard.Lease dbLease,
 			@Nonnull Snapshot snapshot,
 			@Nonnull List<StateMetaInfoSnapshot> stateMetaInfoSnapshots,
 			@Nonnull List<Tuple2<ColumnFamilyHandle, RegisteredStateMetaInfoBase>> metaDataCopy) {
 
+			super(taskCloseableRegistry);
+
 			this.checkpointStreamSupplier = checkpointStreamSupplier;
-			this.snapshotCloseableRegistry = snapshotCloseableRegistry;
 			this.dbLease = dbLease;
 			this.snapshot = snapshot;
 			this.stateMetaInfoSnapshots = stateMetaInfoSnapshots;
 			this.metaDataCopy = metaDataCopy;
-			this.resourceOwnershipTaken = new AtomicBoolean(false);
 		}
-
 
 		@Override
-		public SnapshotResult<KeyedStateHandle> call() throws Exception {
+		protected SnapshotResult<KeyedStateHandle> callInternal() throws Exception {
+			final KeyGroupRangeOffsets keyGroupRangeOffsets = new KeyGroupRangeOffsets(keyGroupRange);
+			final CheckpointStreamWithResultProvider checkpointStreamWithResultProvider =
+				checkpointStreamSupplier.get();
 
-			final long startTime = System.currentTimeMillis();
+			snapshotCloseableRegistry.registerCloseable(checkpointStreamWithResultProvider);
+			writeSnapshotToOutputStream(checkpointStreamWithResultProvider, keyGroupRangeOffsets);
 
-			if (resourceOwnershipTaken.compareAndSet(false, true)) {
-
-				final KeyGroupRangeOffsets keyGroupRangeOffsets = new KeyGroupRangeOffsets(keyGroupRange);
-				final CheckpointStreamWithResultProvider checkpointStreamWithResultProvider =
-					checkpointStreamSupplier.get();
-
-				try {
-
-					snapshotCloseableRegistry.registerCloseable(checkpointStreamWithResultProvider);
-					writeSnapshotToOutputStream(checkpointStreamWithResultProvider, keyGroupRangeOffsets);
-
-					if (snapshotCloseableRegistry.unregisterCloseable(checkpointStreamWithResultProvider)) {
-
-						SnapshotResult<KeyedStateHandle> snapshotResult =
-							CheckpointStreamWithResultProvider.toKeyedStateHandleSnapshotResult(
-								checkpointStreamWithResultProvider.closeAndFinalizeCheckpointStreamResult(),
-								keyGroupRangeOffsets);
-
-						LOG.info("Asynchronous RocksDB snapshot ({}, asynchronous part) in thread {} took {} ms.",
-							checkpointStreamSupplier, Thread.currentThread(), (System.currentTimeMillis() - startTime));
-
-						return snapshotResult;
-					}
-				} catch (Exception ex) {
-					if (!snapshotCloseableRegistry.isClosed()) {
-						throw ex;
-					}
-				} finally {
-					closeSnapshotCloseableRegistry();
-					releaseSnapshotResources();
-				}
+			if (snapshotCloseableRegistry.unregisterCloseable(checkpointStreamWithResultProvider)) {
+				return CheckpointStreamWithResultProvider.toKeyedStateHandleSnapshotResult(
+					checkpointStreamWithResultProvider.closeAndFinalizeCheckpointStreamResult(),
+					keyGroupRangeOffsets);
+			} else {
+				throw new IOException("Stream is already unregistered/closed.");
 			}
-
-			throw new CancellationException(CANCELLATION_EXCEPTION_MSG);
 		}
 
-		public void cancel() {
-			closeSnapshotCloseableRegistry();
-
-			if (resourceOwnershipTaken.compareAndSet(false, true)) {
-				releaseSnapshotResources();
-			}
+		@Override
+		protected void cleanupProvidedResources() {
+			db.releaseSnapshot(snapshot);
+			IOUtils.closeQuietly(snapshot);
+			IOUtils.closeQuietly(dbLease);
 		}
 
 		private void writeSnapshotToOutputStream(
@@ -448,18 +408,6 @@ public class RocksFullSnapshotStrategy<K> extends SnapshotStrategyBase<K> {
 			if (Thread.currentThread().isInterrupted()) {
 				throw new InterruptedException("RocksDB snapshot interrupted.");
 			}
-		}
-
-		private void closeSnapshotCloseableRegistry() {
-			if (cancelStreamRegistry.unregisterCloseable(snapshotCloseableRegistry)) {
-				IOUtils.closeQuietly(snapshotCloseableRegistry);
-			}
-		}
-
-		private void releaseSnapshotResources() {
-			db.releaseSnapshot(snapshot);
-			IOUtils.closeQuietly(snapshot);
-			IOUtils.closeQuietly(dbLease);
 		}
 	}
 
