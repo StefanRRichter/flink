@@ -44,27 +44,35 @@ import java.util.LinkedHashMap;
  */
 public abstract class SnapshotStrategyBase<K> implements SnapshotStrategy<SnapshotResult<KeyedStateHandle>> {
 
+	/** RocksDB instance from the backend. */
 	@Nonnull
 	protected final RocksDB db;
 
+	/** Resource guard for the RocksDB instance. */
 	@Nonnull
 	protected final ResourceGuard rocksDBResourceGuard;
 
+	/** The key serializer of the backend. */
 	@Nonnull
 	protected final TypeSerializer<K> keySerializer;
 
+	/** Key/Value state meta info from the backend. */
 	@Nonnull
 	protected final LinkedHashMap<String, Tuple2<ColumnFamilyHandle, RegisteredStateMetaInfoBase>> kvStateInformation;
 
+	/** The key-group range for the task. */
 	@Nonnull
 	protected final KeyGroupRange keyGroupRange;
 
+	/** Number of bytes in the key-group prefix. */
 	@Nonnegative
 	protected final int keyGroupPrefixBytes;
 
+	/** The configuration for local recovery. */
 	@Nonnull
 	protected final LocalRecoveryConfig localRecoveryConfig;
 
+	/** A {@link CloseableRegistry} that will be closed when the task is cancelled. */
 	@Nonnull
 	protected final CloseableRegistry cancelStreamRegistry;
 

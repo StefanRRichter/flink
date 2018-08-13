@@ -71,6 +71,7 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.FutureTask;
 import java.util.concurrent.RunnableFuture;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.apache.flink.contrib.streaming.state.snapshot.RocksSnapshotUtil.END_OF_KEY_GROUP_MARK;
 import static org.apache.flink.contrib.streaming.state.snapshot.RocksSnapshotUtil.hasMetaDataFollowsFlag;
@@ -121,8 +122,6 @@ public class RocksFullSnapshotStrategy<K> extends SnapshotStrategyBase<K> {
 		CheckpointStreamFactory primaryStreamFactory,
 		CheckpointOptions checkpointOptions) throws Exception {
 
-		long startTime = System.currentTimeMillis();
-
 		if (kvStateInformation.isEmpty()) {
 			if (LOG.isDebugEnabled()) {
 				LOG.debug("Asynchronous RocksDB snapshot performed on empty keyed state at {}. Returning null.",
@@ -131,40 +130,40 @@ public class RocksFullSnapshotStrategy<K> extends SnapshotStrategyBase<K> {
 			return DoneFuture.of(SnapshotResult.empty());
 		}
 
-		final SupplierWithException<CheckpointStreamWithResultProvider, Exception> supplier =
+		final SupplierWithException<CheckpointStreamWithResultProvider, Exception> checkpointStreamSupplier =
+			createCheckpointStreamSupplier(checkpointId, primaryStreamFactory, checkpointOptions);
 
-			localRecoveryConfig.isLocalRecoveryEnabled() &&
-				(CheckpointType.SAVEPOINT != checkpointOptions.getCheckpointType()) ?
+		final List<StateMetaInfoSnapshot> stateMetaInfoSnapshots = new ArrayList<>(kvStateInformation.size());
+		final List<Tuple2<ColumnFamilyHandle, RegisteredStateMetaInfoBase>> metaDataCopy =
+			new ArrayList<>(kvStateInformation.size());
 
-				() -> CheckpointStreamWithResultProvider.createDuplicatingStream(
-					checkpointId,
-					CheckpointedStateScope.EXCLUSIVE,
-					primaryStreamFactory,
-					localRecoveryConfig.getLocalStateDirectoryProvider()) :
-
-				() -> CheckpointStreamWithResultProvider.createSimpleStream(
-					CheckpointedStateScope.EXCLUSIVE,
-					primaryStreamFactory);
+		for (Tuple2<ColumnFamilyHandle, RegisteredStateMetaInfoBase> tuple2 : kvStateInformation.values()) {
+			// snapshot meta info
+			stateMetaInfoSnapshots.add(tuple2.f1.snapshot());
+			metaDataCopy.add(tuple2);
+		}
 
 		final CloseableRegistry snapshotCloseableRegistry = new CloseableRegistry();
+		cancelStreamRegistry.registerCloseable(snapshotCloseableRegistry);
 
-		final RocksDBFullSnapshotCallable snapshotOperation =
-			new RocksDBFullSnapshotCallable(supplier, snapshotCloseableRegistry);
+		final ResourceGuard.Lease lease = rocksDBResourceGuard.acquireResource();
+		final Snapshot snapshot = db.getSnapshot();
 
-		LOG.info("Asynchronous RocksDB snapshot ({}, synchronous part) in thread {} took {} ms.",
-			primaryStreamFactory, Thread.currentThread(), (System.currentTimeMillis() - startTime));
+		final SnapshotAsynchronousPartCallable asyncSnapshotCallable =
+			new SnapshotAsynchronousPartCallable(
+				checkpointStreamSupplier,
+				snapshotCloseableRegistry,
+				lease,
+				snapshot,
+				stateMetaInfoSnapshots,
+				metaDataCopy);
 
-		return new FutureTask<SnapshotResult<KeyedStateHandle>>(snapshotOperation) {
+		return new FutureTask<SnapshotResult<KeyedStateHandle>>(asyncSnapshotCallable) {
 
 			@Override
 			public boolean cancel(boolean mayInterruptIfRunning) {
-				snapshotOperation.cancel();
+				asyncSnapshotCallable.cancel();
 				return super.cancel(mayInterruptIfRunning);
-			}
-
-			@Override
-			protected void done() {
-				snapshotOperation.cleanupWhenDone();
 			}
 		};
 	}
@@ -174,134 +173,151 @@ public class RocksFullSnapshotStrategy<K> extends SnapshotStrategyBase<K> {
 		// nothing to do.
 	}
 
+	private SupplierWithException<CheckpointStreamWithResultProvider, Exception> createCheckpointStreamSupplier(
+		long checkpointId,
+		CheckpointStreamFactory primaryStreamFactory,
+		CheckpointOptions checkpointOptions) {
+
+		return localRecoveryConfig.isLocalRecoveryEnabled() &&
+			(CheckpointType.SAVEPOINT != checkpointOptions.getCheckpointType()) ?
+
+			() -> CheckpointStreamWithResultProvider.createDuplicatingStream(
+				checkpointId,
+				CheckpointedStateScope.EXCLUSIVE,
+				primaryStreamFactory,
+				localRecoveryConfig.getLocalStateDirectoryProvider()) :
+
+			() -> CheckpointStreamWithResultProvider.createSimpleStream(
+				CheckpointedStateScope.EXCLUSIVE,
+				primaryStreamFactory);
+	}
+
 	/**
 	 * Encapsulates the process to perform a full snapshot of a RocksDBKeyedStateBackend.
 	 */
 	@VisibleForTesting
-	private class RocksDBFullSnapshotCallable implements Callable<SnapshotResult<KeyedStateHandle>> {
+	private class SnapshotAsynchronousPartCallable implements Callable<SnapshotResult<KeyedStateHandle>> {
 
-		@Nonnull
-		private final KeyGroupRangeOffsets keyGroupRangeOffsets;
+		private static final String CANCELLATION_EXCEPTION_MSG = "Snapshot was cancelled.";
 
+		/** Supplier for the stream into which we write the snapshot. */
 		@Nonnull
 		private final SupplierWithException<CheckpointStreamWithResultProvider, Exception> checkpointStreamSupplier;
 
+		/** {@link CloseableRegistry} for this snapshot that is closed on cancellation to terminate blocking I/O. */
 		@Nonnull
 		private final CloseableRegistry snapshotCloseableRegistry;
 
+		/** This lease protects the native RocksDB resources. */
 		@Nonnull
 		private final ResourceGuard.Lease dbLease;
 
+		/** RocksDB snapshot*/
 		@Nonnull
 		private final Snapshot snapshot;
 
 		@Nonnull
-		private final ReadOptions readOptions;
-
-		/** The state meta data. */
-		@Nonnull
 		private List<StateMetaInfoSnapshot> stateMetaInfoSnapshots;
 
-		/** The copied column handle. */
 		@Nonnull
 		private List<Tuple2<ColumnFamilyHandle, RegisteredStateMetaInfoBase>> metaDataCopy;
 
-		RocksDBFullSnapshotCallable(
+		/** This boolean is used to atomically claim ownership over the snapshot resources for releasing them. */
+		private final AtomicBoolean resourceOwnershipTaken;
+
+		SnapshotAsynchronousPartCallable(
 			@Nonnull SupplierWithException<CheckpointStreamWithResultProvider, Exception> checkpointStreamSupplier,
-			@Nonnull CloseableRegistry registry) throws IOException {
+			@Nonnull CloseableRegistry snapshotCloseableRegistry,
+			@Nonnull ResourceGuard.Lease dbLease,
+			@Nonnull Snapshot snapshot,
+			@Nonnull List<StateMetaInfoSnapshot> stateMetaInfoSnapshots,
+			@Nonnull List<Tuple2<ColumnFamilyHandle, RegisteredStateMetaInfoBase>> metaDataCopy) {
 
 			this.checkpointStreamSupplier = checkpointStreamSupplier;
-			this.keyGroupRangeOffsets = new KeyGroupRangeOffsets(keyGroupRange);
-			this.snapshotCloseableRegistry = registry;
-
-			this.stateMetaInfoSnapshots = new ArrayList<>(kvStateInformation.size());
-			this.metaDataCopy = new ArrayList<>(kvStateInformation.size());
-			for (Tuple2<ColumnFamilyHandle, RegisteredStateMetaInfoBase> tuple2 : kvStateInformation.values()) {
-				// snapshot meta info
-				this.stateMetaInfoSnapshots.add(tuple2.f1.snapshot());
-				this.metaDataCopy.add(tuple2);
-			}
-
-			this.dbLease = rocksDBResourceGuard.acquireResource();
-
-			this.snapshot = db.getSnapshot();
-			this.readOptions = new ReadOptions();
-			this.readOptions.setSnapshot(snapshot);
+			this.snapshotCloseableRegistry = snapshotCloseableRegistry;
+			this.dbLease = dbLease;
+			this.snapshot = snapshot;
+			this.stateMetaInfoSnapshots = stateMetaInfoSnapshots;
+			this.metaDataCopy = metaDataCopy;
+			this.resourceOwnershipTaken = new AtomicBoolean(false);
 		}
+
 
 		@Override
 		public SnapshotResult<KeyedStateHandle> call() throws Exception {
 
 			final long startTime = System.currentTimeMillis();
-			final List<Tuple2<RocksIteratorWrapper, Integer>> kvStateIterators = new ArrayList<>(metaDataCopy.size());
 
-			try {
+			if (resourceOwnershipTaken.compareAndSet(false, true)) {
 
-				cancelStreamRegistry.registerCloseable(snapshotCloseableRegistry);
-
+				final KeyGroupRangeOffsets keyGroupRangeOffsets = new KeyGroupRangeOffsets(keyGroupRange);
 				final CheckpointStreamWithResultProvider checkpointStreamWithResultProvider =
 					checkpointStreamSupplier.get();
 
-				snapshotCloseableRegistry.registerCloseable(checkpointStreamWithResultProvider);
+				try {
 
-				final DataOutputView outputView =
-					new DataOutputViewStreamWrapper(checkpointStreamWithResultProvider.getCheckpointOutputStream());
+					snapshotCloseableRegistry.registerCloseable(checkpointStreamWithResultProvider);
+					writeSnapshotToOutputStream(checkpointStreamWithResultProvider, keyGroupRangeOffsets);
 
-				writeKVStateMetaData(kvStateIterators, outputView);
-				writeKVStateData(kvStateIterators, checkpointStreamWithResultProvider);
+					if (snapshotCloseableRegistry.unregisterCloseable(checkpointStreamWithResultProvider)) {
 
-				final SnapshotResult<KeyedStateHandle> snapshotResult =
-					createStateHandlesFromStreamProvider(checkpointStreamWithResultProvider);
+						SnapshotResult<KeyedStateHandle> snapshotResult =
+							CheckpointStreamWithResultProvider.toKeyedStateHandleSnapshotResult(
+								checkpointStreamWithResultProvider.closeAndFinalizeCheckpointStreamResult(),
+								keyGroupRangeOffsets);
 
-				LOG.info("Asynchronous RocksDB snapshot ({}, asynchronous part) in thread {} took {} ms.",
-					checkpointStreamSupplier, Thread.currentThread(), (System.currentTimeMillis() - startTime));
+						LOG.info("Asynchronous RocksDB snapshot ({}, asynchronous part) in thread {} took {} ms.",
+							checkpointStreamSupplier, Thread.currentThread(), (System.currentTimeMillis() - startTime));
 
-				return snapshotResult;
-
-			} catch (Exception e) {
-				if (snapshotCloseableRegistry.isClosed()) {
-					// It is expected that closing the registry probably causes an IOException to quickly cancel execution.
-					throw new CancellationException("Snapshot was canceled and stopped.");
-				} else {
-					// Seems something really went wrong unexpectedly.
-					throw e;
+						return snapshotResult;
+					}
+				} catch (Exception ex) {
+					if (!snapshotCloseableRegistry.isClosed()) {
+						throw ex;
+					}
+				} finally {
+					closeSnapshotCloseableRegistry();
+					releaseSnapshotResources();
 				}
+			}
+
+			throw new CancellationException(CANCELLATION_EXCEPTION_MSG);
+		}
+
+		public void cancel() {
+			closeSnapshotCloseableRegistry();
+
+			if (resourceOwnershipTaken.compareAndSet(false, true)) {
+				releaseSnapshotResources();
+			}
+		}
+
+		private void writeSnapshotToOutputStream(
+			@Nonnull CheckpointStreamWithResultProvider checkpointStreamWithResultProvider,
+			@Nonnull KeyGroupRangeOffsets keyGroupRangeOffsets) throws IOException, InterruptedException {
+
+			final List<Tuple2<RocksIteratorWrapper, Integer>> kvStateIterators =
+				new ArrayList<>(metaDataCopy.size());
+			final DataOutputView outputView =
+				new DataOutputViewStreamWrapper(checkpointStreamWithResultProvider.getCheckpointOutputStream());
+			final ReadOptions readOptions = new ReadOptions();
+			try {
+				readOptions.setSnapshot(snapshot);
+				writeKVStateMetaData(kvStateIterators, readOptions, outputView);
+				writeKVStateData(kvStateIterators, checkpointStreamWithResultProvider, keyGroupRangeOffsets);
 			} finally {
+
 				for (Tuple2<RocksIteratorWrapper, Integer> kvStateIterator : kvStateIterators) {
 					IOUtils.closeQuietly(kvStateIterator.f0);
 				}
-			}
-		}
 
-		/**
-		 * To be called by the executing {@link FutureTask} on {@link FutureTask#done()} -> completed or cancelled.
-		 */
-		void cleanupWhenDone() {
-			IOUtils.closeQuietly(readOptions);
-
-			db.releaseSnapshot(snapshot);
-			IOUtils.closeQuietly(snapshot);
-
-			IOUtils.closeQuietly(dbLease);
-
-			if (cancelStreamRegistry.unregisterCloseable(snapshotCloseableRegistry)) {
-				IOUtils.closeQuietly(snapshotCloseableRegistry);
-			}
-		}
-
-		private SnapshotResult<KeyedStateHandle> createStateHandlesFromStreamProvider(
-			CheckpointStreamWithResultProvider checkpointStreamWithResultProvider) throws IOException {
-			if (snapshotCloseableRegistry.unregisterCloseable(checkpointStreamWithResultProvider)) {
-				return CheckpointStreamWithResultProvider.toKeyedStateHandleSnapshotResult(
-					checkpointStreamWithResultProvider.closeAndFinalizeCheckpointStreamResult(),
-					keyGroupRangeOffsets);
-			} else {
-				throw new IOException("Snapshot was already closed before completion.");
+				IOUtils.closeQuietly(readOptions);
 			}
 		}
 
 		private void writeKVStateMetaData(
 			final List<Tuple2<RocksIteratorWrapper, Integer>> kvStateIterators,
+			final ReadOptions readOptions,
 			final DataOutputView outputView) throws IOException {
 
 			int kvStateId = 0;
@@ -330,7 +346,8 @@ public class RocksFullSnapshotStrategy<K> extends SnapshotStrategyBase<K> {
 
 		private void writeKVStateData(
 			final List<Tuple2<RocksIteratorWrapper, Integer>> kvStateIterators,
-			final CheckpointStreamWithResultProvider checkpointStreamWithResultProvider) throws IOException, InterruptedException {
+			final CheckpointStreamWithResultProvider checkpointStreamWithResultProvider,
+			final KeyGroupRangeOffsets keyGroupRangeOffsets) throws IOException, InterruptedException {
 
 			byte[] previousKey = null;
 			byte[] previousValue = null;
@@ -433,10 +450,16 @@ public class RocksFullSnapshotStrategy<K> extends SnapshotStrategyBase<K> {
 			}
 		}
 
-		public void cancel() {
+		private void closeSnapshotCloseableRegistry() {
 			if (cancelStreamRegistry.unregisterCloseable(snapshotCloseableRegistry)) {
 				IOUtils.closeQuietly(snapshotCloseableRegistry);
 			}
+		}
+
+		private void releaseSnapshotResources() {
+			db.releaseSnapshot(snapshot);
+			IOUtils.closeQuietly(snapshot);
+			IOUtils.closeQuietly(dbLease);
 		}
 	}
 

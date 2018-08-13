@@ -46,7 +46,6 @@ import org.apache.flink.core.memory.ByteArrayDataInputView;
 import org.apache.flink.core.memory.ByteArrayDataOutputView;
 import org.apache.flink.core.memory.DataInputView;
 import org.apache.flink.core.memory.DataInputViewStreamWrapper;
-import org.apache.flink.core.memory.DataOutputViewStreamWrapper;
 import org.apache.flink.runtime.checkpoint.CheckpointOptions;
 import org.apache.flink.runtime.checkpoint.CheckpointType;
 import org.apache.flink.runtime.query.TaskKvStateRegistry;
@@ -455,6 +454,8 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 		final CheckpointStreamFactory streamFactory,
 		CheckpointOptions checkpointOptions) throws Exception {
 
+		long startTime = System.currentTimeMillis();
+
 		// flush everything into db before taking a snapshot
 		writeBatchWrapper.flush();
 
@@ -462,7 +463,13 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 			CheckpointType.SAVEPOINT == checkpointOptions.getCheckpointType() ?
 				savepointSnapshotStrategy : checkpointSnapshotStrategy;
 
-		return chosenSnapshotStrategy.performSnapshot(checkpointId, timestamp, streamFactory, checkpointOptions);
+		RunnableFuture<SnapshotResult<KeyedStateHandle>> snapshotRunner =
+			chosenSnapshotStrategy.performSnapshot(checkpointId, timestamp, streamFactory, checkpointOptions);
+
+		LOG.info("Asynchronous RocksDB snapshot (synchronous part) in thread {} took {} ms.",
+			Thread.currentThread(), (System.currentTimeMillis() - startTime));
+
+		return snapshotRunner;
 	}
 
 	@Override
