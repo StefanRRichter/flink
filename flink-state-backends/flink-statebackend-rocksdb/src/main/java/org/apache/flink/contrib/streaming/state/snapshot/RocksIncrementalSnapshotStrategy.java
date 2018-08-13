@@ -76,6 +76,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.SortedMap;
 import java.util.UUID;
+import java.util.concurrent.Callable;
 import java.util.concurrent.FutureTask;
 import java.util.concurrent.RunnableFuture;
 
@@ -150,53 +151,27 @@ public class RocksIncrementalSnapshotStrategy<K> extends SnapshotStrategyBase<K>
 			return DoneFuture.of(SnapshotResult.empty());
 		}
 
-		SnapshotDirectory snapshotDirectory;
+		final SnapshotDirectory snapshotDirectory = prepareLocalSnapshotDirectory(checkpointId);
+		LOG.trace("Local RocksDB checkpoint goes to backup path {}.", snapshotDirectory);
 
-		if (localRecoveryConfig.isLocalRecoveryEnabled()) {
-			// create a "permanent" snapshot directory for local recovery.
-			LocalRecoveryDirectoryProvider directoryProvider = localRecoveryConfig.getLocalStateDirectoryProvider();
-			File directory = directoryProvider.subtaskSpecificCheckpointDirectory(checkpointId);
+		final List<StateMetaInfoSnapshot> stateMetaInfoSnapshots = new ArrayList<>(kvStateInformation.size());
+		final Set<StateHandleID> baseSstFiles = snapshotMetaData(checkpointId, stateMetaInfoSnapshots);
 
-			if (directory.exists()) {
-				FileUtils.deleteDirectory(directory);
-			}
-
-			if (!directory.mkdirs()) {
-				throw new IOException("Local state base directory for checkpoint " + checkpointId +
-					" already exists: " + directory);
-			}
-
-			// introduces an extra directory because RocksDB wants a non-existing directory for native checkpoints.
-			File rdbSnapshotDir = new File(directory, "rocks_db");
-			Path path = new Path(rdbSnapshotDir.toURI());
-			// create a "permanent" snapshot directory because local recovery is active.
-			snapshotDirectory = SnapshotDirectory.permanent(path);
-		} else {
-			// create a "temporary" snapshot directory because local recovery is inactive.
-			Path path = new Path(instanceBasePath.getAbsolutePath(), "chk-" + checkpointId);
-			snapshotDirectory = SnapshotDirectory.temporary(path);
-		}
+		takeDBCheckpoint(snapshotDirectory);
 
 		final RocksDBIncrementalSnapshotOperation snapshotOperation =
 			new RocksDBIncrementalSnapshotOperation(
+				checkpointId,
 				checkpointStreamFactory,
 				snapshotDirectory,
-				checkpointId);
+				baseSstFiles,
+				stateMetaInfoSnapshots);
 
-		try {
-			snapshotOperation.takeSnapshot();
-		} catch (Exception e) {
-			snapshotOperation.stop();
-			snapshotOperation.releaseResources(true);
-			throw e;
-		}
+		return new FutureTask<SnapshotResult<KeyedStateHandle>>(snapshotOperation) {
 
-		return new FutureTask<SnapshotResult<KeyedStateHandle>>(
-			snapshotOperation::runSnapshot
-		) {
 			@Override
 			public boolean cancel(boolean mayInterruptIfRunning) {
-				snapshotOperation.stop();
+				snapshotOperation.cancel();
 				return super.cancel(mayInterruptIfRunning);
 			}
 
@@ -217,10 +192,87 @@ public class RocksIncrementalSnapshotStrategy<K> extends SnapshotStrategyBase<K>
 		}
 	}
 
+	@Nonnull
+	private SnapshotDirectory prepareLocalSnapshotDirectory(long checkpointId) throws IOException {
+
+		if (localRecoveryConfig.isLocalRecoveryEnabled()) {
+			// create a "permanent" snapshot directory for local recovery.
+			LocalRecoveryDirectoryProvider directoryProvider = localRecoveryConfig.getLocalStateDirectoryProvider();
+			File directory = directoryProvider.subtaskSpecificCheckpointDirectory(checkpointId);
+
+			if (directory.exists()) {
+				FileUtils.deleteDirectory(directory);
+			}
+
+			if (!directory.mkdirs()) {
+				throw new IOException("Local state base directory for checkpoint " + checkpointId +
+					" already exists: " + directory);
+			}
+
+			// introduces an extra directory because RocksDB wants a non-existing directory for native checkpoints.
+			File rdbSnapshotDir = new File(directory, "rocks_db");
+			Path path = new Path(rdbSnapshotDir.toURI());
+			// create a "permanent" snapshot directory because local recovery is active.
+			try {
+				return SnapshotDirectory.permanent(path);
+			} catch (IOException ex) {
+				try {
+					FileUtils.deleteDirectory(directory);
+				} catch (IOException delEx) {
+					ex = ExceptionUtils.firstOrSuppressed(delEx, ex);
+				}
+				throw ex;
+			}
+		} else {
+			// create a "temporary" snapshot directory because local recovery is inactive.
+			Path path = new Path(instanceBasePath.getAbsolutePath(), "chk-" + checkpointId);
+			return SnapshotDirectory.temporary(path);
+		}
+	}
+
+	private Set<StateHandleID> snapshotMetaData(
+		long checkpointId,
+		@Nonnull List<StateMetaInfoSnapshot> stateMetaInfoSnapshots) {
+
+		final long lastCompletedCheckpoint;
+		final Set<StateHandleID> baseSstFiles;
+
+		// use the last completed checkpoint as the comparison base.
+		synchronized (materializedSstFiles) {
+			lastCompletedCheckpoint = lastCompletedCheckpointId;
+			baseSstFiles = materializedSstFiles.get(lastCompletedCheckpoint);
+		}
+		LOG.trace("Taking incremental snapshot for checkpoint {}. Snapshot is based on last completed checkpoint {} " +
+			"assuming the following (shared) files as base: {}.", checkpointId, lastCompletedCheckpoint, baseSstFiles);
+
+		// snapshot meta data to save
+		for (Map.Entry<String, Tuple2<ColumnFamilyHandle, RegisteredStateMetaInfoBase>> stateMetaInfoEntry
+			: kvStateInformation.entrySet()) {
+			stateMetaInfoSnapshots.add(stateMetaInfoEntry.getValue().f1.snapshot());
+		}
+		return baseSstFiles;
+	}
+
+	private void takeDBCheckpoint(@Nonnull SnapshotDirectory snapshotDirectory) throws Exception {
+		// create hard links of living files in the snapshot path
+		try (
+			ResourceGuard.Lease dbLease = rocksDBResourceGuard.acquireResource();
+			Checkpoint checkpoint = Checkpoint.create(db)) {
+			checkpoint.createCheckpoint(snapshotDirectory.getDirectory().getPath());
+		} catch (Exception ex) {
+			try {
+				snapshotDirectory.cleanup();
+			} catch (IOException cleanupEx) {
+				ex = ExceptionUtils.firstOrSuppressed(cleanupEx, ex);
+			}
+			throw ex;
+		}
+	}
+
 	/**
 	 * Encapsulates the process to perform an incremental snapshot of a RocksDBKeyedStateBackend.
 	 */
-	private final class RocksDBIncrementalSnapshotOperation {
+	private final class RocksDBIncrementalSnapshotOperation implements Callable<SnapshotResult<KeyedStateHandle>> {
 
 		private static final int READ_BUFFER_SIZE = 16 * 1024;
 
@@ -241,181 +293,108 @@ public class RocksIncrementalSnapshotStrategy<K> extends SnapshotStrategyBase<K>
 
 		/** Registry for all opened i/o streams. */
 		@Nonnull
-		private final CloseableRegistry closeableRegistry;
-
-		/** New sst files since the last completed checkpoint */
-		@Nonnull
-		private final Map<StateHandleID, StreamStateHandle> sstFiles;
-
-		/** Handles to the misc files in the current snapshot */
-		@Nonnull
-		private final Map<StateHandleID, StreamStateHandle> miscFiles;
-
-		/** This lease protects from concurrent disposal of the native RocksDB instance. */
-		@Nonnull
-		private final ResourceGuard.Lease dbLease;
+		private final CloseableRegistry snapshotCloseableRegistry;
 
 		/** All sst files that were part of the last previously completed checkpoint. */
 		@Nullable
-		private Set<StateHandleID> baseSstFiles;
-
-		/** State handle to the meta-data file from the RocksDB native checkpoint .*/
-		@Nullable
-		private SnapshotResult<StreamStateHandle> metaStateHandle;
+		private final Set<StateHandleID> baseSstFiles;
 
 		private RocksDBIncrementalSnapshotOperation(
+			long checkpointId,
 			@Nonnull CheckpointStreamFactory checkpointStreamFactory,
 			@Nonnull SnapshotDirectory localBackupDirectory,
-			long checkpointId) throws IOException {
+			@Nullable Set<StateHandleID> baseSstFiles,
+			@Nonnull List<StateMetaInfoSnapshot> stateMetaInfoSnapshots) {
 
 			this.checkpointStreamFactory = checkpointStreamFactory;
+			this.baseSstFiles = baseSstFiles;
 			this.checkpointId = checkpointId;
 			this.localBackupDirectory = localBackupDirectory;
-			this.metaStateHandle = null;
-			this.stateMetaInfoSnapshots = new ArrayList<>();
-			this.sstFiles = new HashMap<>();
-			this.miscFiles = new HashMap<>();
-			this.closeableRegistry = new CloseableRegistry();
-			this.dbLease = rocksDBResourceGuard.acquireResource();
-		}
-
-		void takeSnapshot() throws Exception {
-
-			final long lastCompletedCheckpoint;
-
-			// use the last completed checkpoint as the comparison base.
-			synchronized (materializedSstFiles) {
-				lastCompletedCheckpoint = lastCompletedCheckpointId;
-				baseSstFiles = materializedSstFiles.get(lastCompletedCheckpoint);
-			}
-
-			LOG.trace("Taking incremental snapshot for checkpoint {}. Snapshot is based on last completed checkpoint {} " +
-				"assuming the following (shared) files as base: {}.", checkpointId, lastCompletedCheckpoint, baseSstFiles);
-
-			// save meta data
-			for (Map.Entry<String, Tuple2<ColumnFamilyHandle, RegisteredStateMetaInfoBase>> stateMetaInfoEntry
-				: kvStateInformation.entrySet()) {
-				stateMetaInfoSnapshots.add(stateMetaInfoEntry.getValue().f1.snapshot());
-			}
-
-			LOG.trace("Local RocksDB checkpoint goes to backup path {}.", localBackupDirectory);
-
-			if (localBackupDirectory.exists()) {
-				throw new IllegalStateException("Unexpected existence of the backup directory.");
-			}
-
-			// create hard links of living files in the snapshot path
-			try (Checkpoint checkpoint = Checkpoint.create(db)) {
-				checkpoint.createCheckpoint(localBackupDirectory.getDirectory().getPath());
-			}
-		}
-
-		private StreamStateHandle materializeStateData(Path filePath) throws Exception {
-			FSDataInputStream inputStream = null;
-			CheckpointStreamFactory.CheckpointStateOutputStream outputStream = null;
-
-			try {
-				final byte[] buffer = new byte[READ_BUFFER_SIZE];
-
-				FileSystem backupFileSystem = localBackupDirectory.getFileSystem();
-				inputStream = backupFileSystem.open(filePath);
-				closeableRegistry.registerCloseable(inputStream);
-
-				outputStream = checkpointStreamFactory
-					.createCheckpointStateOutputStream(CheckpointedStateScope.SHARED);
-				closeableRegistry.registerCloseable(outputStream);
-
-				while (true) {
-					int numBytes = inputStream.read(buffer);
-
-					if (numBytes == -1) {
-						break;
-					}
-
-					outputStream.write(buffer, 0, numBytes);
-				}
-
-				StreamStateHandle result = null;
-				if (closeableRegistry.unregisterCloseable(outputStream)) {
-					result = outputStream.closeAndGetHandle();
-					outputStream = null;
-				}
-				return result;
-
-			} finally {
-
-				if (closeableRegistry.unregisterCloseable(inputStream)) {
-					inputStream.close();
-				}
-
-				if (closeableRegistry.unregisterCloseable(outputStream)) {
-					outputStream.close();
-				}
-			}
+			this.stateMetaInfoSnapshots = stateMetaInfoSnapshots;
+			this.snapshotCloseableRegistry = new CloseableRegistry();
 		}
 
 		@Nonnull
-		private SnapshotResult<StreamStateHandle> materializeMetaData() throws Exception {
+		@Override
+		public SnapshotResult<KeyedStateHandle> call() throws Exception {
 
-			CheckpointStreamWithResultProvider streamWithResultProvider =
+			long startTime = System.currentTimeMillis();
 
-				localRecoveryConfig.isLocalRecoveryEnabled() ?
+			cancelStreamRegistry.registerCloseable(snapshotCloseableRegistry);
 
-					CheckpointStreamWithResultProvider.createDuplicatingStream(
-						checkpointId,
-						CheckpointedStateScope.EXCLUSIVE,
-						checkpointStreamFactory,
-						localRecoveryConfig.getLocalStateDirectoryProvider()) :
+			// Handle to the meta data file
+			final SnapshotResult<StreamStateHandle> metaStateHandle = materializeMetaData();
 
-					CheckpointStreamWithResultProvider.createSimpleStream(
-						CheckpointedStateScope.EXCLUSIVE,
-						checkpointStreamFactory);
+			// Handles to new sst files since the last completed checkpoint will go here
+			final Map<StateHandleID, StreamStateHandle> sstFiles = new HashMap<>();
 
-			try {
-				closeableRegistry.registerCloseable(streamWithResultProvider);
+			// Handles to the misc files in the current snapshot will go here
+			final Map<StateHandleID, StreamStateHandle> miscFiles = new HashMap<>();
 
-				//no need for compression scheme support because sst-files are already compressed
-				KeyedBackendSerializationProxy<K> serializationProxy =
-					new KeyedBackendSerializationProxy<>(
-						keySerializer,
-						stateMetaInfoSnapshots,
-						false);
-
-				DataOutputView out =
-					new DataOutputViewStreamWrapper(streamWithResultProvider.getCheckpointOutputStream());
-
-				serializationProxy.write(out);
-
-				if (closeableRegistry.unregisterCloseable(streamWithResultProvider)) {
-					SnapshotResult<StreamStateHandle> result =
-						streamWithResultProvider.closeAndFinalizeCheckpointStreamResult();
-					streamWithResultProvider = null;
-					return result;
-				} else {
-					throw new IOException("Stream already closed and cannot return a handle.");
-				}
-			} finally {
-				if (streamWithResultProvider != null) {
-					if (closeableRegistry.unregisterCloseable(streamWithResultProvider)) {
-						IOUtils.closeQuietly(streamWithResultProvider);
-					}
-				}
-			}
-		}
-
-		@Nonnull
-		SnapshotResult<KeyedStateHandle> runSnapshot() throws Exception {
-
-			cancelStreamRegistry.registerCloseable(closeableRegistry);
-
-			// write meta data
-			metaStateHandle = materializeMetaData();
-
-			// sanity checks - they should never fail
+			// Sanity checks - they should never fail
 			Preconditions.checkNotNull(metaStateHandle,
 				"Metadata was not properly created.");
 			Preconditions.checkNotNull(metaStateHandle.getJobManagerOwnedSnapshot(),
 				"Metadata for job manager was not properly created.");
+
+			uploadSstFiles(sstFiles, miscFiles);
+
+			synchronized (materializedSstFiles) {
+				materializedSstFiles.put(checkpointId, sstFiles.keySet());
+			}
+
+			IncrementalKeyedStateHandle jmIncrementalKeyedStateHandle = new IncrementalKeyedStateHandle(
+				backendUID,
+				keyGroupRange,
+				checkpointId,
+				sstFiles,
+				miscFiles,
+				metaStateHandle.getJobManagerOwnedSnapshot());
+
+			StreamStateHandle taskLocalSnapshotMetaDataStateHandle = metaStateHandle.getTaskLocalSnapshot();
+			DirectoryStateHandle directoryStateHandle = null;
+			try {
+				directoryStateHandle = localBackupDirectory.completeSnapshotAndGetHandle();
+			} catch (IOException ex) {
+
+				Exception collector = ex;
+
+				try {
+					taskLocalSnapshotMetaDataStateHandle.discardState();
+				} catch (Exception discardEx) {
+					collector = ExceptionUtils.firstOrSuppressed(discardEx, collector);
+				}
+
+				LOG.warn("Problem with local state snapshot.", collector);
+			}
+
+			SnapshotResult<KeyedStateHandle> snapshotResult;
+
+			if (directoryStateHandle != null && taskLocalSnapshotMetaDataStateHandle != null) {
+
+				IncrementalLocalKeyedStateHandle localDirKeyedStateHandle =
+					new IncrementalLocalKeyedStateHandle(
+						backendUID,
+						checkpointId,
+						directoryStateHandle,
+						keyGroupRange,
+						taskLocalSnapshotMetaDataStateHandle,
+						sstFiles.keySet());
+
+				snapshotResult = SnapshotResult.withLocalState(jmIncrementalKeyedStateHandle, localDirKeyedStateHandle);
+			} else {
+				snapshotResult = SnapshotResult.of(jmIncrementalKeyedStateHandle);
+			}
+
+			LOG.info("Asynchronous RocksDB snapshot (incremental, asynchronous part) in thread {} took {} ms.",
+				Thread.currentThread(), (System.currentTimeMillis() - startTime));
+
+			return snapshotResult;
+		}
+
+		private void uploadSstFiles(
+			@Nonnull Map<StateHandleID, StreamStateHandle> sstFiles,
+			@Nonnull Map<StateHandleID, StreamStateHandle> miscFiles) throws Exception {
 
 			// write state data
 			Preconditions.checkState(localBackupDirectory.exists());
@@ -438,67 +417,114 @@ public class RocksIncrementalSnapshotStrategy<K> extends SnapshotStrategyBase<K>
 								stateHandleID,
 								new PlaceholderStreamStateHandle());
 						} else {
-							sstFiles.put(stateHandleID, materializeStateData(filePath));
+							sstFiles.put(stateHandleID, uploadLocalFileToCheckpointFs(filePath));
 						}
 					} else {
-						StreamStateHandle fileHandle = materializeStateData(filePath);
+						StreamStateHandle fileHandle = uploadLocalFileToCheckpointFs(filePath);
 						miscFiles.put(stateHandleID, fileHandle);
 					}
 				}
 			}
+		}
 
-			synchronized (materializedSstFiles) {
-				materializedSstFiles.put(checkpointId, sstFiles.keySet());
-			}
-
-			IncrementalKeyedStateHandle jmIncrementalKeyedStateHandle = new IncrementalKeyedStateHandle(
-				backendUID,
-				keyGroupRange,
-				checkpointId,
-				sstFiles,
-				miscFiles,
-				metaStateHandle.getJobManagerOwnedSnapshot());
-
-			StreamStateHandle taskLocalSnapshotMetaDataStateHandle = metaStateHandle.getTaskLocalSnapshot();
-			DirectoryStateHandle directoryStateHandle = null;
+		private StreamStateHandle uploadLocalFileToCheckpointFs(Path filePath) throws Exception {
+			FSDataInputStream inputStream = null;
+			CheckpointStreamFactory.CheckpointStateOutputStream outputStream = null;
 
 			try {
+				final byte[] buffer = new byte[READ_BUFFER_SIZE];
 
-				directoryStateHandle = localBackupDirectory.completeSnapshotAndGetHandle();
-			} catch (IOException ex) {
+				FileSystem backupFileSystem = localBackupDirectory.getFileSystem();
+				inputStream = backupFileSystem.open(filePath);
+				snapshotCloseableRegistry.registerCloseable(inputStream);
 
-				Exception collector = ex;
+				outputStream = checkpointStreamFactory
+					.createCheckpointStateOutputStream(CheckpointedStateScope.SHARED);
+				snapshotCloseableRegistry.registerCloseable(outputStream);
 
-				try {
-					taskLocalSnapshotMetaDataStateHandle.discardState();
-				} catch (Exception discardEx) {
-					collector = ExceptionUtils.firstOrSuppressed(discardEx, collector);
+				while (true) {
+					int numBytes = inputStream.read(buffer);
+
+					if (numBytes == -1) {
+						break;
+					}
+
+					outputStream.write(buffer, 0, numBytes);
 				}
 
-				LOG.warn("Problem with local state snapshot.", collector);
-			}
+				StreamStateHandle result = null;
+				if (snapshotCloseableRegistry.unregisterCloseable(outputStream)) {
+					result = outputStream.closeAndGetHandle();
+					outputStream = null;
+				}
+				return result;
 
-			if (directoryStateHandle != null && taskLocalSnapshotMetaDataStateHandle != null) {
+			} finally {
 
-				IncrementalLocalKeyedStateHandle localDirKeyedStateHandle =
-					new IncrementalLocalKeyedStateHandle(
-						backendUID,
-						checkpointId,
-						directoryStateHandle,
-						keyGroupRange,
-						taskLocalSnapshotMetaDataStateHandle,
-						sstFiles.keySet());
-				return SnapshotResult.withLocalState(jmIncrementalKeyedStateHandle, localDirKeyedStateHandle);
-			} else {
-				return SnapshotResult.of(jmIncrementalKeyedStateHandle);
+				if (snapshotCloseableRegistry.unregisterCloseable(inputStream)) {
+					inputStream.close();
+				}
+
+				if (snapshotCloseableRegistry.unregisterCloseable(outputStream)) {
+					outputStream.close();
+				}
 			}
 		}
 
-		void stop() {
+		@Nonnull
+		private SnapshotResult<StreamStateHandle> materializeMetaData() throws Exception {
 
-			if (cancelStreamRegistry.unregisterCloseable(closeableRegistry)) {
+			CheckpointStreamWithResultProvider streamWithResultProvider =
+
+				localRecoveryConfig.isLocalRecoveryEnabled() ?
+
+					CheckpointStreamWithResultProvider.createDuplicatingStream(
+						checkpointId,
+						CheckpointedStateScope.EXCLUSIVE,
+						checkpointStreamFactory,
+						localRecoveryConfig.getLocalStateDirectoryProvider()) :
+
+					CheckpointStreamWithResultProvider.createSimpleStream(
+						CheckpointedStateScope.EXCLUSIVE,
+						checkpointStreamFactory);
+
+			snapshotCloseableRegistry.registerCloseable(streamWithResultProvider);
+
+			try {
+				//no need for compression scheme support because sst-files are already compressed
+				KeyedBackendSerializationProxy<K> serializationProxy =
+					new KeyedBackendSerializationProxy<>(
+						keySerializer,
+						stateMetaInfoSnapshots,
+						false);
+
+				DataOutputView out =
+					new DataOutputViewStreamWrapper(streamWithResultProvider.getCheckpointOutputStream());
+
+				serializationProxy.write(out);
+
+				if (snapshotCloseableRegistry.unregisterCloseable(streamWithResultProvider)) {
+					SnapshotResult<StreamStateHandle> result =
+						streamWithResultProvider.closeAndFinalizeCheckpointStreamResult();
+					streamWithResultProvider = null;
+					return result;
+				} else {
+					throw new IOException("Stream already closed and cannot return a handle.");
+				}
+			} finally {
+				if (streamWithResultProvider != null) {
+					if (snapshotCloseableRegistry.unregisterCloseable(streamWithResultProvider)) {
+						IOUtils.closeQuietly(streamWithResultProvider);
+					}
+				}
+			}
+		}
+
+		void cancel() {
+
+			if (cancelStreamRegistry.unregisterCloseable(snapshotCloseableRegistry)) {
 				try {
-					closeableRegistry.close();
+					snapshotCloseableRegistry.close();
 				} catch (IOException e) {
 					LOG.warn("Could not properly close io streams.", e);
 				}
@@ -507,11 +533,9 @@ public class RocksIncrementalSnapshotStrategy<K> extends SnapshotStrategyBase<K>
 
 		void releaseResources(boolean canceled) {
 
-			dbLease.close();
-
-			if (cancelStreamRegistry.unregisterCloseable(closeableRegistry)) {
+			if (cancelStreamRegistry.unregisterCloseable(snapshotCloseableRegistry)) {
 				try {
-					closeableRegistry.close();
+					snapshotCloseableRegistry.close();
 				} catch (IOException e) {
 					LOG.warn("Exception on closing registry.", e);
 				}
