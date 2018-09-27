@@ -35,6 +35,7 @@ import org.apache.flink.api.common.typeutils.base.array.BytePrimitiveArraySerial
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.configuration.ConfigConstants;
 import org.apache.flink.contrib.streaming.state.iterator.RocksStateKeysIterator;
+import org.apache.flink.contrib.streaming.state.restore.RocksDBIncrementalCheckpointUtils;
 import org.apache.flink.contrib.streaming.state.snapshot.RocksDBSnapshotStrategyBase;
 import org.apache.flink.contrib.streaming.state.snapshot.RocksFullSnapshotStrategy;
 import org.apache.flink.contrib.streaming.state.snapshot.RocksIncrementalSnapshotStrategy;
@@ -204,7 +205,7 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 	 * Information about the k/v states, maintained in the order as we create them. This is used to retrieve the
 	 * column family that is used for a state and also for sanity checks when restoring.
 	 */
-	private final LinkedHashMap<String, Tuple2<ColumnFamilyHandle, RegisteredStateMetaInfoBase>> kvStateInformation;
+	private final LinkedHashMap<String, StateColumnFamilyHandle> kvStateInformation;
 
 	/**
 	 * Map of state names to their corresponding restored state meta info.
@@ -313,13 +314,14 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 	@SuppressWarnings("unchecked")
 	@Override
 	public <N> Stream<K> getKeys(String state, N namespace) {
-		Tuple2<ColumnFamilyHandle, RegisteredStateMetaInfoBase> columnInfo = kvStateInformation.get(state);
-		if (columnInfo == null || !(columnInfo.f1 instanceof RegisteredKeyValueStateBackendMetaInfo)) {
+		StateColumnFamilyHandle stateColumnFamilyHandle = kvStateInformation.get(state);
+		if (stateColumnFamilyHandle == null
+			|| !(stateColumnFamilyHandle.getStateMetaInfo() instanceof RegisteredKeyValueStateBackendMetaInfo)) {
 			return Stream.empty();
 		}
 
 		RegisteredKeyValueStateBackendMetaInfo<N, ?> registeredKeyValueStateBackendMetaInfo =
-			(RegisteredKeyValueStateBackendMetaInfo<N, ?>) columnInfo.f1;
+			(RegisteredKeyValueStateBackendMetaInfo<N, ?>) stateColumnFamilyHandle.getStateMetaInfo();
 
 		final TypeSerializer<N> namespaceSerializer = registeredKeyValueStateBackendMetaInfo.getNamespaceSerializer();
 		final DataOutputSerializer namespaceOutputView = new DataOutputSerializer(8);
@@ -336,7 +338,7 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 			throw new FlinkRuntimeException("Failed to get keys from RocksDB state backend.", ex);
 		}
 
-		RocksIteratorWrapper iterator = getRocksIterator(db, columnInfo.f0);
+		RocksIteratorWrapper iterator = getRocksIterator(db, stateColumnFamilyHandle.getColumnFamilyHandle());
 		iterator.seekToFirst();
 
 		final RocksStateKeysIterator<K> iteratorWrapper = new RocksStateKeysIterator<>(iterator, state, keySerializer, keyGroupPrefixBytes,
@@ -348,8 +350,8 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 
 	@VisibleForTesting
 	public ColumnFamilyHandle getColumnFamilyHandle(String state) {
-		Tuple2<ColumnFamilyHandle, ?> columnInfo = kvStateInformation.get(state);
-		return columnInfo != null ? columnInfo.f0 : null;
+		StateColumnFamilyHandle stateColumnFamilyHandle = kvStateInformation.get(state);
+		return stateColumnFamilyHandle != null ? stateColumnFamilyHandle.getColumnFamilyHandle() : null;
 	}
 
 	/**
@@ -376,9 +378,9 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 			IOUtils.closeQuietly(db.getDefaultColumnFamily());
 
 			// ... continue with the ones created by Flink...
-			for (Tuple2<ColumnFamilyHandle, RegisteredStateMetaInfoBase> columnMetaData :
+			for (StateColumnFamilyHandle stateColumn :
 				kvStateInformation.values()) {
-				IOUtils.closeQuietly(columnMetaData.f0);
+				IOUtils.closeQuietly(stateColumn.getColumnFamilyHandle());
 			}
 
 			// ... and finally close the DB instance ...
@@ -503,8 +505,7 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 	}
 
 	@VisibleForTesting
-	void initializeSnapshotStrategy(
-		@Nullable RocksDBIncrementalRestoreOperation<K> incrementalRestoreOperation) {
+	void initializeSnapshotStrategy(@Nullable RocksDBIncrementalRestoreOperation<K> incrementalRestoreOperation) {
 
 		this.savepointSnapshotStrategy =
 			new RocksFullSnapshotStrategy<>(
@@ -708,10 +709,10 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 
 			for (StateMetaInfoSnapshot restoredMetaInfo : restoredMetaInfos) {
 
-				Tuple2<ColumnFamilyHandle, RegisteredStateMetaInfoBase> registeredColumn =
+				StateColumnFamilyHandle registeredstateCFHandle =
 					rocksDBKeyedStateBackend.kvStateInformation.get(restoredMetaInfo.getName());
 
-				if (registeredColumn == null) {
+				if (registeredstateCFHandle == null) {
 					byte[] nameBytes = restoredMetaInfo.getName().getBytes(ConfigConstants.DEFAULT_CHARSET);
 
 					ColumnFamilyDescriptor columnFamilyDescriptor = new ColumnFamilyDescriptor(
@@ -725,13 +726,13 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 
 					ColumnFamilyHandle columnFamily = rocksDBKeyedStateBackend.db.createColumnFamily(columnFamilyDescriptor);
 
-					registeredColumn = new Tuple2<>(columnFamily, stateMetaInfo);
-					rocksDBKeyedStateBackend.kvStateInformation.put(stateMetaInfo.getName(), registeredColumn);
+					registeredstateCFHandle = new StateColumnFamilyHandle(columnFamily, stateMetaInfo);
+					rocksDBKeyedStateBackend.kvStateInformation.put(stateMetaInfo.getName(), registeredstateCFHandle);
 
 				} else {
 					// TODO with eager state registration in place, check here for serializer migration strategies
 				}
-				currentStateHandleKVStateColumnFamilies.add(registeredColumn.f0);
+				currentStateHandleKVStateColumnFamilies.add(registeredstateCFHandle.getColumnFamilyHandle());
 			}
 		}
 
@@ -1025,24 +1026,24 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 			ColumnFamilyHandle columnFamilyHandle,
 			StateMetaInfoSnapshot stateMetaInfoSnapshot) throws RocksDBException {
 
-			Tuple2<ColumnFamilyHandle, RegisteredStateMetaInfoBase> registeredStateMetaInfoEntry =
+			StateColumnFamilyHandle registeredStateColumnFamilyHandle =
 				stateBackend.kvStateInformation.get(stateMetaInfoSnapshot.getName());
 
-			if (null == registeredStateMetaInfoEntry) {
+			if (null == registeredStateColumnFamilyHandle) {
 				RegisteredStateMetaInfoBase stateMetaInfo =
 					RegisteredStateMetaInfoBase.fromMetaInfoSnapshot(stateMetaInfoSnapshot);
 
-				registeredStateMetaInfoEntry =
-					new Tuple2<>(
+				registeredStateColumnFamilyHandle =
+					new StateColumnFamilyHandle(
 						columnFamilyHandle != null ? columnFamilyHandle : stateBackend.db.createColumnFamily(columnFamilyDescriptor),
 						stateMetaInfo);
 
 				stateBackend.kvStateInformation.put(
 					stateMetaInfoSnapshot.getName(),
-					registeredStateMetaInfoEntry);
+					registeredStateColumnFamilyHandle);
 			}
 
-			return registeredStateMetaInfoEntry.f0;
+			return registeredStateColumnFamilyHandle.getColumnFamilyHandle();
 		}
 
 		/**
@@ -1158,7 +1159,7 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 
 				stateBackend.kvStateInformation.put(
 					stateMetaInfoSnapshot.getName(),
-					new Tuple2<>(columnFamilyHandle, stateMetaInfo));
+					new StateColumnFamilyHandle(columnFamilyHandle, stateMetaInfo));
 			}
 
 			// use the restore sst files as the base for succeeding checkpoints
@@ -1326,11 +1327,10 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 			TypeSerializer<N> namespaceSerializer,
 			@Nullable StateSnapshotTransformer<S> snapshotTransformer) throws StateMigrationException {
 
-		Tuple2<ColumnFamilyHandle, RegisteredStateMetaInfoBase> stateInfo =
-			kvStateInformation.get(stateDesc.getName());
+		StateColumnFamilyHandle stateColumnFamilyHandle = kvStateInformation.get(stateDesc.getName());
 
 		RegisteredKeyValueStateBackendMetaInfo<N, S> newMetaInfo;
-		if (stateInfo != null) {
+		if (stateColumnFamilyHandle != null) {
 
 			StateMetaInfoSnapshot restoredMetaInfoSnapshot = restoredKvStateMetaInfos.get(stateDesc.getName());
 
@@ -1345,7 +1345,7 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 				stateDesc,
 				snapshotTransformer);
 
-			stateInfo.f1 = newMetaInfo;
+			stateColumnFamilyHandle.setStateMetaInfo(newMetaInfo);
 		} else {
 			String stateName = stateDesc.getName();
 
@@ -1358,11 +1358,11 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 
 			ColumnFamilyHandle columnFamily = createColumnFamily(stateName);
 
-			stateInfo = Tuple2.of(columnFamily, newMetaInfo);
-			kvStateInformation.put(stateDesc.getName(), stateInfo);
+			stateColumnFamilyHandle = new StateColumnFamilyHandle(columnFamily, newMetaInfo);
+			kvStateInformation.put(stateDesc.getName(), stateColumnFamilyHandle);
 		}
 
-		return Tuple2.of(stateInfo.f0, newMetaInfo);
+		return Tuple2.of(stateColumnFamilyHandle.getColumnFamilyHandle(), newMetaInfo);
 	}
 
 	/**
@@ -1442,9 +1442,9 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 	public int numKeyValueStateEntries() {
 		int count = 0;
 
-		for (Tuple2<ColumnFamilyHandle, RegisteredStateMetaInfoBase> column : kvStateInformation.values()) {
+		for (StateColumnFamilyHandle stateCFHandle : kvStateInformation.values()) {
 			//TODO maybe filterOrTransform only for k/v states
-			try (RocksIteratorWrapper rocksIterator = getRocksIterator(db, column.f0)) {
+			try (RocksIteratorWrapper rocksIterator = getRocksIterator(db, stateCFHandle.getColumnFamilyHandle())) {
 				rocksIterator.seekToFirst();
 
 				while (rocksIterator.isValid()) {
@@ -1493,10 +1493,10 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 		public <T extends HeapPriorityQueueElement & PriorityComparable & Keyed> KeyGroupedInternalPriorityQueue<T>
 		create(@Nonnull String stateName, @Nonnull TypeSerializer<T> byteOrderedElementSerializer) {
 
-			final Tuple2<ColumnFamilyHandle, RegisteredStateMetaInfoBase> metaInfoTuple =
+			final StateColumnFamilyHandle stateColumnFamilyHandle =
 				tryRegisterPriorityQueueMetaInfo(stateName, byteOrderedElementSerializer);
 
-			final ColumnFamilyHandle columnFamilyHandle = metaInfoTuple.f0;
+			final ColumnFamilyHandle columnFamilyHandle = stateColumnFamilyHandle.getColumnFamilyHandle();
 
 			return new KeyGroupPartitionedPriorityQueue<>(
 				KeyExtractorFunction.forKeyedObjects(),
@@ -1529,21 +1529,21 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 	}
 
 	@Nonnull
-	private <T> Tuple2<ColumnFamilyHandle, RegisteredStateMetaInfoBase> tryRegisterPriorityQueueMetaInfo(
+	private <T> StateColumnFamilyHandle tryRegisterPriorityQueueMetaInfo(
 		@Nonnull String stateName,
 		@Nonnull TypeSerializer<T> byteOrderedElementSerializer) {
 
-		Tuple2<ColumnFamilyHandle, RegisteredStateMetaInfoBase> metaInfoTuple =
+		StateColumnFamilyHandle stateColumnFamilyHandle =
 			kvStateInformation.get(stateName);
 
-		if (metaInfoTuple == null) {
+		if (stateColumnFamilyHandle == null) {
 			final ColumnFamilyHandle columnFamilyHandle = createColumnFamily(stateName);
 
 			RegisteredPriorityQueueStateBackendMetaInfo<T> metaInfo =
 				new RegisteredPriorityQueueStateBackendMetaInfo<>(stateName, byteOrderedElementSerializer);
 
-			metaInfoTuple = new Tuple2<>(columnFamilyHandle, metaInfo);
-			kvStateInformation.put(stateName, metaInfoTuple);
+			stateColumnFamilyHandle = new StateColumnFamilyHandle(columnFamilyHandle, metaInfo);
+			kvStateInformation.put(stateName, stateColumnFamilyHandle);
 		} else {
 			// TODO we implement the simple way of supporting the current functionality, mimicking keyed state
 			// because this should be reworked in FLINK-9376 and then we should have a common algorithm over
@@ -1572,12 +1572,13 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 				}
 
 				// update meta info with new serializer
-				metaInfoTuple.f1 =
+				RegisteredPriorityQueueStateBackendMetaInfo<T> updatedMetaInfo =
 					new RegisteredPriorityQueueStateBackendMetaInfo<>(stateName, byteOrderedElementSerializer);
+				stateColumnFamilyHandle.setStateMetaInfo(updatedMetaInfo);
 			}
 		}
 
-		return metaInfoTuple;
+		return stateColumnFamilyHandle;
 	}
 
 	@Override
