@@ -818,10 +818,6 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 		 */
 		void restore(Collection<KeyedStateHandle> restoreStateHandles) throws Exception {
 
-			if (restoreStateHandles.isEmpty()) {
-				return;
-			}
-
 			final KeyedStateHandle theFirstStateHandle = restoreStateHandles.iterator().next();
 
 			boolean isRescaling = (restoreStateHandles.size() > 1 ||
