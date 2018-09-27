@@ -196,12 +196,6 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 	protected RocksDB db;
 
 	/**
-	 * We are not using the default column family for Flink state ops, but we still need to remember this handle so that
-	 * we can close it properly when the backend is closed. This is required by RocksDB's native memory management.
-	 */
-	private ColumnFamilyHandle defaultColumnFamily;
-
-	/**
 	 * The write options to use in the states. We disable write ahead logging.
 	 */
 	private final WriteOptions writeOptions;
@@ -379,7 +373,7 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 			// DB is closed. See:
 			// https://github.com/facebook/rocksdb/wiki/RocksJava-Basics#opening-a-database-with-column-families
 			// Start with default CF ...
-			IOUtils.closeQuietly(defaultColumnFamily);
+			IOUtils.closeQuietly(db.getDefaultColumnFamily());
 
 			// ... continue with the ones created by Flink...
 			for (Tuple2<ColumnFamilyHandle, RegisteredStateMetaInfoBase> columnMetaData :
@@ -574,7 +568,6 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 		List<ColumnFamilyHandle> columnFamilyHandles = new ArrayList<>(1);
 		this.db = openDB(instanceRocksDBPath.getAbsolutePath(), Collections.emptyList(), columnFamilyHandles);
 		this.writeBatchWrapper = new RocksDBWriteBatchWrapper(db, writeOptions);
-		this.defaultColumnFamily = columnFamilyHandles.get(0);
 	}
 
 	private RocksDB openDB(
@@ -974,9 +967,6 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 			private final RocksDB db;
 
 			@Nonnull
-			private final ColumnFamilyHandle defaultColumnFamilyHandle;
-
-			@Nonnull
 			private final List<ColumnFamilyHandle> columnFamilyHandles;
 
 			@Nonnull
@@ -991,8 +981,8 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 				@Nonnull List<ColumnFamilyDescriptor> columnFamilyDescriptors,
 				@Nonnull List<StateMetaInfoSnapshot> stateMetaInfoSnapshots) {
 				this.db = db;
+				columnFamilyHandles.remove(0);
 				this.columnFamilyHandles = columnFamilyHandles;
-				this.defaultColumnFamilyHandle = this.columnFamilyHandles.remove(0);
 				this.columnFamilyDescriptors = columnFamilyDescriptors;
 				this.stateMetaInfoSnapshots = stateMetaInfoSnapshots;
 			}
@@ -1000,7 +990,7 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 			@Override
 			public void close() {
 
-				IOUtils.closeQuietly(defaultColumnFamilyHandle);
+				IOUtils.closeQuietly(db.getDefaultColumnFamily());
 
 				for (ColumnFamilyHandle columnFamilyHandle : columnFamilyHandles) {
 					IOUtils.closeQuietly(columnFamilyHandle);
@@ -1088,7 +1078,6 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 						stateBackend.keyGroupPrefixBytes);
 
 					stateBackend.db = restoreDBInfo.db;
-					stateBackend.defaultColumnFamily = restoreDBInfo.defaultColumnFamilyHandle;
 					stateBackend.writeBatchWrapper =
 						new RocksDBWriteBatchWrapper(stateBackend.db, stateBackend.writeOptions);
 
@@ -1114,7 +1103,6 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 					stateBackend.instanceRocksDBPath.getAbsolutePath(),
 					Collections.emptyList(),
 					columnFamilyHandles);
-				stateBackend.defaultColumnFamily = columnFamilyHandles.get(0);
 				stateBackend.writeBatchWrapper =
 					new RocksDBWriteBatchWrapper(stateBackend.db, stateBackend.writeOptions);
 			}
@@ -1169,8 +1157,8 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 				stateBackend.instanceRocksDBPath.getAbsolutePath(),
 				columnFamilyDescriptors, columnFamilyHandles);
 
-			// extract and store the default column family which is located at the first index
-			stateBackend.defaultColumnFamily = columnFamilyHandles.remove(0);
+			// remove the default column family which is located at the first index
+			columnFamilyHandles.remove(0);
 			stateBackend.writeBatchWrapper = new RocksDBWriteBatchWrapper(stateBackend.db, stateBackend.writeOptions);
 
 			for (int i = 0; i < columnFamilyDescriptors.size(); ++i) {
