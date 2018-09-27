@@ -1057,50 +1057,42 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 			IncrementalKeyedStateHandle initialHandle = (IncrementalKeyedStateHandle) RocksDBIncrementalCheckpointUtils.chooseTheBestStateHandleForInitial(
 				restoreStateHandles, targetKeyGroupRange);
 
-			if (initialHandle != null) {
-				restoreStateHandles.remove(initialHandle);
-				RestoredDBInstance restoreDBInfo = null;
-				Path instancePath = new Path(stateBackend.instanceRocksDBPath.getAbsolutePath());
-				try {
-					restoreDBInfo = restoreDBInstanceFromStateHandle(
-						initialHandle,
-						instancePath);
+			Preconditions.checkNotNull(initialHandle);
 
-					RocksDBIncrementalCheckpointUtils.clipDBWithKeyGroupRange(
-						restoreDBInfo.db,
-						restoreDBInfo.columnFamilyHandles,
-						targetKeyGroupRange,
-						initialHandle.getKeyGroupRange(),
-						stateBackend.keyGroupPrefixBytes);
+			restoreStateHandles.remove(initialHandle);
+			RestoredDBInstance restoreDBInfo = null;
+			Path instancePath = new Path(stateBackend.instanceRocksDBPath.getAbsolutePath());
+			try {
+				restoreDBInfo = restoreDBInstanceFromStateHandle(
+					initialHandle,
+					instancePath);
 
-					stateBackend.db = restoreDBInfo.db;
-					stateBackend.writeBatchWrapper =
-						new RocksDBWriteBatchWrapper(stateBackend.db, stateBackend.writeOptions);
+				RocksDBIncrementalCheckpointUtils.clipDBWithKeyGroupRange(
+					restoreDBInfo.db,
+					restoreDBInfo.columnFamilyHandles,
+					targetKeyGroupRange,
+					initialHandle.getKeyGroupRange(),
+					stateBackend.keyGroupPrefixBytes);
 
-					for (int i = 0; i < restoreDBInfo.stateMetaInfoSnapshots.size(); ++i) {
-						getOrRegisterColumnFamilyHandle(
-							restoreDBInfo.columnFamilyDescriptors.get(i),
-							restoreDBInfo.columnFamilyHandles.get(i),
-							restoreDBInfo.stateMetaInfoSnapshots.get(i));
-					}
-				} catch (Exception e) {
-					if (restoreDBInfo != null) {
-						restoreDBInfo.close();
-					}
-					FileSystem restoreFileSystem = instancePath.getFileSystem();
-					if (restoreFileSystem.exists(instancePath)) {
-						restoreFileSystem.delete(instancePath, true);
-					}
-					throw e;
-				}
-			} else {
-				List<ColumnFamilyHandle> columnFamilyHandles = new ArrayList<>(1);
-				stateBackend.db = stateBackend.openDB(
-					stateBackend.instanceRocksDBPath.getAbsolutePath(),
-					Collections.emptyList(),
-					columnFamilyHandles);
+				stateBackend.db = restoreDBInfo.db;
 				stateBackend.writeBatchWrapper =
 					new RocksDBWriteBatchWrapper(stateBackend.db, stateBackend.writeOptions);
+
+				for (int i = 0; i < restoreDBInfo.stateMetaInfoSnapshots.size(); ++i) {
+					getOrRegisterColumnFamilyHandle(
+						restoreDBInfo.columnFamilyDescriptors.get(i),
+						restoreDBInfo.columnFamilyHandles.get(i),
+						restoreDBInfo.stateMetaInfoSnapshots.get(i));
+				}
+			} catch (Exception e) {
+				if (restoreDBInfo != null) {
+					restoreDBInfo.close();
+				}
+				FileSystem restoreFileSystem = instancePath.getFileSystem();
+				if (restoreFileSystem.exists(instancePath)) {
+					restoreFileSystem.delete(instancePath, true);
+				}
+				throw e;
 			}
 		}
 
