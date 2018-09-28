@@ -98,6 +98,7 @@ public abstract class AbstractKeyedStateBackend<K> implements
 		int numberOfKeyGroups,
 		KeyGroupRange keyGroupRange,
 		ExecutionConfig executionConfig,
+		CloseableRegistry cancelStreamRegistry,
 		TtlTimeProvider ttlTimeProvider) {
 
 		Preconditions.checkArgument(numberOfKeyGroups >= 1, "NumberOfKeyGroups must be a positive number");
@@ -108,11 +109,30 @@ public abstract class AbstractKeyedStateBackend<K> implements
 		this.numberOfKeyGroups = numberOfKeyGroups;
 		this.userCodeClassLoader = Preconditions.checkNotNull(userCodeClassLoader);
 		this.keyGroupRange = Preconditions.checkNotNull(keyGroupRange);
-		this.cancelStreamRegistry = new CloseableRegistry();
+		this.cancelStreamRegistry = Preconditions.checkNotNull(cancelStreamRegistry);
 		this.keyValueStatesByName = new HashMap<>();
 		this.executionConfig = executionConfig;
 		this.keyGroupCompressionDecorator = determineStreamCompression(executionConfig);
 		this.ttlTimeProvider = Preconditions.checkNotNull(ttlTimeProvider);
+	}
+
+	public AbstractKeyedStateBackend(
+		TaskKvStateRegistry kvStateRegistry,
+		TypeSerializer<K> keySerializer,
+		ClassLoader userCodeClassLoader,
+		int numberOfKeyGroups,
+		KeyGroupRange keyGroupRange,
+		ExecutionConfig executionConfig,
+		TtlTimeProvider ttlTimeProvider) {
+		this(
+			kvStateRegistry,
+			keySerializer,
+			userCodeClassLoader,
+			numberOfKeyGroups,
+			keyGroupRange,
+			executionConfig,
+			new CloseableRegistry(),
+			ttlTimeProvider);
 	}
 
 	private StreamCompressionDecorator determineStreamCompression(ExecutionConfig executionConfig) {

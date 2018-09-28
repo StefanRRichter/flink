@@ -18,7 +18,7 @@
 
 package org.apache.flink.streaming.api.operators;
 
-import org.apache.flink.core.fs.CloseableRegistry;
+import org.apache.flink.core.fs.local.CloseableRegistryClient;
 import org.apache.flink.runtime.state.Snapshotable;
 import org.apache.flink.runtime.state.StateObject;
 import org.apache.flink.util.Disposable;
@@ -60,7 +60,7 @@ public class BackendRestorerProcedure<
 	private final SupplierWithException<T, Exception> instanceSupplier;
 
 	/** This registry is used so that recovery can participate in the task lifecycle, i.e. can be canceled. */
-	private final CloseableRegistry backendCloseableRegistry;
+	private final CloseableRegistryClient backendCloseableRegistry;
 
 	/** Description of this instance for logging. */
 	private final String logDescription;
@@ -73,7 +73,7 @@ public class BackendRestorerProcedure<
 	 */
 	public BackendRestorerProcedure(
 		@Nonnull SupplierWithException<T, Exception> instanceSupplier,
-		@Nonnull CloseableRegistry backendCloseableRegistry,
+		@Nonnull CloseableRegistryClient backendCloseableRegistry,
 		@Nonnull String logDescription) {
 
 		this.instanceSupplier = Preconditions.checkNotNull(instanceSupplier);

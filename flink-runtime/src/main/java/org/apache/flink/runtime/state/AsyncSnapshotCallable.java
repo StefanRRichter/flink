@@ -20,6 +20,7 @@ package org.apache.flink.runtime.state;
 
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.core.fs.CloseableRegistry;
+import org.apache.flink.core.fs.local.CloseableRegistryClient;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -101,7 +102,7 @@ public abstract class AsyncSnapshotCallable<T> implements Callable<T> {
 	 * Creates a future task from this and registers it with the given {@link CloseableRegistry}. The task is
 	 * unregistered again in {@link FutureTask#done()}.
 	 */
-	public AsyncSnapshotTask toAsyncSnapshotFutureTask(@Nonnull CloseableRegistry taskRegistry) throws IOException {
+	public AsyncSnapshotTask toAsyncSnapshotFutureTask(@Nonnull CloseableRegistryClient taskRegistry) throws IOException {
 		return new AsyncSnapshotTask(taskRegistry);
 	}
 
@@ -111,16 +112,16 @@ public abstract class AsyncSnapshotCallable<T> implements Callable<T> {
 	public class AsyncSnapshotTask extends FutureTask<T> {
 
 		@Nonnull
-		private final CloseableRegistry taskRegistry;
+		private final CloseableRegistryClient closeableRegistryClient;
 
 		@Nonnull
 		private final Closeable cancelOnClose;
 
-		private AsyncSnapshotTask(@Nonnull CloseableRegistry taskRegistry) throws IOException {
+		private AsyncSnapshotTask(@Nonnull CloseableRegistryClient closeableRegistryClient) throws IOException {
 			super(AsyncSnapshotCallable.this);
 			this.cancelOnClose = () -> cancel(true);
-			this.taskRegistry = taskRegistry;
-			taskRegistry.registerCloseable(cancelOnClose);
+			this.closeableRegistryClient = closeableRegistryClient;
+			closeableRegistryClient.registerCloseable(cancelOnClose);
 		}
 
 		@Override
@@ -135,7 +136,7 @@ public abstract class AsyncSnapshotCallable<T> implements Callable<T> {
 		@Override
 		protected void done() {
 			super.done();
-			taskRegistry.unregisterCloseable(cancelOnClose);
+			closeableRegistryClient.unregisterCloseable(cancelOnClose);
 		}
 	}
 

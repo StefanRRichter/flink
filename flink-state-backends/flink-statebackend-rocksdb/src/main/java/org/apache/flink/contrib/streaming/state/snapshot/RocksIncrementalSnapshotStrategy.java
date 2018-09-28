@@ -20,11 +20,11 @@ package org.apache.flink.contrib.streaming.state.snapshot;
 
 import org.apache.flink.api.common.typeutils.TypeSerializer;
 import org.apache.flink.contrib.streaming.state.StateColumnFamilyHandle;
-import org.apache.flink.core.fs.CloseableRegistry;
 import org.apache.flink.core.fs.FSDataInputStream;
 import org.apache.flink.core.fs.FileStatus;
 import org.apache.flink.core.fs.FileSystem;
 import org.apache.flink.core.fs.Path;
+import org.apache.flink.core.fs.local.CloseableRegistryClient;
 import org.apache.flink.core.memory.DataOutputView;
 import org.apache.flink.core.memory.DataOutputViewStreamWrapper;
 import org.apache.flink.runtime.checkpoint.CheckpointOptions;
@@ -112,7 +112,7 @@ public class RocksIncrementalSnapshotStrategy<K> extends RocksDBSnapshotStrategy
 		@Nonnull KeyGroupRange keyGroupRange,
 		@Nonnegative int keyGroupPrefixBytes,
 		@Nonnull LocalRecoveryConfig localRecoveryConfig,
-		@Nonnull CloseableRegistry cancelStreamRegistry,
+		@Nonnull CloseableRegistryClient cancelStreamRegistry,
 		@Nonnull File instanceBasePath,
 		@Nonnull UUID backendUID,
 		@Nonnull SortedMap<Long, Set<StateHandleID>> materializedSstFiles,
@@ -226,10 +226,10 @@ public class RocksIncrementalSnapshotStrategy<K> extends RocksDBSnapshotStrategy
 			"assuming the following (shared) files as base: {}.", checkpointId, lastCompletedCheckpoint, baseSstFiles);
 
 		// snapshot meta data to save
-		for (Map.Entry<String, StateColumnFamilyHandle> stateMetaInfoEntry
-			: kvStateInformation.entrySet()) {
-			stateMetaInfoSnapshots.add(stateMetaInfoEntry.getValue().getStateMetaInfo().snapshot());
+		for (StateColumnFamilyHandle stateColumnFamilyHandle : kvStateInformation.values()) {
+			stateMetaInfoSnapshots.add(stateColumnFamilyHandle.getStateMetaInfo().snapshot());
 		}
+
 		return baseSstFiles;
 	}
 

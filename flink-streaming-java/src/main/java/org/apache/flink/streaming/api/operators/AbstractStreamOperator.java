@@ -28,7 +28,7 @@ import org.apache.flink.api.common.typeutils.TypeSerializer;
 import org.apache.flink.api.java.functions.KeySelector;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.MetricOptions;
-import org.apache.flink.core.fs.CloseableRegistry;
+import org.apache.flink.core.fs.local.CloseableRegistryClient;
 import org.apache.flink.core.memory.DataOutputViewStreamWrapper;
 import org.apache.flink.metrics.Counter;
 import org.apache.flink.metrics.MetricGroup;
@@ -241,7 +241,7 @@ public abstract class AbstractStreamOperator<OUT>
 
 		final StreamTask<?, ?> containingTask =
 			Preconditions.checkNotNull(getContainingTask());
-		final CloseableRegistry streamTaskCloseableRegistry =
+		final CloseableRegistryClient streamTaskCloseableRegistry =
 			Preconditions.checkNotNull(containingTask.getCancelables());
 		final StreamTaskStateInitializer streamTaskStateManager =
 			Preconditions.checkNotNull(containingTask.createStreamTaskStateInitializer());
@@ -281,7 +281,7 @@ public abstract class AbstractStreamOperator<OUT>
 		}
 	}
 
-	private static void closeFromRegistry(Closeable closeable, CloseableRegistry registry) {
+	private static void closeFromRegistry(Closeable closeable, CloseableRegistryClient registry) {
 		if (registry.unregisterCloseable(closeable)) {
 			IOUtils.closeQuietly(closeable);
 		}
@@ -326,7 +326,7 @@ public abstract class AbstractStreamOperator<OUT>
 		Exception exception = null;
 
 		StreamTask<?, ?> containingTask = getContainingTask();
-		CloseableRegistry taskCloseableRegistry = containingTask != null ?
+		CloseableRegistryClient taskCloseableRegistry = containingTask != null ?
 			containingTask.getCancelables() :
 			null;
 

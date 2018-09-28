@@ -19,7 +19,7 @@
 package org.apache.flink.runtime.state;
 
 import org.apache.flink.annotation.VisibleForTesting;
-import org.apache.flink.core.fs.CloseableRegistry;
+import org.apache.flink.core.fs.local.CloseableRegistryClient;
 import org.apache.flink.util.ExceptionUtils;
 import org.apache.flink.util.Preconditions;
 
@@ -50,7 +50,7 @@ public class StateSnapshotContextSynchronousImpl implements StateSnapshotContext
 	 * Registry for opened streams to participate in the lifecycle of the stream task. Hence, this registry should be 
 	 * obtained from and managed by the stream task.
 	 */
-	private final CloseableRegistry closableRegistry;
+	private final CloseableRegistryClient closeableRegistryClient;
 
 	/** Output stream for the raw keyed state. */
 	private KeyedStateCheckpointOutputStream keyedStateCheckpointOutputStream;
@@ -64,7 +64,7 @@ public class StateSnapshotContextSynchronousImpl implements StateSnapshotContext
 		this.checkpointTimestamp = checkpointTimestamp;
 		this.streamFactory = null;
 		this.keyGroupRange = KeyGroupRange.EMPTY_KEY_GROUP_RANGE;
-		this.closableRegistry = null;
+		this.closeableRegistryClient = null;
 	}
 
 
@@ -73,13 +73,13 @@ public class StateSnapshotContextSynchronousImpl implements StateSnapshotContext
 			long checkpointTimestamp,
 			CheckpointStreamFactory streamFactory,
 			KeyGroupRange keyGroupRange,
-			CloseableRegistry closableRegistry) {
+			CloseableRegistryClient closeableRegistryClient) {
 
 		this.checkpointId = checkpointId;
 		this.checkpointTimestamp = checkpointTimestamp;
 		this.streamFactory = Preconditions.checkNotNull(streamFactory);
 		this.keyGroupRange = Preconditions.checkNotNull(keyGroupRange);
-		this.closableRegistry = Preconditions.checkNotNull(closableRegistry);
+		this.closeableRegistryClient = Preconditions.checkNotNull(closeableRegistryClient);
 	}
 
 	@Override
@@ -96,7 +96,7 @@ public class StateSnapshotContextSynchronousImpl implements StateSnapshotContext
 		CheckpointStreamFactory.CheckpointStateOutputStream cout =
 				streamFactory.createCheckpointStateOutputStream(CheckpointedStateScope.EXCLUSIVE);
 
-		closableRegistry.registerCloseable(cout);
+		closeableRegistryClient.registerCloseable(cout);
 		return cout;
 	}
 
@@ -139,7 +139,7 @@ public class StateSnapshotContextSynchronousImpl implements StateSnapshotContext
 	private <T extends StreamStateHandle> T closeAndUnregisterStreamToObtainStateHandle(
 		NonClosingCheckpointOutputStream<T> stream) throws IOException {
 
-		if (stream != null && closableRegistry.unregisterCloseable(stream.getDelegate())) {
+		if (stream != null && closeableRegistryClient.unregisterCloseable(stream.getDelegate())) {
 			return stream.closeAndGetHandle();
 		} else {
 			return null;
@@ -153,7 +153,7 @@ public class StateSnapshotContextSynchronousImpl implements StateSnapshotContext
 
 		CheckpointStreamFactory.CheckpointStateOutputStream delegate = stream.getDelegate();
 
-		if (closableRegistry.unregisterCloseable(delegate)) {
+		if (closeableRegistryClient.unregisterCloseable(delegate)) {
 			delegate.close();
 		}
 	}

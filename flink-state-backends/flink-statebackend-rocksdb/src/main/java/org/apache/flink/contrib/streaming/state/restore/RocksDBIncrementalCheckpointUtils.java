@@ -15,8 +15,12 @@
  * limitations under the License.
  */
 
-package org.apache.flink.contrib.streaming.state;
+package org.apache.flink.contrib.streaming.state.restore;
 
+import org.apache.flink.contrib.streaming.state.RocksDBKeySerializationUtils;
+import org.apache.flink.contrib.streaming.state.RocksDBKeyedStateBackend;
+import org.apache.flink.contrib.streaming.state.RocksDBWriteBatchWrapper;
+import org.apache.flink.contrib.streaming.state.RocksIteratorWrapper;
 import org.apache.flink.runtime.state.KeyGroupRange;
 import org.apache.flink.runtime.state.KeyedStateHandle;
 
@@ -72,7 +76,7 @@ public class RocksDBIncrementalCheckpointUtils {
 	 * @param currentKeyGroupRange the key group range of the db instance.
 	 * @param keyGroupPrefixBytes Number of bytes required to prefix the key groups.
 	 */
-	static void clipDBWithKeyGroupRange(
+	public static void clipDBWithKeyGroupRange(
 		@Nonnull RocksDB db,
 		@Nonnull List<ColumnFamilyHandle> columnFamilyHandles,
 		@Nonnull KeyGroupRange targetKeyGroupRange,
@@ -115,7 +119,7 @@ public class RocksDBIncrementalCheckpointUtils {
 
 		for (ColumnFamilyHandle columnFamilyHandle : columnFamilyHandles) {
 			try (RocksIteratorWrapper iteratorWrapper = RocksDBKeyedStateBackend.getRocksIterator(db, columnFamilyHandle);
-				RocksDBWriteBatchWrapper writeBatchWrapper = new RocksDBWriteBatchWrapper(db)) {
+				 RocksDBWriteBatchWrapper writeBatchWrapper = new RocksDBWriteBatchWrapper(db)) {
 
 				iteratorWrapper.seek(beginKeyBytes);
 
@@ -135,7 +139,7 @@ public class RocksDBIncrementalCheckpointUtils {
 	/**
 	 * check whether the bytes is before prefixBytes in the character order.
 	 */
-	static boolean beforeThePrefixBytes(@Nonnull byte[] bytes, @Nonnull byte[] prefixBytes) {
+	public static boolean beforeThePrefixBytes(@Nonnull byte[] bytes, @Nonnull byte[] prefixBytes) {
 		final int prefixLength = prefixBytes.length;
 		for (int i = 0; i < prefixLength; ++i) {
 			int r = (char) prefixBytes[i] - (char) bytes[i];
@@ -155,7 +159,7 @@ public class RocksDBIncrementalCheckpointUtils {
 	 * @return The best candidate or null if no candidate was a good fit.
 	 */
 	@Nullable
-	static KeyedStateHandle chooseTheBestStateHandleForInitial(
+	public static KeyedStateHandle chooseTheBestStateHandleForInitial(
 		@Nonnull Collection<KeyedStateHandle> restoreStateHandles,
 		@Nonnull KeyGroupRange targetKeyGroupRange) {
 

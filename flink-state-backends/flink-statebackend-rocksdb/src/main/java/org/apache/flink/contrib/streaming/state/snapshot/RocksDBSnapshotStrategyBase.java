@@ -20,7 +20,7 @@ package org.apache.flink.contrib.streaming.state.snapshot;
 
 import org.apache.flink.api.common.typeutils.TypeSerializer;
 import org.apache.flink.contrib.streaming.state.StateColumnFamilyHandle;
-import org.apache.flink.core.fs.CloseableRegistry;
+import org.apache.flink.core.fs.local.CloseableRegistryClient;
 import org.apache.flink.runtime.checkpoint.CheckpointOptions;
 import org.apache.flink.runtime.state.AbstractSnapshotStrategy;
 import org.apache.flink.runtime.state.CheckpointListener;
@@ -82,9 +82,9 @@ public abstract class RocksDBSnapshotStrategyBase<K>
 	@Nonnull
 	protected final LocalRecoveryConfig localRecoveryConfig;
 
-	/** A {@link CloseableRegistry} that will be closed when the task is cancelled. */
+	/** A {@link CloseableRegistryClient} that will be closed when the task is cancelled. */
 	@Nonnull
-	protected final CloseableRegistry cancelStreamRegistry;
+	protected final CloseableRegistryClient cancelStreamRegistry;
 
 	public RocksDBSnapshotStrategyBase(
 		@Nonnull String description,
@@ -95,7 +95,7 @@ public abstract class RocksDBSnapshotStrategyBase<K>
 		@Nonnull KeyGroupRange keyGroupRange,
 		@Nonnegative int keyGroupPrefixBytes,
 		@Nonnull LocalRecoveryConfig localRecoveryConfig,
-		@Nonnull CloseableRegistry cancelStreamRegistry) {
+		@Nonnull CloseableRegistryClient cancelStreamRegistry) {
 
 		super(description);
 		this.db = db;

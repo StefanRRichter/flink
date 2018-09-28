@@ -22,11 +22,11 @@ import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.typeutils.TypeSerializer;
 import org.apache.flink.api.common.typeutils.base.array.BytePrimitiveArraySerializer;
 import org.apache.flink.api.java.tuple.Tuple2;
-import org.apache.flink.contrib.streaming.state.StateColumnFamilyHandle;
 import org.apache.flink.contrib.streaming.state.RocksIteratorWrapper;
+import org.apache.flink.contrib.streaming.state.StateColumnFamilyHandle;
 import org.apache.flink.contrib.streaming.state.iterator.RocksStatesPerKeyGroupMergeIterator;
 import org.apache.flink.contrib.streaming.state.iterator.RocksTransformingIteratorWrapper;
-import org.apache.flink.core.fs.CloseableRegistry;
+import org.apache.flink.core.fs.local.CloseableRegistryClient;
 import org.apache.flink.core.memory.DataOutputView;
 import org.apache.flink.core.memory.DataOutputViewStreamWrapper;
 import org.apache.flink.runtime.checkpoint.CheckpointOptions;
@@ -95,7 +95,7 @@ public class RocksFullSnapshotStrategy<K> extends RocksDBSnapshotStrategyBase<K>
 		@Nonnull KeyGroupRange keyGroupRange,
 		@Nonnegative int keyGroupPrefixBytes,
 		@Nonnull LocalRecoveryConfig localRecoveryConfig,
-		@Nonnull CloseableRegistry cancelStreamRegistry,
+		@Nonnull CloseableRegistryClient cancelStreamRegistry,
 		@Nonnull StreamCompressionDecorator keyGroupCompressionDecorator) {
 		super(
 			DESCRIPTION,
@@ -126,10 +126,10 @@ public class RocksFullSnapshotStrategy<K> extends RocksDBSnapshotStrategyBase<K>
 		final List<StateColumnFamilyHandle> metaDataCopy =
 			new ArrayList<>(kvStateInformation.size());
 
-		for (StateColumnFamilyHandle stateColumn : kvStateInformation.values()) {
+		for (StateColumnFamilyHandle stateColumnFamilyHandle : kvStateInformation.values()) {
 			// snapshot meta info
-			stateMetaInfoSnapshots.add(stateColumn.getStateMetaInfo().snapshot());
-			metaDataCopy.add(stateColumn);
+			stateMetaInfoSnapshots.add(stateColumnFamilyHandle.getStateMetaInfo().snapshot());
+			metaDataCopy.add(stateColumnFamilyHandle);
 		}
 
 		final ResourceGuard.Lease lease = rocksDBResourceGuard.acquireResource();

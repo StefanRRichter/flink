@@ -61,13 +61,6 @@ public abstract class AbstractCloseableRegistry<C extends Closeable, T> implemen
 		this.closed = false;
 	}
 
-	/**
-	 * Registers a {@link Closeable} with the registry. In case the registry is already closed, this method throws an
-	 * {@link IllegalStateException} and closes the passed {@link Closeable}.
-	 *
-	 * @param closeable Closeable tor register
-	 * @throws IOException exception when the registry was closed before
-	 */
 	public final void registerCloseable(C closeable) throws IOException {
 
 		if (null == closeable) {
@@ -85,12 +78,6 @@ public abstract class AbstractCloseableRegistry<C extends Closeable, T> implemen
 		throw new IOException("Cannot register Closeable, registry is already closed. Closing argument.");
 	}
 
-	/**
-	 * Removes a {@link Closeable} from the registry.
-	 *
-	 * @param closeable instance to remove from the registry.
-	 * @return true if the closeable was previously registered and became unregistered through this call.
-	 */
 	public final boolean unregisterCloseable(C closeable) {
 
 		if (null == closeable) {

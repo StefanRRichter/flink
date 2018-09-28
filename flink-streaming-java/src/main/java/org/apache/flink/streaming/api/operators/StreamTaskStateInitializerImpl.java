@@ -23,6 +23,7 @@ import org.apache.flink.api.common.typeutils.TypeSerializer;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.core.fs.CloseableRegistry;
 import org.apache.flink.core.fs.FSDataInputStream;
+import org.apache.flink.core.fs.local.CloseableRegistryClient;
 import org.apache.flink.runtime.checkpoint.PrioritizedOperatorSubtaskState;
 import org.apache.flink.runtime.checkpoint.StateObjectCollection;
 import org.apache.flink.runtime.execution.Environment;
@@ -106,7 +107,7 @@ public class StreamTaskStateInitializerImpl implements StreamTaskStateInitialize
 		@Nonnull String operatorClassName,
 		@Nonnull KeyContext keyContext,
 		@Nullable TypeSerializer<?> keySerializer,
-		@Nonnull CloseableRegistry streamTaskCloseableRegistry) throws Exception {
+		@Nonnull CloseableRegistryClient streamTaskCloseableRegistry) throws Exception {
 
 		TaskInfo taskInfo = environment.getTaskInfo();
 		OperatorSubtaskDescriptionText operatorSubtaskDescription =
@@ -229,7 +230,7 @@ public class StreamTaskStateInitializerImpl implements StreamTaskStateInitialize
 	protected OperatorStateBackend operatorStateBackend(
 		String operatorIdentifierText,
 		PrioritizedOperatorSubtaskState prioritizedOperatorSubtaskStates,
-		CloseableRegistry backendCloseableRegistry) throws Exception {
+		CloseableRegistryClient backendCloseableRegistry) throws Exception {
 
 		String logDescription = "operator state backend for " + operatorIdentifierText;
 
@@ -247,7 +248,7 @@ public class StreamTaskStateInitializerImpl implements StreamTaskStateInitialize
 		TypeSerializer<K> keySerializer,
 		String operatorIdentifierText,
 		PrioritizedOperatorSubtaskState prioritizedOperatorSubtaskStates,
-		CloseableRegistry backendCloseableRegistry) throws Exception {
+		CloseableRegistryClient backendCloseableRegistry) throws Exception {
 
 		if (keySerializer == null) {
 			return null;
@@ -273,8 +274,8 @@ public class StreamTaskStateInitializerImpl implements StreamTaskStateInitialize
 					keyGroupRange,
 					environment.getTaskKvStateRegistry(),
 					TtlTimeProvider.DEFAULT),
-				backendCloseableRegistry,
-				logDescription);
+					backendCloseableRegistry,
+					logDescription);
 
 		return backendRestorer.createAndRestore(
 			prioritizedOperatorSubtaskStates.getPrioritizedManagedKeyedState());
@@ -355,7 +356,7 @@ public class StreamTaskStateInitializerImpl implements StreamTaskStateInitialize
 		private Iterator<Tuple2<Integer, Long>> currentOffsetsIterator;
 
 		KeyGroupStreamIterator(
-			Iterator<KeyGroupsStateHandle> stateHandleIterator, CloseableRegistry closableRegistry) {
+			Iterator<KeyGroupsStateHandle> stateHandleIterator, CloseableRegistryClient closableRegistry) {
 
 			super(stateHandleIterator, closableRegistry);
 		}
@@ -415,7 +416,7 @@ public class StreamTaskStateInitializerImpl implements StreamTaskStateInitialize
 		OperatorStateStreamIterator(
 			String stateName,
 			Iterator<OperatorStateHandle> stateHandleIterator,
-			CloseableRegistry closableRegistry) {
+			CloseableRegistryClient closableRegistry) {
 
 			super(stateHandleIterator, closableRegistry);
 			this.stateName = Preconditions.checkNotNull(stateName);
@@ -484,14 +485,14 @@ public class StreamTaskStateInitializerImpl implements StreamTaskStateInitialize
 		implements Iterator<T> {
 
 		protected final Iterator<H> stateHandleIterator;
-		protected final CloseableRegistry closableRegistry;
+		protected final CloseableRegistryClient closableRegistry;
 
 		protected H currentStateHandle;
 		protected FSDataInputStream currentStream;
 
 		AbstractStateStreamIterator(
 			Iterator<H> stateHandleIterator,
-			CloseableRegistry closableRegistry) {
+			CloseableRegistryClient closableRegistry) {
 
 			this.stateHandleIterator = Preconditions.checkNotNull(stateHandleIterator);
 			this.closableRegistry = Preconditions.checkNotNull(closableRegistry);

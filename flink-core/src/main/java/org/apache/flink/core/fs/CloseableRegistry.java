@@ -19,6 +19,7 @@
 package org.apache.flink.core.fs;
 
 import org.apache.flink.annotation.Internal;
+import org.apache.flink.core.fs.local.CloseableRegistryClient;
 import org.apache.flink.util.AbstractCloseableRegistry;
 
 import javax.annotation.Nonnull;
@@ -35,7 +36,7 @@ import java.util.Map;
  * <p>All methods in this class are thread-safe.
  */
 @Internal
-public class CloseableRegistry extends AbstractCloseableRegistry<Closeable, Object> {
+public class CloseableRegistry extends AbstractCloseableRegistry<Closeable, Object> implements CloseableRegistryClient {
 
 	private static final Object DUMMY = new Object();
 
