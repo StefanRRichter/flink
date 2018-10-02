@@ -27,6 +27,7 @@ import org.apache.flink.core.memory.DataInputView;
 import org.apache.flink.core.memory.DataOutputView;
 import org.apache.flink.util.InstantiationUtil;
 import org.apache.flink.util.Preconditions;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -200,7 +201,15 @@ public class OperatorBackendStateMetaInfoSnapshotReaderWriters {
 			RegisteredOperatorBackendStateMetaInfo.Snapshot<S> stateMetaInfo =
 				new RegisteredOperatorBackendStateMetaInfo.Snapshot<>();
 
-			stateMetaInfo.setName(in.readUTF());
+			String stateName = in.readUTF();
+
+			// custom patch, we remap the name that was introduced in the previous variant of the patch to the
+			// standard name
+			if ("kafka-consumer-offsets".equals(stateName)) {
+				stateName = "topic-partition-offset-states";
+			}
+
+			stateMetaInfo.setName(stateName);
 			stateMetaInfo.setAssignmentMode(OperatorStateHandle.Mode.values()[in.readByte()]);
 
 			Tuple2<TypeSerializer<?>, TypeSerializerConfigSnapshot> stateSerializerAndConfig =

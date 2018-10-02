@@ -321,6 +321,7 @@ public class FlinkKafkaConsumerBaseMigrationTest {
 	/**
 	 * Test restoring from savepoints before version Flink 1.3 should fail if discovery is enabled.
 	 */
+	@Ignore
 	@Test
 	public void testRestoreFailsWithNonEmptyPreFlink13StatesIfDiscoveryEnabled() throws Exception {
 		assumeTrue(testMigrateVersion == MigrationVersion.v1_3 || testMigrateVersion == MigrationVersion.v1_2);

@@ -19,6 +19,7 @@
 package org.apache.flink.streaming.util;
 
 import org.apache.flink.runtime.checkpoint.savepoint.SavepointV1Serializer;
+import org.apache.flink.runtime.checkpoint.savepoint.SavepointV2Serializer;
 import org.apache.flink.runtime.state.KeyedStateHandle;
 import org.apache.flink.runtime.state.OperatorStateHandle;
 import org.apache.flink.streaming.runtime.tasks.OperatorStateHandles;
@@ -127,7 +128,7 @@ public class OperatorSnapshotUtil {
 			if (numManagedOperatorStates >= 0) {
 				managedOperatorState = new ArrayList<>();
 				for (int i = 0; i < numManagedOperatorStates; i++) {
-					OperatorStateHandle operatorState = SavepointV1Serializer.deserializeOperatorStateHandle(
+					OperatorStateHandle operatorState = SavepointV2Serializer.deserializeOperatorStateHandle(
 						dis);
 					managedOperatorState.add(operatorState);
 				}
