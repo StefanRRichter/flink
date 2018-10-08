@@ -39,6 +39,7 @@ import org.apache.flink.runtime.jobmanager.slots.TaskManagerGateway;
 import org.apache.flink.runtime.jobmaster.JobMasterId;
 import org.apache.flink.runtime.jobmaster.LogicalSlot;
 import org.apache.flink.runtime.jobmaster.SlotContext;
+import org.apache.flink.runtime.jobmaster.SlotInfo;
 import org.apache.flink.runtime.jobmaster.SlotOwner;
 import org.apache.flink.runtime.jobmaster.SlotRequestId;
 import org.apache.flink.runtime.messages.Acknowledge;
@@ -642,10 +643,12 @@ public class SlotPool implements SlotPoolGateway, AllocatedSlotActions, AutoClos
 	 * @param allocationTimeout timeout before the slot allocation times out
 	 * @return An {@link AllocatedSlot} future which is completed once the slot is offered to the {@link SlotPool}
 	 */
-	private CompletableFuture<AllocatedSlot> requestNewAllocatedSlot(
-			SlotRequestId slotRequestId,
-			ResourceProfile resourceProfile,
-			Time allocationTimeout) {
+	@Override
+	@Nonnull
+	public CompletableFuture<AllocatedSlot> requestNewAllocatedSlot(
+		@Nonnull SlotRequestId slotRequestId,
+		@Nonnull ResourceProfile resourceProfile,
+		Time allocationTimeout) {
 
 		final PendingRequest pendingRequest = new PendingRequest(
 			slotRequestId,
@@ -746,7 +749,8 @@ public class SlotPool implements SlotPoolGateway, AllocatedSlotActions, AutoClos
 
 	private CompletableFuture<Acknowledge> releaseSharedSlot(
 		SlotRequestId slotRequestId,
-		@Nonnull SlotSharingGroupId slotSharingGroupId, Throwable cause) {
+		@Nonnull SlotSharingGroupId slotSharingGroupId,
+		Throwable cause) {
 
 		final SlotSharingManager multiTaskSlotManager = slotSharingManagers.get(slotSharingGroupId);
 
@@ -823,6 +827,32 @@ public class SlotPool implements SlotPoolGateway, AllocatedSlotActions, AutoClos
 		}
 
 		return slotFromPool;
+	}
+
+	@Nullable
+	private AllocatedSlot allocateSlotWithID(@Nonnull SlotRequestId slotRequestId, @Nonnull AllocationID allocationID) {
+		AllocatedSlot allocatedSlot = availableSlots.tryRemove(allocationID);
+		if (allocatedSlot != null) {
+			allocatedSlots.add(slotRequestId, allocatedSlot);
+		}
+		return allocatedSlot;
+	}
+
+	@Override
+	@Nonnull
+	public CompletableFuture<AllocatedSlot> allocateAvailableSlot(
+		@Nonnull SlotRequestId slotRequestId,
+		@Nonnull AllocationID allocationID) {
+		final AllocatedSlot allocatedSlot = allocateSlotWithID(slotRequestId, allocationID);
+		return allocatedSlot != null ?
+			CompletableFuture.completedFuture(allocatedSlot) :
+			FutureUtils.completedExceptionally(new IllegalStateException("No slot available under " + allocationID));
+	}
+
+	@Override
+	@Nonnull
+	public CompletableFuture<List<SlotInfo>> getAvailableSlotsInformation() {
+		return CompletableFuture.completedFuture(availableSlots.listSlotInfo());
 	}
 
 	/**
@@ -1596,6 +1626,15 @@ public class SlotPool implements SlotPoolGateway, AllocatedSlotActions, AutoClos
 			else {
 				return null;
 			}
+		}
+
+		@Nonnull
+		List<SlotInfo> listSlotInfo() {
+			return availableSlots
+				.values()
+				.stream()
+				.map(SlotAndTimestamp::slot)
+				.collect(Collectors.toList());
 		}
 
 		private void remove(AllocationID slotId) throws IllegalStateException {

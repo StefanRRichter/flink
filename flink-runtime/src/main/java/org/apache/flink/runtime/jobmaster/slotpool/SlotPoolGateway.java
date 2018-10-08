@@ -27,6 +27,7 @@ import org.apache.flink.runtime.instance.SlotSharingGroupId;
 import org.apache.flink.runtime.jobmanager.scheduler.ScheduledUnit;
 import org.apache.flink.runtime.jobmanager.slots.TaskManagerGateway;
 import org.apache.flink.runtime.jobmaster.LogicalSlot;
+import org.apache.flink.runtime.jobmaster.SlotInfo;
 import org.apache.flink.runtime.jobmaster.SlotRequestId;
 import org.apache.flink.runtime.messages.Acknowledge;
 import org.apache.flink.runtime.resourcemanager.ResourceManagerGateway;
@@ -35,7 +36,10 @@ import org.apache.flink.runtime.taskexecutor.slot.SlotOffer;
 import org.apache.flink.runtime.taskmanager.TaskManagerLocation;
 import org.apache.flink.types.SerializableOptional;
 
+import javax.annotation.Nonnull;
+
 import java.util.Collection;
+import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
 /**
@@ -157,4 +161,18 @@ public interface SlotPoolGateway extends AllocatedSlotActions {
 			SlotProfile slotProfile,
 			boolean allowQueuedScheduling,
 			@RpcTimeout Time timeout);
+
+	@Nonnull
+	CompletableFuture<List<SlotInfo>> getAvailableSlotsInformation();
+
+	@Nonnull
+	CompletableFuture<AllocatedSlot> allocateAvailableSlot(
+		@Nonnull SlotRequestId slotRequestId,
+		@Nonnull AllocationID allocationID);
+
+	@Nonnull
+	CompletableFuture<AllocatedSlot> requestNewAllocatedSlot(
+		@Nonnull SlotRequestId slotRequestId,
+		@Nonnull ResourceProfile resourceProfile,
+		@RpcTimeout Time allocationTimeout);
 }
