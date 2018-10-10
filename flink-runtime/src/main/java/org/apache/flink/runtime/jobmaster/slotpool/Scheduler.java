@@ -73,15 +73,6 @@ public class Scheduler implements SlotProvider, SlotOwner {
 	@Nonnull
 	private final Map<SlotSharingGroupId, SlotSharingManager> slotSharingManagers;
 
-//	@Nonnull
-//	private final SchedulingStrategy schedulingStrategy;
-//
-//	@Nonnull
-////	private final SlotProviderAndOwner providerAndOwner;
-//	private final AllocatedSlotActions allocatedSlotActions;
-//
-//	private final boolean queuedSchedulingAllowed;
-
 	@Nonnull
 	private final SlotPoolGateway slotPoolGateway;
 
@@ -211,9 +202,9 @@ public class Scheduler implements SlotProvider, SlotOwner {
 		// if we have no location preferences, we can only filter by the additional requirements.
 		if (locationPreferences.isEmpty()) {
 			if (availableSlots.hasNext()) {
-				return Tuple2.of(null, Locality.UNKNOWN);
-			} else {
 				return Tuple2.of(availableSlots.next(), Locality.UNCONSTRAINED);
+			} else {
+				return Tuple2.of(null, Locality.UNKNOWN);
 			}
 		}
 
@@ -234,7 +225,7 @@ public class Scheduler implements SlotProvider, SlotOwner {
 
 		while (availableSlots.hasNext()) {
 			SlotInfo candidate = availableSlots.next();
-			if (resourceProfile.isMatching(candidate.getResourceProfile())) {
+			if (candidate.getResourceProfile().isMatching(resourceProfile)) {
 
 				// this gets candidate is local-weigh
 				Integer localWeigh = preferredResourceIDs.getOrDefault(candidate.getTaskManagerLocation().getResourceID(), 0);
@@ -273,39 +264,39 @@ public class Scheduler implements SlotProvider, SlotOwner {
 				slotPoolGateway, //TODO was "this", aka slot pool
 				this)); //TODO!!!!!!
 
-		final SlotSharingManager.MultiTaskSlotLocality multiTaskSlotLocality;
+		final CompletableFuture<SlotSharingManager.MultiTaskSlotLocality> multiTaskSlotLocalityFuture;
 
-		try {
-			if (scheduledUnit.getCoLocationConstraint() != null) {
-				multiTaskSlotLocality = allocateCoLocatedMultiTaskSlot(
-					scheduledUnit.getCoLocationConstraint(),
-					multiTaskSlotManager,
-					slotProfile,
-					availableSlotsInfo,
-					allowQueuedScheduling,
-					allocationTimeout);
-			} else {
-				multiTaskSlotLocality = allocateMultiTaskSlot(
-					scheduledUnit.getJobVertexId(),
-					multiTaskSlotManager,
-					slotProfile,
-					availableSlotsInfo,
-					allowQueuedScheduling,
-					allocationTimeout);
-			}
-		} catch (NoResourceAvailableException noResourceException) {
-			return FutureUtils.completedExceptionally(noResourceException);
+		if (scheduledUnit.getCoLocationConstraint() != null) {
+			multiTaskSlotLocalityFuture = allocateCoLocatedMultiTaskSlot(
+				scheduledUnit.getCoLocationConstraint(),
+				multiTaskSlotManager,
+				slotProfile,
+				availableSlotsInfo,
+				allowQueuedScheduling,
+				allocationTimeout);
+		} else {
+			multiTaskSlotLocalityFuture = allocateMultiTaskSlot(
+				scheduledUnit.getJobVertexId(),
+				multiTaskSlotManager,
+				slotProfile,
+				availableSlotsInfo,
+				allowQueuedScheduling,
+				allocationTimeout);
 		}
 
-		// sanity check
-		Preconditions.checkState(!multiTaskSlotLocality.getMultiTaskSlot().contains(scheduledUnit.getJobVertexId()));
+		return multiTaskSlotLocalityFuture.thenCompose((SlotSharingManager.MultiTaskSlotLocality multiTaskSlotLocality) -> {
 
-		final SlotSharingManager.SingleTaskSlot leaf = multiTaskSlotLocality.getMultiTaskSlot().allocateSingleTaskSlot(
-			slotRequestId,
-			scheduledUnit.getJobVertexId(),
-			multiTaskSlotLocality.getLocality());
+				// sanity check
+				Preconditions.checkState(!multiTaskSlotLocality.getMultiTaskSlot().contains(scheduledUnit.getJobVertexId()));
 
-		return leaf.getLogicalSlotFuture();
+				final SlotSharingManager.SingleTaskSlot leaf = multiTaskSlotLocality.getMultiTaskSlot().allocateSingleTaskSlot(
+					slotRequestId,
+					scheduledUnit.getJobVertexId(),
+					multiTaskSlotLocality.getLocality());
+
+				return leaf.getLogicalSlotFuture();
+			}
+		);
 	}
 
 	/**
@@ -323,13 +314,13 @@ public class Scheduler implements SlotProvider, SlotOwner {
 	 * 		and its locality wrt the given location preferences
 	 * @throws NoResourceAvailableException if no task slot could be allocated
 	 */
-	private SlotSharingManager.MultiTaskSlotLocality allocateCoLocatedMultiTaskSlot(
+	private CompletableFuture<SlotSharingManager.MultiTaskSlotLocality> allocateCoLocatedMultiTaskSlot(
 		CoLocationConstraint coLocationConstraint,
 		SlotSharingManager multiTaskSlotManager,
 		SlotProfile slotProfile,
 		Iterator<SlotInfo> availableSlotsInfo,
 		boolean allowQueuedScheduling,
-		Time allocationTimeout) throws NoResourceAvailableException {
+		Time allocationTimeout) /* throws NoResourceAvailableException */ {
 		final SlotRequestId coLocationSlotRequestId = coLocationConstraint.getSlotRequestId();
 
 		if (coLocationSlotRequestId != null) {
@@ -338,7 +329,8 @@ public class Scheduler implements SlotProvider, SlotOwner {
 
 			if (taskSlot != null) {
 				Preconditions.checkState(taskSlot instanceof SlotSharingManager.MultiTaskSlot);
-				return SlotSharingManager.MultiTaskSlotLocality.of(((SlotSharingManager.MultiTaskSlot) taskSlot), Locality.LOCAL);
+				return CompletableFuture.completedFuture(
+					SlotSharingManager.MultiTaskSlotLocality.of(((SlotSharingManager.MultiTaskSlot) taskSlot), Locality.LOCAL));
 			} else {
 				// the slot may have been cancelled in the mean time
 				coLocationConstraint.setSlotRequestId(null);
@@ -354,55 +346,56 @@ public class Scheduler implements SlotProvider, SlotOwner {
 		}
 
 		// get a new multi task slot
-		final SlotSharingManager.MultiTaskSlotLocality multiTaskSlotLocality = allocateMultiTaskSlot(
+		return allocateMultiTaskSlot(
 			coLocationConstraint.getGroupId(),
 			multiTaskSlotManager,
 			slotProfile,
 			availableSlotsInfo,
 			allowQueuedScheduling,
-			allocationTimeout);
+			allocationTimeout).thenCompose((SlotSharingManager.MultiTaskSlotLocality multiTaskSlotLocality) -> {
 
-		// check whether we fulfill the co-location constraint
-		if (coLocationConstraint.isAssigned() && multiTaskSlotLocality.getLocality() != Locality.LOCAL) {
-			multiTaskSlotLocality.getMultiTaskSlot().release(
-				new FlinkException("Multi task slot is not local and, thus, does not fulfill the co-location constraint."));
+			// check whether we fulfill the co-location constraint
+			if (coLocationConstraint.isAssigned() && multiTaskSlotLocality.getLocality() != Locality.LOCAL) {
+				multiTaskSlotLocality.getMultiTaskSlot().release(
+					new FlinkException("Multi task slot is not local and, thus, does not fulfill the co-location constraint."));
 
-			throw new NoResourceAvailableException("Could not allocate a local multi task slot for the " +
-				"co location constraint " + coLocationConstraint + '.');
-		}
+				return FutureUtils.completedExceptionally(new NoResourceAvailableException("Could not allocate a local multi task slot for the " +
+					"co location constraint " + coLocationConstraint + '.'));
+			}
 
-		final SlotRequestId slotRequestId = new SlotRequestId();
-		final SlotSharingManager.MultiTaskSlot coLocationSlot = multiTaskSlotLocality.getMultiTaskSlot().allocateMultiTaskSlot(
-			slotRequestId,
-			coLocationConstraint.getGroupId());
+			final SlotRequestId slotRequestId = new SlotRequestId();
+			final SlotSharingManager.MultiTaskSlot coLocationSlot = multiTaskSlotLocality.getMultiTaskSlot().allocateMultiTaskSlot(
+				slotRequestId,
+				coLocationConstraint.getGroupId());
 
-		// mark the requested slot as co-located slot for other co-located tasks
-		coLocationConstraint.setSlotRequestId(slotRequestId);
+			// mark the requested slot as co-located slot for other co-located tasks
+			coLocationConstraint.setSlotRequestId(slotRequestId);
 
-		// lock the co-location constraint once we have obtained the allocated slot
-		coLocationSlot.getSlotContextFuture().whenComplete(
-			(SlotContext slotContext, Throwable throwable) -> {
-				if (throwable == null) {
-					// check whether we are still assigned to the co-location constraint
-					if (Objects.equals(coLocationConstraint.getSlotRequestId(), slotRequestId)) {
-						coLocationConstraint.lockLocation(slotContext.getTaskManagerLocation());
+			// lock the co-location constraint once we have obtained the allocated slot
+			coLocationSlot.getSlotContextFuture().whenComplete(
+				(SlotContext slotContext, Throwable throwable) -> {
+					if (throwable == null) {
+						// check whether we are still assigned to the co-location constraint
+						if (Objects.equals(coLocationConstraint.getSlotRequestId(), slotRequestId)) {
+							coLocationConstraint.lockLocation(slotContext.getTaskManagerLocation());
+						} else {
+							log.debug("Failed to lock colocation constraint {} because assigned slot " +
+									"request {} differs from fulfilled slot request {}.",
+								coLocationConstraint.getGroupId(),
+								coLocationConstraint.getSlotRequestId(),
+								slotRequestId);
+						}
 					} else {
-						log.debug("Failed to lock colocation constraint {} because assigned slot " +
-								"request {} differs from fulfilled slot request {}.",
+						log.debug("Failed to lock colocation constraint {} because the slot " +
+								"allocation for slot request {} failed.",
 							coLocationConstraint.getGroupId(),
 							coLocationConstraint.getSlotRequestId(),
-							slotRequestId);
+							throwable);
 					}
-				} else {
-					log.debug("Failed to lock colocation constraint {} because the slot " +
-							"allocation for slot request {} failed.",
-						coLocationConstraint.getGroupId(),
-						coLocationConstraint.getSlotRequestId(),
-						throwable);
-				}
-			});
+				});
 
-		return SlotSharingManager.MultiTaskSlotLocality.of(coLocationSlot, multiTaskSlotLocality.getLocality());
+			return CompletableFuture.completedFuture(SlotSharingManager.MultiTaskSlotLocality.of(coLocationSlot, multiTaskSlotLocality.getLocality()));
+		});
 	}
 
 	/**
@@ -449,8 +442,7 @@ public class Scheduler implements SlotProvider, SlotOwner {
 		SlotInfo poolSlotInfo = bestPoolSlotInfoWithLocality.f0;
 		Locality poolSlotLocality = bestPoolSlotInfoWithLocality.f1;
 
-		CompletableFuture<SlotSharingManager.MultiTaskSlotLocality> shortcut = new CompletableFuture<>();
-		CompletableFuture<Void> chain = new CompletableFuture<>();
+		final CompletableFuture<SlotSharingManager.MultiTaskSlotLocality> fromPoolAttemptFuture = new CompletableFuture<>();
 
 		if (poolSlotInfo != null && (poolSlotLocality == Locality.LOCAL || bestResolvedRootSlotInfo == null)) {
 
@@ -464,64 +456,74 @@ public class Scheduler implements SlotProvider, SlotOwner {
 
 			allocatedSlotFuture.thenAccept((AllocatedSlot allocatedSlot) -> {
 				if (allocatedSlot.tryAssignPayload(multiTaskSlot)) {
-					shortcut.complete(SlotSharingManager.MultiTaskSlotLocality.of(multiTaskSlot, poolSlotLocality));
+					fromPoolAttemptFuture.complete(SlotSharingManager.MultiTaskSlotLocality.of(multiTaskSlot, poolSlotLocality));
 				} else {
 					multiTaskSlot.release(new FlinkException("Could not assign payload to allocated slot " +
 						allocatedSlot.getAllocationId() + '.'));
-
+					fromPoolAttemptFuture.complete(null);
 				}
 			});
+		} else {
+			fromPoolAttemptFuture.complete(null);
 		}
 
-		if (bestResolvedRootSlotInfo != null) {
-			return CompletableFuture.completedFuture(
-				new SlotSharingManager.MultiTaskSlotLocality(
-					Preconditions.checkNotNull(slotSharingManager.getResolvedRootSlot(bestResolvedRootSlotInfo)),
-					bestResolvedRootSlotWithLocality.f1));
-		} else if (allowQueuedScheduling) {
-			// there is no slot immediately available --> check first for uncompleted slots at the slot sharing group
-			SlotSharingManager.MultiTaskSlot multiTaskSlotFuture = slotSharingManager.getUnresolvedRootSlot(groupId);
+		return fromPoolAttemptFuture.thenCompose((fromPool) -> {
 
-			if (multiTaskSlotFuture == null) {
-				// it seems as if we have to request a new slot from the resource manager, this is always the last resort!!!
-				final CompletableFuture<AllocatedSlot> futureSlot = slotPoolGateway.requestNewAllocatedSlot(
-					allocatedSlotRequestId,
-					slotProfile.getResourceProfile(),
-					allocationTimeout);
-
-				multiTaskSlotFuture = slotSharingManager.createRootSlot(
-					multiTaskSlotRequestId,
-					futureSlot,
-					allocatedSlotRequestId);
-
-				futureSlot.whenComplete(
-					(AllocatedSlot allocatedSlot, Throwable throwable) -> {
-						final SlotSharingManager.TaskSlot taskSlot = slotSharingManager.getTaskSlot(multiTaskSlotRequestId);
-
-						if (taskSlot != null) {
-							// still valid
-							if (!(taskSlot instanceof SlotSharingManager.MultiTaskSlot) || throwable != null) {
-								taskSlot.release(throwable);
-							} else {
-								if (!allocatedSlot.tryAssignPayload(((SlotSharingManager.MultiTaskSlot) taskSlot))) {
-									taskSlot.release(new FlinkException("Could not assign payload to allocated slot " +
-										allocatedSlot.getAllocationId() + '.'));
-								}
-							}
-						} else {
-							slotPoolGateway.releaseSlot(
-								allocatedSlotRequestId,
-								null,
-								new FlinkException("Could not find task slot with " + multiTaskSlotRequestId + '.'));
-						}
-					});
+			if (fromPool != null) {
+				return CompletableFuture.completedFuture(fromPool);
 			}
 
-			return SlotSharingManager.MultiTaskSlotLocality.of(multiTaskSlotFuture, Locality.UNKNOWN);
+			if (bestResolvedRootSlotInfo != null) {
+				return CompletableFuture.completedFuture(new SlotSharingManager.MultiTaskSlotLocality(
+					Preconditions.checkNotNull(slotSharingManager.getResolvedRootSlot(bestResolvedRootSlotInfo)),
+					bestResolvedRootSlotWithLocality.f1));
+			}
 
-		} else {
-			throw new NoResourceAvailableException("Could not allocate a shared slot for " + groupId + '.');
-		}
+			if (allowQueuedScheduling) {
+				// there is no slot immediately available --> check first for uncompleted slots at the slot sharing group
+				SlotSharingManager.MultiTaskSlot multiTaskSlotFuture = slotSharingManager.getUnresolvedRootSlot(groupId);
+
+				if (multiTaskSlotFuture == null) {
+					// it seems as if we have to request a new slot from the resource manager, this is always the last resort!!!
+					final CompletableFuture<AllocatedSlot> futureSlot = slotPoolGateway.requestNewAllocatedSlot(
+						allocatedSlotRequestId,
+						slotProfile.getResourceProfile(),
+						allocationTimeout);
+
+					multiTaskSlotFuture = slotSharingManager.createRootSlot(
+						multiTaskSlotRequestId,
+						futureSlot,
+						allocatedSlotRequestId);
+
+					futureSlot.whenComplete(
+						(AllocatedSlot allocatedSlot, Throwable throwable) -> {
+							final SlotSharingManager.TaskSlot taskSlot = slotSharingManager.getTaskSlot(multiTaskSlotRequestId);
+
+							if (taskSlot != null) {
+								// still valid
+								if (!(taskSlot instanceof SlotSharingManager.MultiTaskSlot) || throwable != null) {
+									taskSlot.release(throwable);
+								} else {
+									if (!allocatedSlot.tryAssignPayload(((SlotSharingManager.MultiTaskSlot) taskSlot))) {
+										taskSlot.release(new FlinkException("Could not assign payload to allocated slot " +
+											allocatedSlot.getAllocationId() + '.'));
+									}
+								}
+							} else {
+								slotPoolGateway.releaseSlot(
+									allocatedSlotRequestId,
+									null,
+									new FlinkException("Could not find task slot with " + multiTaskSlotRequestId + '.'));
+							}
+						});
+				}
+
+				return CompletableFuture.completedFuture(SlotSharingManager.MultiTaskSlotLocality.of(multiTaskSlotFuture, Locality.UNKNOWN));
+
+			}
+
+			return FutureUtils.completedExceptionally(new NoResourceAvailableException("Could not allocate a shared slot for " + groupId + '.'));
+		});
 	}
 
 	private CompletableFuture<Acknowledge> releaseSharedSlot(

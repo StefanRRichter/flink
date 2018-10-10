@@ -614,7 +614,6 @@ public class SlotPool extends RpcEndpoint implements SlotPoolGateway, AllocatedS
 						}
 					});
 			}
-
 			return SlotSharingManager.MultiTaskSlotLocality.of(multiTaskSlotFuture, Locality.UNKNOWN);
 
 		} else {
