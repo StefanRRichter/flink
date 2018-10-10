@@ -155,6 +155,7 @@ public interface SlotPoolGateway extends AllocatedSlotActions {
 	 * @param timeout for the operation
 	 * @return Future which is completed with the allocated {@link LogicalSlot}
 	 */
+	@Deprecated
 	CompletableFuture<LogicalSlot> allocateSlot(
 			SlotRequestId slotRequestId,
 			ScheduledUnit scheduledUnit,

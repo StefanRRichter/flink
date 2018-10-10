@@ -318,7 +318,7 @@ public class SingleLogicalSlotTest extends TestLogger {
 
 		@Override
 		public ResourceProfile getResourceProfile() {
-			throw new UnsupportedOperationException();
+			throw new UnsupportedOperationException("Not implemented");
 		}
 
 		@Override

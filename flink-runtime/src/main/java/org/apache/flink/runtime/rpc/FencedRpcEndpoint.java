@@ -70,6 +70,7 @@ public abstract class FencedRpcEndpoint<F extends Serializable> extends RpcEndpo
 	}
 
 	protected void setFencingToken(@Nullable F newFencingToken) {
+
 		// this method should only be called from within the main thread
 		validateRunsInMainThread();
 

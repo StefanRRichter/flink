@@ -73,4 +73,9 @@ public class SimpleSlotContext implements SlotContext {
 	public TaskManagerGateway getTaskManagerGateway() {
 		return taskManagerGateway;
 	}
+
+	@Override
+	public ResourceProfile getResourceProfile() {
+		throw new UnsupportedOperationException("Cannot provide ResourceProfile for SimpleSlot.");
+	}
 }
