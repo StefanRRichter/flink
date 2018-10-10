@@ -49,4 +49,9 @@ public class TestingAllocatedSlotActions implements AllocatedSlotActions {
 
 		return CompletableFuture.completedFuture(Acknowledge.get());
 	}
+
+	@Override
+	public CompletableFuture<Acknowledge> releaseSlot(SlotRequestId slotRequestId, @Nullable Throwable cause) {
+		throw new UnsupportedOperationException("Not implemented");
+	}
 }

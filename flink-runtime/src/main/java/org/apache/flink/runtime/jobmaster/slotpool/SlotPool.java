@@ -613,7 +613,6 @@ public class SlotPool extends RpcEndpoint implements SlotPoolGateway, AllocatedS
 						}
 					});
 			}
-
 			return SlotSharingManager.MultiTaskSlotLocality.of(multiTaskSlotFuture, Locality.UNKNOWN);
 
 		} else {
@@ -773,6 +772,12 @@ public class SlotPool extends RpcEndpoint implements SlotPoolGateway, AllocatedS
 			releaseSingleSlot(slotRequestId, cause);
 	}
 
+	@Override
+	public CompletableFuture<Acknowledge> releaseSlot(SlotRequestId slotRequestId, @Nullable Throwable cause) {
+		log.debug("Releasing slot [{}] because: {}", slotRequestId, cause != null ? cause.getMessage() : "null");
+		return releaseSingleSlot(slotRequestId, cause);
+	}
+
 	private CompletableFuture<Acknowledge> releaseSharedSlot(
 		SlotRequestId slotRequestId,
 		@Nonnull SlotSharingGroupId slotSharingGroupId,
@@ -869,10 +874,7 @@ public class SlotPool extends RpcEndpoint implements SlotPoolGateway, AllocatedS
 	public CompletableFuture<AllocatedSlot> allocateAvailableSlot(
 		@Nonnull SlotRequestId slotRequestId,
 		@Nonnull AllocationID allocationID) {
-		final AllocatedSlot allocatedSlot = allocateSlotWithID(slotRequestId, allocationID);
-		return allocatedSlot != null ?
-			CompletableFuture.completedFuture(allocatedSlot) :
-			FutureUtils.completedExceptionally(new IllegalStateException("No slot available under " + allocationID));
+		return CompletableFuture.completedFuture(allocateSlotWithID(slotRequestId, allocationID));
 	}
 
 	@Override

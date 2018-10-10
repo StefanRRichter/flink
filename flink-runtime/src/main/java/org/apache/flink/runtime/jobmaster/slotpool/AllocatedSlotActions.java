@@ -45,4 +45,8 @@ public interface AllocatedSlotActions {
 		SlotRequestId slotRequestId,
 		@Nullable SlotSharingGroupId slotSharingGroupId,
 		@Nullable Throwable cause);
+
+	CompletableFuture<Acknowledge> releaseSlot(
+		SlotRequestId slotRequestId,
+		@Nullable Throwable cause);
 }
