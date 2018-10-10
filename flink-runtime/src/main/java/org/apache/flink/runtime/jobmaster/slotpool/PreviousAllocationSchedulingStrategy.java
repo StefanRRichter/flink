@@ -27,6 +27,7 @@ import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
 import java.util.Collection;
+import java.util.Iterator;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.function.Predicate;
@@ -43,6 +44,26 @@ public class PreviousAllocationSchedulingStrategy extends LocationPreferenceSche
 	private static final PreviousAllocationSchedulingStrategy INSTANCE = new PreviousAllocationSchedulingStrategy();
 
 	private PreviousAllocationSchedulingStrategy() {}
+
+	@Nullable
+	public SlotInfo xxx(
+		@Nonnull SlotProfile slotProfile,
+		@Nonnull Iterator<SlotInfo> candidates) {
+		Collection<AllocationID> priorAllocations = slotProfile.getPriorAllocations();
+
+		if (priorAllocations.isEmpty()) {
+			return super.xxx(slotProfile, candidates);
+		} else {
+
+			while (candidates.hasNext()) {
+				SlotInfo candidate = candidates.next();
+				if (priorAllocations.contains(candidate.getAllocationId())) {
+					return candidate;
+				}
+			}
+			return null;
+		}
+	}
 
 	@Nullable
 	@Override

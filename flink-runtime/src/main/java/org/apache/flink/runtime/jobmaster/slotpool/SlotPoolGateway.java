@@ -40,7 +40,7 @@ import org.apache.flink.types.SerializableOptional;
 import javax.annotation.Nonnull;
 
 import java.util.Collection;
-import java.util.List;
+import java.util.Iterator;
 import java.util.concurrent.CompletableFuture;
 
 /**
@@ -156,6 +156,7 @@ public interface SlotPoolGateway extends AllocatedSlotActions, RpcGateway {
 	 * @param timeout for the operation
 	 * @return Future which is completed with the allocated {@link LogicalSlot}
 	 */
+	@Deprecated
 	CompletableFuture<LogicalSlot> allocateSlot(
 			SlotRequestId slotRequestId,
 			ScheduledUnit scheduledUnit,
@@ -164,7 +165,7 @@ public interface SlotPoolGateway extends AllocatedSlotActions, RpcGateway {
 			@RpcTimeout Time timeout);
 
 	@Nonnull
-	CompletableFuture<List<SlotInfo>> getAvailableSlotsInformation();
+	CompletableFuture<Iterator<SlotInfo>> getAvailableSlotsInformation();
 
 	@Nonnull
 	CompletableFuture<AllocatedSlot> allocateAvailableSlot(

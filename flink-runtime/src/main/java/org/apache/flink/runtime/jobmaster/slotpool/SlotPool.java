@@ -64,6 +64,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -773,6 +774,12 @@ public class SlotPool extends RpcEndpoint implements SlotPoolGateway, AllocatedS
 			releaseSingleSlot(slotRequestId, cause);
 	}
 
+	@Override
+	public CompletableFuture<Acknowledge> releaseSlot(SlotRequestId slotRequestId, @Nullable Throwable cause) {
+		log.debug("Releasing slot [{}] because: {}", slotRequestId, cause != null ? cause.getMessage() : "null");
+		return releaseSingleSlot(slotRequestId, cause);
+	}
+
 	private CompletableFuture<Acknowledge> releaseSharedSlot(
 		SlotRequestId slotRequestId,
 		@Nonnull SlotSharingGroupId slotSharingGroupId,
@@ -872,13 +879,13 @@ public class SlotPool extends RpcEndpoint implements SlotPoolGateway, AllocatedS
 		final AllocatedSlot allocatedSlot = allocateSlotWithID(slotRequestId, allocationID);
 		return allocatedSlot != null ?
 			CompletableFuture.completedFuture(allocatedSlot) :
-			FutureUtils.completedExceptionally(new IllegalStateException("No slot available under " + allocationID));
+			FutureUtils.completedExceptionally(new IllegalStateException("No slot available under "+ allocationID));
 	}
 
 	@Override
 	@Nonnull
-	public CompletableFuture<List<SlotInfo>> getAvailableSlotsInformation() {
-		return CompletableFuture.completedFuture(availableSlots.listSlotInfo());
+	public CompletableFuture<Iterator<SlotInfo>> getAvailableSlotsInformation() {
+		return CompletableFuture.completedFuture(availableSlots.listSlotInfo().iterator());
 	}
 
 	/**
