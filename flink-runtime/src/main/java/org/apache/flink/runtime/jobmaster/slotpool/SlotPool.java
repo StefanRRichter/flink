@@ -542,6 +542,7 @@ public class SlotPool extends RpcEndpoint implements SlotPoolGateway, AllocatedS
 			slotProfile);
 
 		if (multiTaskSlotLocality != null && multiTaskSlotLocality.getLocality() == Locality.LOCAL) {
+			System.out.println("A");
 			return multiTaskSlotLocality;
 		}
 
@@ -560,6 +561,7 @@ public class SlotPool extends RpcEndpoint implements SlotPoolGateway, AllocatedS
 				allocatedSlotRequestId);
 
 			if (allocatedSlot.tryAssignPayload(multiTaskSlot)) {
+				System.out.println("B");
 				return SlotSharingManager.MultiTaskSlotLocality.of(multiTaskSlot, polledSlotAndLocality.getLocality());
 			} else {
 				multiTaskSlot.release(new FlinkException("Could not assign payload to allocated slot " +
@@ -574,6 +576,7 @@ public class SlotPool extends RpcEndpoint implements SlotPoolGateway, AllocatedS
 					allocatedSlotRequestId,
 					new FlinkException("Locality constraint is not better fulfilled by allocated slot."));
 			}
+			System.out.println("C");
 			return multiTaskSlotLocality;
 		}
 
@@ -614,6 +617,7 @@ public class SlotPool extends RpcEndpoint implements SlotPoolGateway, AllocatedS
 						}
 					});
 			}
+			System.out.println("D");
 			return SlotSharingManager.MultiTaskSlotLocality.of(multiTaskSlotFuture, Locality.UNKNOWN);
 
 		} else {
