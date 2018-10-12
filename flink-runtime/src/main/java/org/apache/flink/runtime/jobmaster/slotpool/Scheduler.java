@@ -443,7 +443,6 @@ public class Scheduler implements SlotProvider, SlotOwner {
 		SlotInfo bestResolvedRootSlotInfo = bestResolvedRootSlotWithLocality.f0;
 
 		if (bestResolvedRootSlotInfo != null && bestResolvedRootSlotWithLocality.f1 == Locality.LOCAL) {
-			System.out.println("A");
 			return CompletableFuture.completedFuture(
 				new SlotSharingManager.MultiTaskSlotLocality(
 					Preconditions.checkNotNull(slotSharingManager.getResolvedRootSlot(bestResolvedRootSlotInfo)),
@@ -485,12 +484,10 @@ public class Scheduler implements SlotProvider, SlotOwner {
 		return fromPoolAttemptFuture.thenCompose((fromPool) -> { //TODO here must ensure we are running in main thread
 
 			if (fromPool != null) {
-				System.out.println("B");
 				return CompletableFuture.completedFuture(fromPool);
 			}
 
 			if (bestResolvedRootSlotInfo != null) {
-				System.out.println("C");
 				return CompletableFuture.completedFuture(new SlotSharingManager.MultiTaskSlotLocality(
 					Preconditions.checkNotNull(slotSharingManager.getResolvedRootSlot(bestResolvedRootSlotInfo)),
 					bestResolvedRootSlotWithLocality.f1));
@@ -534,7 +531,6 @@ public class Scheduler implements SlotProvider, SlotOwner {
 						});
 				}
 
-				System.out.println("D");
 				return CompletableFuture.completedFuture(SlotSharingManager.MultiTaskSlotLocality.of(multiTaskSlot, Locality.UNKNOWN));
 			}
 
