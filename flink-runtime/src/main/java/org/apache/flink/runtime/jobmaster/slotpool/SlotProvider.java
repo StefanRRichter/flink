@@ -60,6 +60,15 @@ public interface SlotProvider {
 		SlotProfile slotProfile,
 		Time timeout);
 
+
+	//TODO
+//	CompletableFuture<LogicalSlot> allocateSlot(
+//		SlotRequestId slotRequestId,
+//		ScheduledUnit task,
+//		boolean allowQueued,
+//		CompletableFuture<SlotProfile> slotProfile,
+//		Time timeout);
+
 	/**
 	 * Allocating slot with specific requirement.
 	 *

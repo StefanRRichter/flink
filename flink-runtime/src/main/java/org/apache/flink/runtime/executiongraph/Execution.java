@@ -479,6 +479,19 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 			Collection<AllocationID> previousAllocationIDs =
 				lastAllocation != null ? Collections.singletonList(lastAllocation) : Collections.emptyList();
 
+			//TODO
+//			final CompletableFuture<SlotProfile> slotProfileFuture =
+//				calculatePreferredLocations(locationPreferenceConstraint)
+//					.thenApply((Collection<TaskManagerLocation> preferredLocations) ->
+//						new SlotProfile(
+//							ResourceProfile.UNKNOWN,
+//							preferredLocations,
+//							previousAllocationIDs));
+//
+//
+//			final SlotRequestId slotRequestId = new SlotRequestId();
+//			slotProvider.allocateSlot(slotRequestId, toSchedule, queued, slotProfileFuture, allocationTimeout);
+
 			// calculate the preferred locations
 			final CompletableFuture<Collection<TaskManagerLocation>> preferredLocationsFuture =
 				calculatePreferredLocations(locationPreferenceConstraint);

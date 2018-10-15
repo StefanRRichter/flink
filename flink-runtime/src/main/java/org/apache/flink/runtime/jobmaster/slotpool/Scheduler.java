@@ -55,7 +55,10 @@ import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.CompletionStage;
+import java.util.concurrent.Executor;
 import java.util.function.BiFunction;
+import java.util.function.BooleanSupplier;
+import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.stream.Stream;
 
@@ -76,29 +79,70 @@ public class Scheduler implements SlotProvider, SlotOwner {
 
 	/** Managers for the different slot sharing groups. */
 	@Nonnull
-	private final Map<SlotSharingGroupId, SlotSharingManager> slotSharingManagers;
+	private final Map<SlotSharingGroupId, SlotSharingManager> slotSharingManagersMap;
 
 	@Nonnull
 	private final SlotPoolGateway slotPoolGateway;
 
 	@Nonnull
+	private Executor jmMainExecutor;
+
+	@Nonnull
 	private CompletableFuture<?> allocationQueue;
 
+	@Nonnull
+	private final BooleanSupplier threadCheck;
+
+
 	public Scheduler(
-		@Nonnull Map<SlotSharingGroupId, SlotSharingManager> slotSharingManagers,
-		@Nonnull SlotPoolGateway slotPoolGateway) {
-		this.slotSharingManagers = slotSharingManagers;
+		@Nonnull Map<SlotSharingGroupId, SlotSharingManager> slotSharingManagersMap,
+		@Nonnull SlotPoolGateway slotPoolGateway, @Nonnull BooleanSupplier threadCheck) {
+		this.slotSharingManagersMap = slotSharingManagersMap;
 		this.slotPoolGateway = slotPoolGateway;
+		this.threadCheck = threadCheck;
 		this.allocationQueue = CHAIN_ROOT;
+		this.jmMainExecutor = command -> {
+			throw new IllegalStateException();
+		};
+	}
+
+	public void start(@Nonnull Executor jmMainExecutor) {
+		this.jmMainExecutor = jmMainExecutor;
+	}
+
+	private String printTrace(StackTraceElement[] elements) {
+		String res = "";
+		for (int i = 1; i < elements.length; i++) {
+			StackTraceElement s = elements[i];
+			res += ("\tat " + s.getClassName() + "." + s.getMethodName()
+				+ "(" + s.getFileName() + ":" + s.getLineNumber() + ")\n");
+		}
+		return res;
+	}
+
+	@Nonnull
+	private <U> CompletableFuture<U> enqueueAllocation(@Nonnull Supplier<CompletionStage<U>> stageSupplier) {
+		CompletableFuture<U> newChainTail = allocationQueue.thenCompose((ignored) -> stageSupplier.get());
+		allocationQueue = newChainTail;
+		Preconditions.checkState(threadCheck.getAsBoolean());
+		//System.out.println("ENQUEUE: "+Thread.currentThread() +" "+printTrace(Thread.currentThread().getStackTrace()));
+		return newChainTail;
+	}
+
+	@Nonnull
+	private <T> CompletableFuture<T> executeInSchedulerMainThread(@Nonnull Supplier<T> supplier) {
+		return CompletableFuture.supplyAsync(supplier, jmMainExecutor);
+	}
+
+	@Nonnull
+	private <T> CompletableFuture<T> operateOnSlotSharingManagersMap(
+		@Nonnull Function<Map<SlotSharingGroupId, SlotSharingManager>, T> operationOnMap) {
+		return CompletableFuture.supplyAsync(
+			() -> operationOnMap.apply(slotSharingManagersMap),
+			jmMainExecutor);
 	}
 
 	//---------------------------
-
-	private <U> CompletableFuture<U> enqueueAllocation(Supplier<CompletionStage<U>> stageSupplier) {
-		CompletableFuture<U> newChainTail = allocationQueue.thenCompose((ignored) -> stageSupplier.get());
-		allocationQueue = newChainTail;
-		return newChainTail;
-	}
 
 	@Override
 	public CompletableFuture<LogicalSlot> allocateSlot(
@@ -107,13 +151,13 @@ public class Scheduler implements SlotProvider, SlotOwner {
 		boolean allowQueuedScheduling,
 		SlotProfile slotProfile,
 		Time allocationTimeout) {
-
 		log.debug("Received slot request [{}] for task: {}", slotRequestId, scheduledUnit.getTaskToExecute());
-		return enqueueAllocation(() ->
+		return CompletableFuture.completedFuture(null).thenComposeAsync((i) -> enqueueAllocation(() ->
 			slotPoolGateway.getAvailableSlotsInformation()
 				.thenCompose((Iterator<SlotInfo> infoIterator) -> scheduledUnit.getSlotSharingGroupId() == null ?
 					allocateSingleSlot(slotRequestId, slotProfile, infoIterator, allowQueuedScheduling, allocationTimeout) :
-					allocateSharedSlot(slotRequestId, scheduledUnit, slotProfile, infoIterator, allowQueuedScheduling, allocationTimeout)));
+					allocateSharedSlot(slotRequestId, scheduledUnit, slotProfile, infoIterator, allowQueuedScheduling, allocationTimeout))),
+			jmMainExecutor);
 	}
 
 	@Override
@@ -152,51 +196,18 @@ public class Scheduler implements SlotProvider, SlotOwner {
 		boolean allowQueuedScheduling,
 		Time allocationTimeout) {
 
-		return scheduleSlotRequest(
-				slotInfoList,
-				slotProfile,
-				allowQueuedScheduling,
-				allocationTimeout)
-			.thenCompose((SlotAndLocality slotAndLocality) -> {
-				final AllocatedSlot allocatedSlot = slotAndLocality.getSlot();
+		Tuple2<SlotInfo, Locality> selectedAvailableSlot = selectBestSlotForProfile(slotInfoList, slotProfile);
+		SlotInfo selectedSlotInfo = selectedAvailableSlot.f0;
 
-				final SingleLogicalSlot singleTaskSlot = new SingleLogicalSlot(
-					slotRequestId,
-					allocatedSlot,
-					null,
-					slotAndLocality.getLocality(),
-					this); //TODO!!!!!!!!!
+		CompletableFuture<SlotAndLocality> slotPoolRequestFuture;
 
-				if (allocatedSlot.tryAssignPayload(singleTaskSlot)) {
-					return CompletableFuture.completedFuture(singleTaskSlot);
-				} else {
-					final FlinkException flinkException =
-						new FlinkException("Could not assign payload to allocated slot " + allocatedSlot.getAllocationId() + '.');
-					slotPoolGateway.releaseSlot(slotRequestId, flinkException); //TODO not though RPC or wait?
-					throw new CompletionException(flinkException);
-				}
-			});
-	}
-
-
-	private CompletableFuture<SlotAndLocality> scheduleSlotRequest(
-		@Nonnull Iterator<SlotInfo> slotInfoList,
-		@Nonnull SlotProfile slotProfile,
-		boolean allowQueuedScheduling,
-		@Nonnull Time allocationTimeout) {
-
-		Tuple2<SlotInfo, Locality> bestSlotWithLocality = selectBestSlotForProfile(slotInfoList, slotProfile);
-		SlotInfo bestSlot = bestSlotWithLocality.f0;
-
-		final SlotRequestId slotRequestId = new SlotRequestId();
-
-		if (bestSlot != null) {
-			return slotPoolGateway
-				.allocateAvailableSlot(slotRequestId, bestSlot.getAllocationId())
-				.thenApply((AllocatedSlot allocatedSlot) -> new SlotAndLocality(allocatedSlot, bestSlotWithLocality.f1));
+		if (selectedSlotInfo != null) {
+			slotPoolRequestFuture = slotPoolGateway
+				.allocateAvailableSlot(slotRequestId, selectedSlotInfo.getAllocationId())
+				.thenApply((AllocatedSlot allocatedSlot) -> new SlotAndLocality(allocatedSlot, selectedAvailableSlot.f1));
 
 		} else if (allowQueuedScheduling) {
-			return slotPoolGateway
+			slotPoolRequestFuture = slotPoolGateway
 				.requestNewAllocatedSlot(slotRequestId, slotProfile.getResourceProfile(), allocationTimeout)
 				.thenApply((AllocatedSlot allocatedSlot) -> new SlotAndLocality(allocatedSlot, Locality.UNKNOWN));
 
@@ -204,10 +215,33 @@ public class Scheduler implements SlotProvider, SlotOwner {
 			return FutureUtils.completedExceptionally(
 				new NoResourceAvailableException("Could not allocate a simple slot for " + slotRequestId + '.'));
 		}
+
+		return slotPoolRequestFuture.thenCompose((SlotAndLocality slotAndLocality) -> {
+			final AllocatedSlot allocatedSlot = slotAndLocality.getSlot();
+
+			final SingleLogicalSlot singleTaskSlot = new SingleLogicalSlot(
+				slotRequestId,
+				allocatedSlot,
+				null,
+				slotAndLocality.getLocality(),
+				this); //TODO!!!!!!!!!
+
+			if (allocatedSlot.tryAssignPayload(singleTaskSlot)) {
+				return CompletableFuture.completedFuture(singleTaskSlot);
+			} else {
+				final FlinkException flinkException =
+					new FlinkException("Could not assign payload to allocated slot " + allocatedSlot.getAllocationId() + '.');
+				return slotPoolGateway
+					.releaseSlot(slotRequestId, flinkException)
+					.thenCompose((ack) -> {
+						throw new CompletionException(flinkException);
+					});
+			}
+		});
 	}
 
 	@Nonnull
-	private Tuple2<SlotInfo, Locality> selectBestSlotForProfile(
+	private static Tuple2<SlotInfo, Locality> selectBestSlotForProfile(
 		@Nonnull Iterator<SlotInfo> availableSlots,
 		@Nonnull SlotProfile slotProfile) {
 
@@ -269,14 +303,15 @@ public class Scheduler implements SlotProvider, SlotOwner {
 		Iterator<SlotInfo> availableSlotsInfo,
 		boolean allowQueuedScheduling,
 		Time allocationTimeout) {
-
 		// allocate slot with slot sharing
-		final SlotSharingManager multiTaskSlotManager = slotSharingManagers.computeIfAbsent(
+		final SlotSharingManager multiTaskSlotManager = slotSharingManagersMap.computeIfAbsent(
 			scheduledUnit.getSlotSharingGroupId(),
 			id -> new SlotSharingManager(
 				id,
 				slotPoolGateway, //TODO was "this", aka slot pool
 				this)); //TODO!!!!!!
+
+//		Preconditions.checkState(threadCheck.getAsBoolean());
 
 		final CompletableFuture<SlotSharingManager.MultiTaskSlotLocality> multiTaskSlotLocalityFuture;
 
@@ -543,7 +578,7 @@ public class Scheduler implements SlotProvider, SlotOwner {
 		@Nonnull SlotSharingGroupId slotSharingGroupId,
 		Throwable cause) {
 
-		final SlotSharingManager multiTaskSlotManager = slotSharingManagers.get(slotSharingGroupId);
+		final SlotSharingManager multiTaskSlotManager = slotSharingManagersMap.get(slotSharingGroupId);
 
 		if (multiTaskSlotManager != null) {
 			final SlotSharingManager.TaskSlot taskSlot = multiTaskSlotManager.getTaskSlot(slotRequestId);

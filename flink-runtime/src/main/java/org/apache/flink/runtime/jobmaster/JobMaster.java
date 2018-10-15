@@ -289,7 +289,7 @@ public class JobMaster extends FencedRpcEndpoint<JobMasterId> implements JobMast
 
 		this.slotPoolGateway = slotPool.getSelfGateway(SlotPoolGateway.class);
 
-		this.scheduler = new Scheduler(new HashMap<>(), slotPoolGateway);
+		this.scheduler = new Scheduler(new HashMap<>(), slotPoolGateway, this::isCurrentMainThread);
 
 		this.registeredTaskManagers = new HashMap<>(4);
 
@@ -1044,6 +1044,7 @@ public class JobMaster extends FencedRpcEndpoint<JobMasterId> implements JobMast
 		//   - on notification of the leader, the connection will be established and
 		//     the slot pool will start requesting slots
 		resourceManagerLeaderRetriever.start(new ResourceManagerLeaderListener());
+		scheduler.start(getMainThreadExecutor());
 	}
 
 	private void setNewFencingToken(JobMasterId newJobMasterId) {

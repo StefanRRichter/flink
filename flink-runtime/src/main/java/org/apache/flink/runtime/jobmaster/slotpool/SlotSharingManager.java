@@ -155,17 +155,18 @@ public class SlotSharingManager {
 		slotContextFuture.whenComplete(
 			(SlotContext slotContext, Throwable throwable) -> {
 				if (slotContext != null) {
-					final AllocationID allocationId = slotContext.getAllocationId();
 					final MultiTaskSlot resolvedRootNode = unresolvedRootSlots.remove(slotRequestId);
 
 					if (resolvedRootNode != null) {
+						final AllocationID allocationId = slotContext.getAllocationId();
 						LOG.trace("Fulfill multi task slot [{}] with slot [{}].", slotRequestId, allocationId);
 
-						final Map<AllocationID, MultiTaskSlot> innerCollection = resolvedRootSlots.computeIfAbsent(
+						final Map<AllocationID, MultiTaskSlot> innerMap = resolvedRootSlots.computeIfAbsent(
 							slotContext.getTaskManagerLocation(),
 							taskManagerLocation -> new HashMap<>(4));
 
-						innerCollection.put(allocationId, resolvedRootNode);
+						MultiTaskSlot previousValue = innerMap.put(allocationId, resolvedRootNode);
+						Preconditions.checkState(previousValue == null);
 					}
 				} else {
 					rootMultiTaskSlot.release(throwable);
@@ -493,7 +494,8 @@ public class SlotSharingManager {
 							resolvedRootSlots.get(slotContext.getTaskManagerLocation());
 
 						if (multiTaskSlots != null) {
-							multiTaskSlots.remove(slotContext.getAllocationId());
+							MultiTaskSlot removedSlot = multiTaskSlots.remove(slotContext.getAllocationId());
+							Preconditions.checkState(removedSlot == this);
 
 							if (multiTaskSlots.isEmpty()) {
 								resolvedRootSlots.remove(slotContext.getTaskManagerLocation());
@@ -528,7 +530,7 @@ public class SlotSharingManager {
 
 		@Override
 		public String toString() {
-			String physicalSlotDescription = "";
+			String physicalSlotDescription;
 			try {
 				physicalSlotDescription = String.valueOf(slotContextFuture.getNow(null));
 			}
