@@ -48,9 +48,9 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
-import java.util.concurrent.CompletionStage;
 import java.util.concurrent.Executor;
 import java.util.function.BooleanSupplier;
+import java.util.function.Function;
 import java.util.function.Supplier;
 
 /**
@@ -73,40 +73,32 @@ public class Scheduler implements SlotProvider, SlotOwner {
 	private final SlotPoolGateway slotPoolGateway;
 
 	@Nonnull
-	private CompletableFuture<?> allocationQueue;
+	private CompletableFuture<LogicalSlot> allocationQueue;
 
 	@Nonnull
-	private Executor jmMainExecutor;
+	private final Supplier<Executor> componentMainThreadExecutor;
 
 	@Nonnull
-	private final BooleanSupplier jmMainThreadCheck;
+	private final BooleanSupplier componentMainThreadCheck;
 
 
 	public Scheduler(
 		@Nonnull Map<SlotSharingGroupId, SlotSharingManager> slotSharingManagersMap,
 		@Nonnull SlotSelectionStrategy slotSelectionStrategy,
 		@Nonnull SlotPoolGateway slotPoolGateway,
-		@Nonnull BooleanSupplier jmMainThreadCheck) {
+		@Nonnull Supplier<Executor> componentMainThreadExecutor,
+		@Nonnull BooleanSupplier componentMainThreadCheck) {
 
 		this.slotSelectionStrategy = slotSelectionStrategy;
 		this.slotSharingManagersMap = slotSharingManagersMap;
 		this.slotPoolGateway = slotPoolGateway;
-		this.jmMainThreadCheck = jmMainThreadCheck;
 		this.allocationQueue = CHAIN_ROOT;
-		this.jmMainExecutor = command -> {
-			throw new IllegalStateException("Main thread executor not initialized!");
-		};
+		this.componentMainThreadExecutor = componentMainThreadExecutor;
+		this.componentMainThreadCheck = componentMainThreadCheck;
 	}
 
-	public void start(@Nonnull Executor jmMainExecutor) {
-		this.jmMainExecutor = jmMainExecutor;
-	}
-
-	@Nonnull
-	private <U> CompletableFuture<U> enqueueAllocation(@Nonnull Supplier<CompletionStage<U>> stageSupplier) {
-		CompletableFuture<U> newChainTail = allocationQueue.thenCompose((ignored) -> stageSupplier.get());
-		allocationQueue = newChainTail;
-		return newChainTail;
+	private void assertRunningInMainThread() {
+//		Preconditions.checkState(componentMainThreadCheck.getAsBoolean());
 	}
 
 	//---------------------------
@@ -119,9 +111,12 @@ public class Scheduler implements SlotProvider, SlotOwner {
 		SlotProfile slotProfile,
 		Time allocationTimeout) {
 		log.debug("Received slot request [{}] for task: {}", slotRequestId, scheduledUnit.getTaskToExecute());
-		return enqueueAllocation(() -> scheduledUnit.getSlotSharingGroupId() == null ?
-					allocateSingleSlot(slotRequestId, slotProfile, allowQueuedScheduling, allocationTimeout) :
-					allocateSharedSlot(slotRequestId, scheduledUnit, slotProfile, allowQueuedScheduling, allocationTimeout));
+
+		allocationQueue = allocationQueue.thenComposeAsync((ignored) -> scheduledUnit.getSlotSharingGroupId() == null ?
+				allocateSingleSlot(slotRequestId, slotProfile, allowQueuedScheduling, allocationTimeout) :
+				allocateSharedSlot(slotRequestId, scheduledUnit, slotProfile, allowQueuedScheduling, allocationTimeout),
+			componentMainThreadExecutor.get());
+		return allocationQueue;
 	}
 
 	@Override
@@ -131,7 +126,11 @@ public class Scheduler implements SlotProvider, SlotOwner {
 		Throwable cause) {
 
 		if (slotSharingGroupId != null) {
-			return releaseSharedSlot(slotRequestId, slotSharingGroupId, cause);
+			if (!componentMainThreadCheck.getAsBoolean()) {
+				return CompletableFuture.supplyAsync(() -> releaseSharedSlot(slotRequestId, slotSharingGroupId, cause), componentMainThreadExecutor.get());
+			} else {
+				return CompletableFuture.completedFuture(releaseSharedSlot(slotRequestId, slotSharingGroupId, cause));
+			}
 		} else {
 			return slotPoolGateway.releaseSlot(slotRequestId, cause);
 		}
@@ -144,10 +143,7 @@ public class Scheduler implements SlotProvider, SlotOwner {
 		SlotSharingGroupId slotSharingGroupId = logicalSlot.getSlotSharingGroupId();
 		FlinkException cause = new FlinkException("Slot is being returned to the SlotPool.");
 
-		CompletableFuture<Acknowledge> releaseSlotFuture = slotSharingGroupId != null ?
-			releaseSharedSlot(slotRequestId, slotSharingGroupId, cause) :
-			slotPoolGateway.releaseSlot(slotRequestId, cause);
-
+		CompletableFuture<Acknowledge> releaseSlotFuture = cancelSlotRequest(slotRequestId, slotSharingGroupId, cause);
 		return releaseSlotFuture.thenApply((Acknowledge acknowledge) -> true);
 	}
 
@@ -271,7 +267,9 @@ public class Scheduler implements SlotProvider, SlotOwner {
 				allocationTimeout);
 		}
 
-		return multiTaskSlotLocalityFuture.thenCompose((SlotSharingManager.MultiTaskSlotLocality multiTaskSlotLocality) -> {
+		return multiTaskSlotLocalityFuture.thenComposeAsync((SlotSharingManager.MultiTaskSlotLocality multiTaskSlotLocality) -> {
+
+				assertRunningInMainThread();
 
 				// sanity check
 				Preconditions.checkState(!multiTaskSlotLocality.getMultiTaskSlot().contains(scheduledUnit.getJobVertexId()));
@@ -282,7 +280,7 @@ public class Scheduler implements SlotProvider, SlotOwner {
 					multiTaskSlotLocality.getLocality());
 				return leaf.getLogicalSlotFuture();
 			}
-		);
+		, componentMainThreadExecutor.get());
 	}
 
 	/**
@@ -306,6 +304,8 @@ public class Scheduler implements SlotProvider, SlotOwner {
 		boolean allowQueuedScheduling,
 		Time allocationTimeout) {
 		final SlotRequestId coLocationSlotRequestId = coLocationConstraint.getSlotRequestId();
+
+		assertRunningInMainThread();
 
 		if (coLocationSlotRequestId != null) {
 			// we have a slot assigned --> try to retrieve it
@@ -358,6 +358,7 @@ public class Scheduler implements SlotProvider, SlotOwner {
 			// lock the co-location constraint once we have obtained the allocated slot
 			coLocationSlot.getSlotContextFuture().whenComplete(
 				(SlotContext slotContext, Throwable throwable) -> {
+					assertRunningInMainThread();
 					if (throwable == null) {
 						// check whether we are still assigned to the co-location constraint
 						if (Objects.equals(coLocationConstraint.getSlotRequestId(), slotRequestId)) {
@@ -404,6 +405,7 @@ public class Scheduler implements SlotProvider, SlotOwner {
 		boolean allowQueuedScheduling,
 		Time allocationTimeout) {
 
+		assertRunningInMainThread();
 		List<SlotInfo> resolvedRootSlotsInfo = slotSharingManager.listResolvedRootSlotInfo(groupId);
 
 		SlotSelectionStrategy.SlotInfoAndLocality bestResolvedRootSlotWithLocality =
@@ -427,7 +429,9 @@ public class Scheduler implements SlotProvider, SlotOwner {
 		CompletableFuture<SlotAndLocality> fromAvailableFuture =
 			tryAllocateFromAvailable(allocatedSlotRequestId, slotProfile);
 
-		return fromAvailableFuture.thenCompose((SlotAndLocality poolSlotAndLocality) -> {
+		return fromAvailableFuture.thenComposeAsync((SlotAndLocality poolSlotAndLocality) -> {
+
+			assertRunningInMainThread();
 
 			if (poolSlotAndLocality != null &&
 				(poolSlotAndLocality.getLocality() == Locality.LOCAL || bestResolvedRootSlotInfo == null)) {
@@ -465,14 +469,14 @@ public class Scheduler implements SlotProvider, SlotOwner {
 					final CompletableFuture<AllocatedSlot> slotAllocationFuture = slotPoolGateway.requestNewAllocatedSlot(
 						allocatedSlotRequestId,
 						slotProfile.getResourceProfile(),
-						allocationTimeout);
+						allocationTimeout).thenApplyAsync(Function.identity(), componentMainThreadExecutor.get());
 
 					multiTaskSlot = slotSharingManager.createRootSlot(
 						multiTaskSlotRequestId,
 						slotAllocationFuture,
 						allocatedSlotRequestId);
 
-					slotAllocationFuture.whenComplete(
+					slotAllocationFuture.whenCompleteAsync(
 						(AllocatedSlot allocatedSlot, Throwable throwable) -> {
 							final SlotSharingManager.TaskSlot taskSlot = slotSharingManager.getTaskSlot(multiTaskSlotRequestId);
 
@@ -491,7 +495,7 @@ public class Scheduler implements SlotProvider, SlotOwner {
 									allocatedSlotRequestId,
 									new FlinkException("Could not find task slot with " + multiTaskSlotRequestId + '.'));
 							}
-						});
+						}, componentMainThreadExecutor.get());
 				}
 
 				return CompletableFuture.completedFuture(
@@ -500,13 +504,15 @@ public class Scheduler implements SlotProvider, SlotOwner {
 
 			return FutureUtils.completedExceptionally(
 				new NoResourceAvailableException("Could not allocate a shared slot for " + groupId + '.'));
-		});
+		}, componentMainThreadExecutor.get());
 	}
 
-	private CompletableFuture<Acknowledge> releaseSharedSlot(
+	private Acknowledge releaseSharedSlot(
 		@Nonnull SlotRequestId slotRequestId,
 		@Nonnull SlotSharingGroupId slotSharingGroupId,
 		Throwable cause) {
+
+		assertRunningInMainThread();
 
 		final SlotSharingManager multiTaskSlotManager = slotSharingManagersMap.get(slotSharingGroupId);
 
@@ -521,6 +527,6 @@ public class Scheduler implements SlotProvider, SlotOwner {
 		} else {
 			log.debug("Could not find slot sharing group {}. Ignoring release slot request.", slotSharingGroupId);
 		}
-		return CompletableFuture.completedFuture(Acknowledge.get());
+		return Acknowledge.get();
 	}
 }
