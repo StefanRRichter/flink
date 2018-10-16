@@ -98,7 +98,7 @@ public class Scheduler implements SlotProvider, SlotOwner {
 	}
 
 	private void assertRunningInMainThread() {
-//		Preconditions.checkState(componentMainThreadCheck.getAsBoolean());
+		//Preconditions.checkState(componentMainThreadCheck.getAsBoolean());
 	}
 
 	//---------------------------
@@ -112,11 +112,13 @@ public class Scheduler implements SlotProvider, SlotOwner {
 		Time allocationTimeout) {
 		log.debug("Received slot request [{}] for task: {}", slotRequestId, scheduledUnit.getTaskToExecute());
 
-		allocationQueue = allocationQueue.thenComposeAsync((ignored) -> scheduledUnit.getSlotSharingGroupId() == null ?
-				allocateSingleSlot(slotRequestId, slotProfile, allowQueuedScheduling, allocationTimeout) :
-				allocateSharedSlot(slotRequestId, scheduledUnit, slotProfile, allowQueuedScheduling, allocationTimeout),
-			componentMainThreadExecutor.get());
-		return allocationQueue;
+		return CompletableFuture.completedFuture(null).thenComposeAsync((i) -> {
+			allocationQueue = allocationQueue.thenComposeAsync((ignored) -> scheduledUnit.getSlotSharingGroupId() == null ?
+					allocateSingleSlot(slotRequestId, slotProfile, allowQueuedScheduling, allocationTimeout) :
+					allocateSharedSlot(slotRequestId, scheduledUnit, slotProfile, allowQueuedScheduling, allocationTimeout),
+				componentMainThreadExecutor.get());
+			return allocationQueue;
+		}, componentMainThreadExecutor.get());
 	}
 
 	@Override
@@ -126,10 +128,10 @@ public class Scheduler implements SlotProvider, SlotOwner {
 		Throwable cause) {
 
 		if (slotSharingGroupId != null) {
-			if (!componentMainThreadCheck.getAsBoolean()) {
-				return CompletableFuture.supplyAsync(() -> releaseSharedSlot(slotRequestId, slotSharingGroupId, cause), componentMainThreadExecutor.get());
-			} else {
+			if (componentMainThreadCheck.getAsBoolean()) {
 				return CompletableFuture.completedFuture(releaseSharedSlot(slotRequestId, slotSharingGroupId, cause));
+			} else {
+				return CompletableFuture.supplyAsync(() -> releaseSharedSlot(slotRequestId, slotSharingGroupId, cause), componentMainThreadExecutor.get());
 			}
 		} else {
 			return slotPoolGateway.releaseSlot(slotRequestId, cause);
