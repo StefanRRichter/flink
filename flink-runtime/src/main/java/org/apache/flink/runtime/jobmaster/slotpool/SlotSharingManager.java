@@ -49,6 +49,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -137,9 +138,10 @@ public class SlotSharingManager {
 	 * @return New root slot
 	 */
 	MultiTaskSlot createRootSlot(
-			SlotRequestId slotRequestId,
-			CompletableFuture<? extends SlotContext> slotContextFuture,
-			SlotRequestId allocatedSlotRequestId) {
+		SlotRequestId slotRequestId,
+		CompletableFuture<? extends SlotContext> slotContextFuture,
+		SlotRequestId allocatedSlotRequestId,
+		Executor schedulerExecutor) {
 		final MultiTaskSlot rootMultiTaskSlot = new MultiTaskSlot(
 			slotRequestId,
 			slotContextFuture,
@@ -153,7 +155,7 @@ public class SlotSharingManager {
 
 		// add the root node to the set of resolved root nodes once the SlotContext future has
 		// been completed and we know the slot's TaskManagerLocation
-		slotContextFuture.whenComplete(
+		slotContextFuture.whenCompleteAsync(
 			(SlotContext slotContext, Throwable throwable) -> {
 				if (slotContext != null) {
 					final MultiTaskSlot resolvedRootNode = unresolvedRootSlots.remove(slotRequestId);
@@ -172,9 +174,16 @@ public class SlotSharingManager {
 				} else {
 					rootMultiTaskSlot.release(throwable);
 				}
-			});
+			}, schedulerExecutor);
 
 		return rootMultiTaskSlot;
+	}
+
+	public MultiTaskSlot createRootSlot(
+		SlotRequestId slotRequestId,
+		CompletableFuture<? extends SlotContext> slotContextFuture,
+		SlotRequestId allocatedSlotRequestId) {
+		return createRootSlot(slotRequestId, slotContextFuture, allocatedSlotRequestId, Runnable::run);
 	}
 
 	/**

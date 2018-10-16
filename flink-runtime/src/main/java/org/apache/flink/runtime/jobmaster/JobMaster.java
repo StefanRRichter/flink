@@ -293,9 +293,7 @@ public class JobMaster extends FencedRpcEndpoint<JobMasterId> implements JobMast
 		this.scheduler = new Scheduler(
 			new HashMap<>(),
 			new LocationPreferenceSlotSelection(),
-			slotPoolGateway,
-			this::getMainThreadExecutor,
-			this::isCurrentMainThread);
+			slotPoolGateway);
 
 		this.registeredTaskManagers = new HashMap<>(4);
 
