@@ -112,13 +112,25 @@ public class Scheduler implements SlotProvider, SlotOwner {
 		Time allocationTimeout) {
 		log.debug("Received slot request [{}] for task: {}", slotRequestId, scheduledUnit.getTaskToExecute());
 
-		return CompletableFuture.completedFuture(null).thenComposeAsync((i) -> {
-			allocationQueue = allocationQueue.thenComposeAsync((ignored) -> scheduledUnit.getSlotSharingGroupId() == null ?
-					allocateSingleSlot(slotRequestId, slotProfile, allowQueuedScheduling, allocationTimeout) :
-					allocateSharedSlot(slotRequestId, scheduledUnit, slotProfile, allowQueuedScheduling, allocationTimeout),
-				componentMainThreadExecutor.get());
-			return allocationQueue;
-		}, componentMainThreadExecutor.get());
+		return CompletableFuture.completedFuture(null)
+			.thenComposeAsync((i) -> {
+				CompletableFuture<LogicalSlot> allocationFuture = allocationQueue
+					.thenComposeAsync((ignored) -> scheduledUnit.getSlotSharingGroupId() == null ?
+							allocateSingleSlot(slotRequestId, slotProfile, allowQueuedScheduling, allocationTimeout) :
+							allocateSharedSlot(slotRequestId, scheduledUnit, slotProfile, allowQueuedScheduling, allocationTimeout),
+						componentMainThreadExecutor.get());
+				allocationQueue = allocationFuture.handle(
+					(LogicalSlot slot, Throwable failure) -> {
+						if (failure != null) {
+							cancelSlotRequest(
+								slotRequestId,
+								scheduledUnit.getSlotSharingGroupId(),
+								failure);
+						}
+						return null;
+					});
+				return allocationFuture;
+			}, componentMainThreadExecutor.get());
 	}
 
 	@Override
