@@ -44,8 +44,7 @@ import org.apache.flink.runtime.jobmaster.SlotRequestId;
 import org.apache.flink.runtime.messages.Acknowledge;
 import org.apache.flink.runtime.resourcemanager.ResourceManagerGateway;
 import org.apache.flink.runtime.resourcemanager.SlotRequest;
-import org.apache.flink.runtime.rpc.RpcEndpoint;
-import org.apache.flink.runtime.rpc.RpcService;
+import org.apache.flink.runtime.rpc.MainThreadExecutable;
 import org.apache.flink.runtime.taskexecutor.slot.SlotOffer;
 import org.apache.flink.runtime.taskmanager.TaskManagerLocation;
 import org.apache.flink.runtime.util.clock.Clock;
@@ -54,6 +53,9 @@ import org.apache.flink.types.SerializableOptional;
 import org.apache.flink.util.AbstractID;
 import org.apache.flink.util.FlinkException;
 import org.apache.flink.util.Preconditions;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -69,6 +71,7 @@ import java.util.Map.Entry;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.TimeUnit;
@@ -92,7 +95,9 @@ import static org.apache.flink.util.Preconditions.checkNotNull;
  * <p>TODO : Make pending requests location preference aware
  * TODO : Make pass location preferences to ResourceManager when sending a slot request
  */
-public class SlotPool extends RpcEndpoint implements SlotPoolGateway, AllocatedSlotActions {
+public class SlotPool implements SlotPoolGateway, AllocatedSlotActions, AutoCloseable {
+
+	protected final Logger log = LoggerFactory.getLogger(getClass());
 
 	/** The interval (in milliseconds) in which the SlotPool writes its slot distribution on debug level. */
 	private static final int STATUS_LOG_INTERVAL_MS = 60_000;
@@ -137,12 +142,13 @@ public class SlotPool extends RpcEndpoint implements SlotPoolGateway, AllocatedS
 
 	private String jobManagerAddress;
 
+	private MainThreadExecutable jmMainThreadScheduledExecutor;
+
 	// ------------------------------------------------------------------------
 
 	@VisibleForTesting
-	protected SlotPool(RpcService rpcService, JobID jobId, SchedulingStrategy schedulingStrategy) {
+	protected SlotPool(JobID jobId, SchedulingStrategy schedulingStrategy) {
 		this(
-			rpcService,
 			jobId,
 			schedulingStrategy,
 			SystemClock.getInstance(),
@@ -151,14 +157,11 @@ public class SlotPool extends RpcEndpoint implements SlotPoolGateway, AllocatedS
 	}
 
 	public SlotPool(
-			RpcService rpcService,
 			JobID jobId,
 			SchedulingStrategy schedulingStrategy,
 			Clock clock,
 			Time rpcTimeout,
 			Time idleSlotTimeout) {
-
-		super(rpcService);
 
 		this.jobId = checkNotNull(jobId);
 		this.schedulingStrategy = checkNotNull(schedulingStrategy);
@@ -173,7 +176,7 @@ public class SlotPool extends RpcEndpoint implements SlotPoolGateway, AllocatedS
 		this.waitingForResourceManager = new HashMap<>(16);
 
 		this.providerAndOwner = new ProviderAndOwner(
-			getSelfGateway(SlotPoolGateway.class),
+			this,
 			schedulingStrategy instanceof PreviousAllocationSchedulingStrategy);
 
 		this.slotSharingManagers = new HashMap<>(4);
@@ -181,16 +184,13 @@ public class SlotPool extends RpcEndpoint implements SlotPoolGateway, AllocatedS
 		this.jobMasterId = null;
 		this.resourceManagerGateway = null;
 		this.jobManagerAddress = null;
+
+		this.jmMainThreadScheduledExecutor = null;
 	}
 
 	// ------------------------------------------------------------------------
 	//  Starting and Stopping
 	// ------------------------------------------------------------------------
-
-	@Override
-	public void start() {
-		throw new UnsupportedOperationException("Should never call start() without leader ID");
-	}
 
 	/**
 	 * Start the slot pool to accept RPC calls.
@@ -198,44 +198,20 @@ public class SlotPool extends RpcEndpoint implements SlotPoolGateway, AllocatedS
 	 * @param jobMasterId The necessary leader id for running the job.
 	 * @param newJobManagerAddress for the slot requests which are sent to the resource manager
 	 */
-	public void start(JobMasterId jobMasterId, String newJobManagerAddress) throws Exception {
+	public void start(
+		JobMasterId jobMasterId,
+		String newJobManagerAddress,
+		MainThreadExecutable jmMainThreadScheduledExecutor) throws Exception {
+
 		this.jobMasterId = checkNotNull(jobMasterId);
 		this.jobManagerAddress = checkNotNull(newJobManagerAddress);
-
-		// TODO - start should not throw an exception
-		try {
-			super.start();
-		} catch (Exception e) {
-			throw new RuntimeException("This should never happen", e);
-		}
+		this.jmMainThreadScheduledExecutor = checkNotNull(jmMainThreadScheduledExecutor);
 
 		scheduleRunAsync(this::checkIdleSlot, idleSlotTimeout);
 
 		if (log.isDebugEnabled()) {
 			scheduleRunAsync(this::scheduledLogStatus, STATUS_LOG_INTERVAL_MS, TimeUnit.MILLISECONDS);
 		}
-	}
-
-	@Override
-	public CompletableFuture<Void> postStop() {
-		log.info("Stopping SlotPool.");
-		// cancel all pending allocations
-		Set<AllocationID> allocationIds = pendingRequests.keySetB();
-
-		for (AllocationID allocationId : allocationIds) {
-			resourceManagerGateway.cancelSlotRequest(allocationId);
-		}
-
-		// release all registered slots by releasing the corresponding TaskExecutors
-		for (ResourceID taskManagerResourceId : registeredTaskManagers) {
-			final FlinkException cause = new FlinkException(
-				"Releasing TaskManager " + taskManagerResourceId + ", because of stopping of SlotPool");
-			releaseTaskManagerInternal(taskManagerResourceId, cause);
-		}
-
-		clear();
-
-		return CompletableFuture.completedFuture(null);
 	}
 
 	/**
@@ -245,8 +221,6 @@ public class SlotPool extends RpcEndpoint implements SlotPoolGateway, AllocatedS
 	public void suspend() {
 		log.info("Suspending SlotPool.");
 
-		validateRunsInMainThread();
-
 		// cancel all pending allocations --> we can request these slots
 		// again after we regained the leadership
 		Set<AllocationID> allocationIds = pendingRequests.keySetB();
@@ -254,9 +228,6 @@ public class SlotPool extends RpcEndpoint implements SlotPoolGateway, AllocatedS
 		for (AllocationID allocationId : allocationIds) {
 			resourceManagerGateway.cancelSlotRequest(allocationId);
 		}
-
-		// suspend this RPC endpoint
-		stop();
 
 		// do not accept any requests
 		jobMasterId = null;
@@ -327,13 +298,16 @@ public class SlotPool extends RpcEndpoint implements SlotPoolGateway, AllocatedS
 			boolean allowQueuedScheduling,
 			Time allocationTimeout) {
 
-		log.debug("Received slot request [{}] for task: {}", slotRequestId, task.getTaskToExecute());
+		return CompletableFuture.completedFuture(null).thenComposeAsync((i) -> {
 
-		if (task.getSlotSharingGroupId() == null) {
-			return allocateSingleSlot(slotRequestId, slotProfile, allowQueuedScheduling, allocationTimeout);
-		} else {
-			return allocateSharedSlot(slotRequestId, task, slotProfile, allowQueuedScheduling, allocationTimeout);
-		}
+			log.debug("Received slot request [{}] for task: {}", slotRequestId, task.getTaskToExecute());
+
+			if (task.getSlotSharingGroupId() == null) {
+				return allocateSingleSlot(slotRequestId, slotProfile, allowQueuedScheduling, allocationTimeout);
+			} else {
+				return allocateSharedSlot(slotRequestId, task, slotProfile, allowQueuedScheduling, allocationTimeout);
+			}
+		}, jmMainThreadScheduledExecutor);
 	}
 
 	private CompletableFuture<LogicalSlot> allocateSingleSlot(
@@ -348,7 +322,7 @@ public class SlotPool extends RpcEndpoint implements SlotPoolGateway, AllocatedS
 			allowQueuedScheduling,
 			allocationTimeout);
 
-		return slotAndLocalityFuture.thenApply(
+			return slotAndLocalityFuture.thenApply(
 			(SlotAndLocality slotAndLocality) -> {
 				final AllocatedSlot allocatedSlot = slotAndLocality.getSlot();
 
@@ -688,7 +662,7 @@ public class SlotPool extends RpcEndpoint implements SlotPoolGateway, AllocatedS
 						timeoutPendingSlotRequest(slotRequestId);
 					}
 				},
-				getMainThreadExecutor());
+				jmMainThreadScheduledExecutor);
 
 		if (resourceManagerGateway == null) {
 			stashRequestWaitingForResourceManager(pendingRequest);
@@ -733,7 +707,7 @@ public class SlotPool extends RpcEndpoint implements SlotPoolGateway, AllocatedS
 					slotRequestToResourceManagerFailed(pendingRequest.getSlotRequestId(), failure);
 				}
 			},
-			getMainThreadExecutor());
+			jmMainThreadScheduledExecutor);
 	}
 
 	private void slotRequestToResourceManagerFailed(SlotRequestId slotRequestID, Throwable failure) {
@@ -904,7 +878,6 @@ public class SlotPool extends RpcEndpoint implements SlotPoolGateway, AllocatedS
 			TaskManagerLocation taskManagerLocation,
 			TaskManagerGateway taskManagerGateway,
 			Collection<SlotOffer> offers) {
-		validateRunsInMainThread();
 
 		List<CompletableFuture<Optional<SlotOffer>>> acceptedSlotOffers = offers.stream().map(
 			offer -> offerSlot(
@@ -939,8 +912,6 @@ public class SlotPool extends RpcEndpoint implements SlotPoolGateway, AllocatedS
 			final TaskManagerLocation taskManagerLocation,
 			final TaskManagerGateway taskManagerGateway,
 			final SlotOffer slotOffer) {
-
-		validateRunsInMainThread();
 
 		// check if this TaskManager is valid
 		final ResourceID resourceID = taskManagerLocation.getResourceID();
@@ -1175,7 +1146,7 @@ public class SlotPool extends RpcEndpoint implements SlotPoolGateway, AllocatedS
 							}
 						}
 					},
-					getMainThreadExecutor());
+					jmMainThreadScheduledExecutor);
 			}
 		}
 
@@ -1204,7 +1175,6 @@ public class SlotPool extends RpcEndpoint implements SlotPoolGateway, AllocatedS
 	}
 
 	private String printStatus() {
-		validateRunsInMainThread();
 
 		final StringBuilder builder = new StringBuilder(1024).append("Slot Pool Status:\n");
 
@@ -1256,6 +1226,71 @@ public class SlotPool extends RpcEndpoint implements SlotPoolGateway, AllocatedS
 	@VisibleForTesting
 	void triggerCheckIdleSlot() {
 		runAsync(this::checkIdleSlot);
+	}
+
+	/**
+	 * Execute the runnable in the main thread of the underlying RPC endpoint.
+	 *
+	 * @param runnable Runnable to be executed in the main thread of the underlying RPC endpoint
+	 */
+	protected void runAsync(Runnable runnable) {
+		jmMainThreadScheduledExecutor.runAsync(runnable);
+	}
+
+	/**
+	 * Execute the runnable in the main thread of the underlying RPC endpoint, with
+	 * a delay of the given number of milliseconds.
+	 *
+	 * @param runnable Runnable to be executed
+	 * @param delay    The delay after which the runnable will be executed
+	 */
+	protected void scheduleRunAsync(Runnable runnable, Time delay) {
+		scheduleRunAsync(runnable, delay.getSize(), delay.getUnit());
+	}
+
+	/**
+	 * Execute the runnable in the main thread of the underlying RPC endpoint, with
+	 * a delay of the given number of milliseconds.
+	 *
+	 * @param runnable Runnable to be executed
+	 * @param delay    The delay after which the runnable will be executed
+	 */
+	protected void scheduleRunAsync(Runnable runnable, long delay, TimeUnit unit) {
+		jmMainThreadScheduledExecutor.scheduleRunAsync(runnable, unit.toMillis(delay));
+	}
+
+	/**
+	 * Execute the callable in the main thread of the underlying RPC service, returning a future for
+	 * the result of the callable. If the callable is not completed within the given timeout, then
+	 * the future will be failed with a {@link TimeoutException}.
+	 *
+	 * @param callable Callable to be executed in the main thread of the underlying rpc server
+	 * @param timeout Timeout for the callable to be completed
+	 * @param <V> Return type of the callable
+	 * @return Future for the result of the callable.
+	 */
+	protected <V> CompletableFuture<V> callAsync(Callable<V> callable, Time timeout) {
+		return jmMainThreadScheduledExecutor.callAsync(callable, timeout);
+	}
+
+	@Override
+	public void close() {
+		log.info("Stopping SlotPool.");
+		// cancel all pending allocations
+		Set<AllocationID> allocationIds = pendingRequests.keySetB();
+
+		for (AllocationID allocationId : allocationIds) {
+			resourceManagerGateway.cancelSlotRequest(allocationId);
+		}
+
+		// release all registered slots by releasing the corresponding TaskExecutors
+		for (ResourceID taskManagerResourceId : registeredTaskManagers) {
+			final FlinkException cause = new FlinkException(
+				"Releasing TaskManager " + taskManagerResourceId + ", because of stopping of SlotPool");
+			releaseTaskManagerInternal(taskManagerResourceId, cause);
+		}
+
+		clear();
 	}
 
 	// ------------------------------------------------------------------------
