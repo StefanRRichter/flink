@@ -507,7 +507,7 @@ public class SlotSharingManager {
 				}
 
 				// release the underlying allocated slot
-				allocatedSlotActions.releaseSlot(allocatedSlotRequestId, null, cause);
+				allocatedSlotActions.releaseSlot(allocatedSlotRequestId, cause);
 			}
 		}
 

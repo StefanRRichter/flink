@@ -73,7 +73,7 @@ public class Scheduler implements SlotProvider, SlotOwner {
 	private final SlotPoolGateway slotPoolGateway;
 
 	@Nonnull
-	private CompletableFuture<LogicalSlot> allocationQueue;
+	private CompletableFuture<?> allocationQueue;
 
 	@Nonnull
 	private final Supplier<Executor> componentMainThreadExecutor;
@@ -148,6 +148,26 @@ public class Scheduler implements SlotProvider, SlotOwner {
 		} else {
 			return slotPoolGateway.releaseSlot(slotRequestId, cause);
 		}
+
+//		return CompletableFuture.completedFuture(null)
+//			.thenComposeAsync((i) -> {
+//				CompletableFuture<Acknowledge> ackFuture = allocationQueue.thenComposeAsync((ignored) -> {
+//					if (slotSharingGroupId != null) {
+//						//actually only this branch needs to be on main thread.
+//						return CompletableFuture.completedFuture(releaseSharedSlot(slotRequestId, slotSharingGroupId, cause));
+//					} else {
+//						return slotPoolGateway.releaseSlot(slotRequestId, cause);
+//					}
+//				}, componentMainThreadExecutor.get())
+//					.handle((Acknowledge ack, Throwable t) -> {
+//						if (t != null) {
+//							log.warn("Could not properly release slot.", t);
+//						}
+//						return null;
+//					});
+//				allocationQueue = ackFuture;
+//				return ackFuture;
+//			}, componentMainThreadExecutor.get());
 	}
 
 	@Override
