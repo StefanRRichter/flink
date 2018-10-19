@@ -18,13 +18,11 @@
 
 package org.apache.flink.runtime.jobmaster.slotpool;
 
-import org.apache.flink.runtime.jobmaster.SlotRequestId;
 import org.apache.flink.runtime.instance.SlotSharingGroupId;
+import org.apache.flink.runtime.jobmaster.SlotRequestId;
 import org.apache.flink.runtime.messages.Acknowledge;
 
 import javax.annotation.Nullable;
-
-import java.util.concurrent.CompletableFuture;
 
 /**
  * Interface for components which have to perform actions on allocated slots.
@@ -41,12 +39,12 @@ public interface AllocatedSlotActions {
 	 * @param cause of the slot release, null if none
 	 * @return Acknowledge (future) after the slot has been released
 	 */
-	CompletableFuture<Acknowledge> releaseSlot(
+	Acknowledge releaseSlot(
 		SlotRequestId slotRequestId,
 		@Nullable SlotSharingGroupId slotSharingGroupId,
 		@Nullable Throwable cause);
 
-	CompletableFuture<Acknowledge> releaseSlot(
+	Acknowledge releaseSlot(
 		SlotRequestId slotRequestId,
 		@Nullable Throwable cause);
 }

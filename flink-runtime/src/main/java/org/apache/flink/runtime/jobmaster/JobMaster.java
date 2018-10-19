@@ -294,9 +294,7 @@ public class JobMaster extends FencedRpcEndpoint<JobMasterId> implements JobMast
 		this.scheduler = new Scheduler(
 			new HashMap<>(),
 			new LocationPreferenceSlotSelection(),
-			slotPoolGateway,
-			this::getMainThreadExecutor,
-			this::isCurrentMainThread);
+			slotPoolGateway);
 
 		this.registeredTaskManagers = new HashMap<>(4);
 
@@ -1046,6 +1044,7 @@ public class JobMaster extends FencedRpcEndpoint<JobMasterId> implements JobMast
 	private void startJobMasterServices() throws Exception {
 		// start the slot pool make sure the slot pool now accepts messages for this leader
 		slotPool.start(getFencingToken(), getAddress(), getMainThreadExecutor());
+		scheduler.start(getMainThreadExecutor(), this::isCurrentMainThread);
 
 		//TODO: Remove once the ZooKeeperLeaderRetrieval returns the stored address upon start
 		// try to reconnect to previously known leader

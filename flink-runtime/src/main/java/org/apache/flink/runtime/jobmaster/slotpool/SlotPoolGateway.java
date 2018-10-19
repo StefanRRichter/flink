@@ -37,6 +37,7 @@ import org.apache.flink.runtime.taskmanager.TaskManagerLocation;
 import org.apache.flink.types.SerializableOptional;
 
 import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 
 import java.util.Collection;
 import java.util.List;
@@ -164,10 +165,10 @@ public interface SlotPoolGateway extends AllocatedSlotActions {
 			@RpcTimeout Time timeout);
 
 	@Nonnull
-	CompletableFuture<List<SlotInfo>> getAvailableSlotsInformation();
+	List<SlotInfo> getAvailableSlotsInformation();
 
-	@Nonnull
-	CompletableFuture<AllocatedSlot> allocateAvailableSlot(
+	@Nullable
+	AllocatedSlot allocateAvailableSlot(
 		@Nonnull SlotRequestId slotRequestId,
 		@Nonnull AllocationID allocationID);
 

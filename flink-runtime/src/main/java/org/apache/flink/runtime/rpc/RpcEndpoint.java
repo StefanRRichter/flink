@@ -299,7 +299,7 @@ public abstract class RpcEndpoint implements RpcGateway {
 	 * }</pre>
 	 */
 	public void validateRunsInMainThread() {
-		//assert isCurrentMainThread();
+		assert isCurrentMainThread();
 	}
 
 	public boolean isCurrentMainThread() {

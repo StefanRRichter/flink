@@ -735,7 +735,7 @@ public class SlotPool implements SlotPoolGateway, AllocatedSlotActions, AutoClos
 	// ------------------------------------------------------------------------
 
 	@Override
-	public CompletableFuture<Acknowledge> releaseSlot(
+	public Acknowledge releaseSlot(
 		SlotRequestId slotRequestId,
 		@Nullable SlotSharingGroupId slotSharingGroupId,
 		Throwable cause) {
@@ -747,12 +747,12 @@ public class SlotPool implements SlotPoolGateway, AllocatedSlotActions, AutoClos
 	}
 
 	@Override
-	public CompletableFuture<Acknowledge> releaseSlot(SlotRequestId slotRequestId, @Nullable Throwable cause) {
+	public Acknowledge releaseSlot(SlotRequestId slotRequestId, @Nullable Throwable cause) {
 		log.debug("Releasing slot [{}] because: {}", slotRequestId, cause != null ? cause.getMessage() : "null");
 		return releaseSingleSlot(slotRequestId, cause);
 	}
 
-	private CompletableFuture<Acknowledge> releaseSharedSlot(
+	private Acknowledge releaseSharedSlot(
 		SlotRequestId slotRequestId,
 		@Nonnull SlotSharingGroupId slotSharingGroupId,
 		Throwable cause) {
@@ -770,10 +770,10 @@ public class SlotPool implements SlotPoolGateway, AllocatedSlotActions, AutoClos
 		} else {
 			log.debug("Could not find slot sharing group {}. Ignoring release slot request.", slotSharingGroupId);
 		}
-		return CompletableFuture.completedFuture(Acknowledge.get());
+		return Acknowledge.get();
 	}
 
-	private CompletableFuture<Acknowledge> releaseSingleSlot(SlotRequestId slotRequestId, Throwable cause) {
+	private Acknowledge releaseSingleSlot(SlotRequestId slotRequestId, Throwable cause) {
 		final PendingRequest pendingRequest = removePendingRequest(slotRequestId);
 
 		if (pendingRequest != null) {
@@ -788,7 +788,7 @@ public class SlotPool implements SlotPoolGateway, AllocatedSlotActions, AutoClos
 				log.debug("There is no allocated slot [{}]. Ignoring the release slot request.", slotRequestId);
 			}
 		}
-		return CompletableFuture.completedFuture(Acknowledge.get());
+		return Acknowledge.get();
 	}
 
 	/**
@@ -844,17 +844,17 @@ public class SlotPool implements SlotPoolGateway, AllocatedSlotActions, AutoClos
 	}
 
 	@Override
-	@Nonnull
-	public CompletableFuture<AllocatedSlot> allocateAvailableSlot(
+	@Nullable
+	public AllocatedSlot allocateAvailableSlot(
 		@Nonnull SlotRequestId slotRequestId,
 		@Nonnull AllocationID allocationID) {
-		return CompletableFuture.completedFuture(allocateSlotWithID(slotRequestId, allocationID));
+		return allocateSlotWithID(slotRequestId, allocationID);
 	}
 
 	@Override
 	@Nonnull
-	public CompletableFuture<List<SlotInfo>> getAvailableSlotsInformation() {
-		return CompletableFuture.completedFuture(availableSlots.listSlotInfo());
+	public List<SlotInfo> getAvailableSlotsInformation() {
+		return availableSlots.listSlotInfo();
 	}
 
 	/**
@@ -1682,14 +1682,12 @@ public class SlotPool implements SlotPoolGateway, AllocatedSlotActions, AutoClos
 		}
 
 		@Override
-		public CompletableFuture<Boolean> returnAllocatedSlot(LogicalSlot slot) {
-			return gateway
-				.releaseSlot(
-					slot.getSlotRequestId(),
-					slot.getSlotSharingGroupId(),
-					new FlinkException("Slot is being returned to the SlotPool."))
-				.thenApply(
-					(Acknowledge acknowledge) -> true);
+		public boolean returnAllocatedSlot(LogicalSlot slot) {
+			gateway.releaseSlot(
+				slot.getSlotRequestId(),
+				slot.getSlotSharingGroupId(),
+				new FlinkException("Slot is being returned to the SlotPool."));
+			return true;
 		}
 
 		@Override
@@ -1721,7 +1719,7 @@ public class SlotPool implements SlotPoolGateway, AllocatedSlotActions, AutoClos
 		}
 
 		@Override
-		public CompletableFuture<Acknowledge> cancelSlotRequest(
+		public Acknowledge cancelSlotRequest(
 				SlotRequestId slotRequestId,
 				@Nullable SlotSharingGroupId slotSharingGroupId,
 				Throwable cause) {
