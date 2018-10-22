@@ -25,7 +25,6 @@ import javax.annotation.Nonnull;
 
 import java.util.Collection;
 import java.util.Collections;
-import java.util.Set;
 
 /**
  * A slot profile describes the profile of a slot into which a task wants to be scheduled. The profile contains
