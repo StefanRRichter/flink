@@ -47,7 +47,6 @@ import org.apache.flink.runtime.jobmanager.scheduler.SlotSharingGroup;
 import org.apache.flink.runtime.jobmanager.slots.TaskManagerGateway;
 import org.apache.flink.runtime.jobmaster.LogicalSlot;
 import org.apache.flink.runtime.jobmaster.SlotRequestId;
-import org.apache.flink.runtime.jobmaster.slotpool.Scheduler;
 import org.apache.flink.runtime.jobmaster.slotpool.SlotProvider;
 import org.apache.flink.runtime.messages.Acknowledge;
 import org.apache.flink.runtime.messages.StackTraceSampleResponse;
@@ -499,8 +498,8 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 			ExecutionVertex executionVertex = getVertex();
 			AllocationID lastAllocation = executionVertex.getLatestPriorAllocation();
 
-			Collection<AllocationID> previousAllocationIDs =
-				lastAllocation != null ? Collections.singletonList(lastAllocation) : Collections.emptyList();
+			Set<AllocationID> previousAllocationIDs =
+				lastAllocation != null ? Collections.singleton(lastAllocation) : Collections.emptySet();
 
 			// calculate the preferred locations
 			final CompletableFuture<Collection<TaskManagerLocation>> preferredLocationsFuture =
@@ -514,7 +513,6 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 						slotProvider.allocateSlot(
 							slotRequestId,
 							toSchedule,
-							queued,
 							new SlotProfile(
 								ResourceProfile.UNKNOWN,
 								preferredLocations,

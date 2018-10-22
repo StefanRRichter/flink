@@ -25,6 +25,7 @@ import javax.annotation.Nonnull;
 
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Set;
 
 /**
  * A slot profile describes the profile of a slot into which a task wants to be scheduled. The profile contains
@@ -47,7 +48,7 @@ public class SlotProfile {
 
 	/** This contains desired allocation ids of the slot. */
 	@Nonnull
-	private final Collection<AllocationID> preferredAllocations;
+	private final Set<AllocationID> preferredAllocations;
 
 	/** This contains all prior allocation ids from the whole execution graph. */
 	@Nonnull
@@ -56,7 +57,7 @@ public class SlotProfile {
 	public SlotProfile(
 		@Nonnull ResourceProfile resourceProfile,
 		@Nonnull Collection<TaskManagerLocation> preferredLocations,
-		@Nonnull Collection<AllocationID> preferredAllocations) {
+		@Nonnull Set<AllocationID> preferredAllocations) {
 
 		this(resourceProfile, preferredLocations, preferredAllocations, Collections.emptySet());
 	}
@@ -64,7 +65,7 @@ public class SlotProfile {
 	public SlotProfile(
 		@Nonnull ResourceProfile resourceProfile,
 		@Nonnull Collection<TaskManagerLocation> preferredLocations,
-		@Nonnull Collection<AllocationID> preferredAllocations,
+		@Nonnull Set<AllocationID> preferredAllocations,
 		@Nonnull Set<AllocationID> previousExecutionGraphAllocations) {
 
 		this.resourceProfile = resourceProfile;
@@ -93,7 +94,7 @@ public class SlotProfile {
 	 * Returns the desired allocation ids for the slot.
 	 */
 	@Nonnull
-	public Collection<AllocationID> getPreferredAllocations() {
+	public Set<AllocationID> getPreferredAllocations() {
 		return preferredAllocations;
 	}
 
@@ -118,7 +119,7 @@ public class SlotProfile {
 	 * Returns a slot profile for the given resource profile, without any locality requirements.
 	 */
 	public static SlotProfile noLocality(ResourceProfile resourceProfile) {
-		return new SlotProfile(resourceProfile, Collections.emptyList(), Collections.emptyList());
+		return new SlotProfile(resourceProfile, Collections.emptyList(), Collections.emptySet());
 	}
 
 	/**
@@ -129,7 +130,7 @@ public class SlotProfile {
 	 * @return Slot profile with the given resource profile and preferred locations
 	 */
 	public static SlotProfile preferredLocality(ResourceProfile resourceProfile, Collection<TaskManagerLocation> preferredLocations) {
-		return new SlotProfile(resourceProfile, preferredLocations, Collections.emptyList());
+		return new SlotProfile(resourceProfile, preferredLocations, Collections.emptySet());
 	}
 
 	/**
@@ -139,7 +140,7 @@ public class SlotProfile {
 	 * @param priorAllocations specifying the prior allocations
 	 * @return Slot profile with the given resource profile and prior allocations
 	 */
-	public static SlotProfile priorAllocation(ResourceProfile resourceProfile, Collection<AllocationID> priorAllocations) {
+	public static SlotProfile priorAllocation(ResourceProfile resourceProfile, Set<AllocationID> priorAllocations) {
 		return new SlotProfile(resourceProfile, Collections.emptyList(), priorAllocations);
 	}
 }

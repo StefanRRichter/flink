@@ -21,8 +21,8 @@ package org.apache.flink.runtime.jobmanager.scheduler;
 import org.apache.flink.runtime.clusterframework.types.ResourceID;
 import org.apache.flink.runtime.clusterframework.types.ResourceProfile;
 import org.apache.flink.runtime.clusterframework.types.SlotProfile;
-import org.apache.flink.runtime.jobmaster.LogicalSlot;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
+import org.apache.flink.runtime.jobmaster.LogicalSlot;
 import org.apache.flink.runtime.taskmanager.TaskManagerLocation;
 import org.apache.flink.runtime.testingUtils.TestingUtils;
 
@@ -1049,6 +1049,6 @@ public class SchedulerSlotSharingTest extends SchedulerTestBase {
 	}
 
 	private static SlotProfile slotProfileForLocation(TaskManagerLocation location) {
-		return new SlotProfile(ResourceProfile.UNKNOWN, Collections.singletonList(location), Collections.emptyList());
+		return new SlotProfile(ResourceProfile.UNKNOWN, Collections.singletonList(location), Collections.emptySet());
 	}
 }
