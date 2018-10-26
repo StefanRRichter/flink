@@ -19,6 +19,8 @@
 package org.apache.flink.runtime.jobmaster.slotpool;
 
 import org.apache.flink.api.common.JobID;
+import org.apache.flink.runtime.concurrent.ScheduledExecutor;
+import org.apache.flink.runtime.concurrent.ScheduledExecutorServiceAdapter;
 import org.apache.flink.runtime.jobmaster.JobMasterId;
 import org.apache.flink.runtime.resourcemanager.utils.TestingResourceManagerGateway;
 
@@ -27,6 +29,9 @@ import org.junit.rules.ExternalResource;
 import javax.annotation.Nonnull;
 
 import java.util.HashMap;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executors;
+import java.util.function.Supplier;
 
 /**
  * {@link ExternalResource} which provides a {@link SlotPool}.
@@ -42,8 +47,11 @@ public class SlotPoolResource extends ExternalResource {
 
 	private TestingResourceManagerGateway testingResourceManagerGateway;
 
+	private final ScheduledExecutor mainThreadExecutor;
+
 	public SlotPoolResource(@Nonnull SlotSelectionStrategy schedulingStrategy) {
 		this.schedulingStrategy = schedulingStrategy;
+		this.mainThreadExecutor = new ScheduledExecutorServiceAdapter(Executors.newSingleThreadScheduledExecutor());
 		slotPool = null;
 		testingResourceManagerGateway = null;
 	}
@@ -77,9 +85,8 @@ public class SlotPoolResource extends ExternalResource {
 
 		slotPool = new SlotPool(new JobID());
 		scheduler = new Scheduler(new HashMap<>(), schedulingStrategy, slotPool);
-		TestMainThreadExecutor testMainThreadExecutor = new TestMainThreadExecutor();
-		slotPool.start(JobMasterId.generate(), "foobar", testMainThreadExecutor);
-		scheduler.start(testMainThreadExecutor);
+		slotPool.start(JobMasterId.generate(), "foobar", mainThreadExecutor);
+		scheduler.start(mainThreadExecutor);
 		slotPool.connectToResourceManager(testingResourceManagerGateway);
 	}
 
@@ -93,5 +100,9 @@ public class SlotPoolResource extends ExternalResource {
 
 	private void terminateSlotPool() {
 		slotPool.close();
+	}
+
+	public <V> V executeInMainThreadAndJoin(Supplier<V> supplier) throws Exception {
+		return CompletableFuture.supplyAsync(supplier, mainThreadExecutor).get();
 	}
 }
