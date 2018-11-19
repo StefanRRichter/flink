@@ -912,7 +912,8 @@ public class ExecutionGraph implements AccessExecutionGraph {
 				final CompletableFuture<Void> schedulingJobVertexFuture = ejv.scheduleAll(
 					slotProvider,
 					allowQueuedScheduling,
-					LocationPreferenceConstraint.ALL); // since it is an input vertex, the input based location preferences should be empty
+					LocationPreferenceConstraint.ALL,
+					Collections.emptySet()); // since it is an input vertex, the input based location preferences should be empty
 
 				schedulingFutures.add(schedulingJobVertexFuture);
 			}
@@ -942,6 +943,9 @@ public class ExecutionGraph implements AccessExecutionGraph {
 		// collecting all the slots may resize and fail in that operation without slots getting lost
 		final ArrayList<CompletableFuture<Execution>> allAllocationFutures = new ArrayList<>(getNumberOfExecutionJobVertices());
 
+		final Set<AllocationID> allPreviousAllocationIds =
+			Collections.unmodifiableSet(computeAllPriorAllocationIdsIfRequiredByScheduling());
+
 		// allocate the slots (obtain all their futures
 		for (ExecutionJobVertex ejv : getVerticesTopologically()) {
 			// these calls are not blocking, they only return futures
@@ -949,6 +953,7 @@ public class ExecutionGraph implements AccessExecutionGraph {
 				slotProvider,
 				queued,
 				LocationPreferenceConstraint.ALL,
+				allPreviousAllocationIds,
 				timeout);
 
 			allAllocationFutures.addAll(allocationFutures);

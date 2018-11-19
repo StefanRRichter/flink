@@ -139,7 +139,7 @@ public class SlotProfileTest extends TestLogger {
 		blacklisted.add(aid2);
 		blacklisted.add(aid3);
 		blacklisted.add(aid4);
-		SlotProfile slotProfile = new SlotProfile(resourceProfile, Collections.singletonList(tml4), Collections.singletonList(aidX), blacklisted);
+		SlotProfile slotProfile = new SlotProfile(resourceProfile, Collections.singletonList(tml4), Collections.singleton(aidX), blacklisted);
 		SlotContext match = runMatching(slotProfile);
 
 		// there should be no valid option left and we expect null as return
@@ -152,7 +152,7 @@ public class SlotProfileTest extends TestLogger {
 		blacklisted.add(aid1);
 		blacklisted.add(aid3);
 		blacklisted.add(aid4);
-		SlotProfile slotProfile = new SlotProfile(resourceProfile, Collections.singletonList(tml4), Collections.singletonList(aidX), blacklisted);
+		SlotProfile slotProfile = new SlotProfile(resourceProfile, Collections.singletonList(tml4), Collections.singleton(aidX), blacklisted);
 		SlotContext match = runMatching(slotProfile);
 
 		// we expect that the candidate that is not blacklisted is returned
@@ -166,7 +166,7 @@ public class SlotProfileTest extends TestLogger {
 		blacklisted.add(aid2);
 		blacklisted.add(aid3);
 		blacklisted.add(aid4);
-		SlotProfile slotProfile = new SlotProfile(resourceProfile, Collections.singletonList(tml3), Collections.singletonList(aid3), blacklisted);
+		SlotProfile slotProfile = new SlotProfile(resourceProfile, Collections.singletonList(tml3), Collections.singleton(aid3), blacklisted);
 		SlotContext match = runMatching(slotProfile);
 
 		// available previous allocation should override blacklisting

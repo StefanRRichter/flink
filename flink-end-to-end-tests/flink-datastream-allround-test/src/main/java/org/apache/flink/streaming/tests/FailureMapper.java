@@ -77,9 +77,10 @@ public class FailureMapper<T> extends RichMapFunction<T, T> implements Checkpoin
 	private void considerTriggerArtificialFailure() throws Exception {
 		if (isReachedFailureThreshold()) {
 			final RuntimeContext runtimeContext = getRuntimeContext();
-			if(runtimeContext.getAttemptNumber() % runtimeContext.getNumberOfParallelSubtasks() ==
-				runtimeContext.getIndexOfThisSubtask())
-			throw new Exception("Artificial failure.");
+			if (runtimeContext.getAttemptNumber() % runtimeContext.getNumberOfParallelSubtasks() ==
+				runtimeContext.getIndexOfThisSubtask()) {
+				throw new Exception("Artificial failure.");
+			}
 		}
 	}
 }

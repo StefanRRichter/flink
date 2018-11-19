@@ -518,6 +518,7 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 								preferredLocations,
 								previousAllocationIDs,
 								allPreviousExecutionGraphAllocationIds),
+							queued,
 							allocationTimeout));
 
 			// register call back to cancel slot request in case that the execution gets canceled
