@@ -105,7 +105,6 @@ import org.apache.flink.runtime.taskexecutor.slot.SlotOffer;
 import org.apache.flink.runtime.taskmanager.TaskExecutionState;
 import org.apache.flink.runtime.taskmanager.TaskManagerLocation;
 import org.apache.flink.runtime.webmonitor.WebMonitorUtils;
-import org.apache.flink.types.SerializableOptional;
 import org.apache.flink.util.ExceptionUtils;
 import org.apache.flink.util.FlinkException;
 import org.apache.flink.util.InstantiationUtil;
@@ -646,7 +645,7 @@ public class JobMaster extends FencedRpcEndpoint<JobMasterId> implements JobMast
 		log.debug("Disconnect TaskExecutor {} because: {}", resourceID, cause.getMessage());
 
 		taskManagerHeartbeatManager.unmonitorTarget(resourceID);
-		CompletableFuture<Acknowledge> releaseFuture = slotPool.releaseTaskManager(resourceID, cause);
+		slotPool.releaseTaskManager(resourceID, cause);
 
 		Tuple2<TaskManagerLocation, TaskExecutorGateway> taskManagerConnection = registeredTaskManagers.remove(resourceID);
 
@@ -654,7 +653,7 @@ public class JobMaster extends FencedRpcEndpoint<JobMasterId> implements JobMast
 			taskManagerConnection.f1.disconnectJobManager(jobGraph.getJobID(), cause);
 		}
 
-		return releaseFuture;
+		return CompletableFuture.completedFuture(Acknowledge.get());
 	}
 
 	// TODO: This method needs a leader session ID
@@ -816,10 +815,10 @@ public class JobMaster extends FencedRpcEndpoint<JobMasterId> implements JobMast
 
 		final RpcTaskManagerGateway rpcTaskManagerGateway = new RpcTaskManagerGateway(taskExecutorGateway, getFencingToken());
 
-		return slotPool.offerSlots(
+		return CompletableFuture.completedFuture(slotPool.offerSlots(
 			taskManagerLocation,
 			rpcTaskManagerGateway,
-			slots);
+			slots));
 	}
 
 	@Override
@@ -837,11 +836,8 @@ public class JobMaster extends FencedRpcEndpoint<JobMasterId> implements JobMast
 	}
 
 	private void internalFailAllocation(AllocationID allocationId, Exception cause) {
-		final CompletableFuture<SerializableOptional<ResourceID>> emptyTaskExecutorFuture = slotPool.failAllocation(allocationId, cause);
-
-		emptyTaskExecutorFuture.thenAcceptAsync(
-			resourceIdOptional -> resourceIdOptional.ifPresent(this::releaseEmptyTaskManager),
-			getMainThreadExecutor());
+		final Optional<ResourceID> emptyTaskExecutorFuture = slotPool.failAllocation(allocationId, cause);
+		getMainThreadExecutor().execute(() -> emptyTaskExecutorFuture.ifPresent(this::releaseEmptyTaskManager));
 	}
 
 	private CompletableFuture<Acknowledge> releaseEmptyTaskManager(ResourceID resourceId) {

@@ -44,7 +44,6 @@ import org.apache.flink.runtime.taskmanager.LocalTaskManagerLocation;
 import org.apache.flink.runtime.taskmanager.TaskManagerLocation;
 import org.apache.flink.runtime.testingUtils.TestingUtils;
 import org.apache.flink.runtime.util.clock.ManualClock;
-import org.apache.flink.types.SerializableOptional;
 import org.apache.flink.util.ExceptionUtils;
 import org.apache.flink.util.FlinkException;
 import org.apache.flink.util.TestLogger;
@@ -62,6 +61,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CompletableFuture;
@@ -115,7 +115,7 @@ public class SlotPoolTest extends TestLogger {
 		try (SlotPool slotPool = new SlotPool(jobId)) {
 			SlotPoolGateway slotPoolGateway = setupSlotPool(slotPool, resourceManagerGateway, mainThreadExecutor);
 			Scheduler scheduler = setupScheduler(slotPoolGateway, mainThreadExecutor);
-			executeInMainThreadAndJoin(() -> slotPoolGateway.registerTaskManager(taskManagerLocation.getResourceID()));
+			slotPoolGateway.registerTaskManager(taskManagerLocation.getResourceID());
 
 			SlotRequestId requestId = new SlotRequestId();
 			CompletableFuture<LogicalSlot> future = scheduler.allocateSlot(
@@ -133,7 +133,7 @@ public class SlotPoolTest extends TestLogger {
 				0,
 				DEFAULT_TESTING_PROFILE);
 
-			assertTrue(executeInMainThreadAndJoin(() -> slotPoolGateway.offerSlot(taskManagerLocation, taskManagerGateway, slotOffer)).get());
+			assertTrue(slotPoolGateway.offerSlot(taskManagerLocation, taskManagerGateway, slotOffer));
 
 			LogicalSlot slot = future.get(1, TimeUnit.SECONDS);
 			assertTrue(future.isDone());
@@ -184,7 +184,7 @@ public class SlotPoolTest extends TestLogger {
 				0,
 				DEFAULT_TESTING_PROFILE);
 
-			assertTrue(executeInMainThreadAndJoin(() -> slotPoolGateway.offerSlot(taskManagerLocation, taskManagerGateway, slotOffer)).get());
+			assertTrue(slotPoolGateway.offerSlot(taskManagerLocation, taskManagerGateway, slotOffer));
 
 			LogicalSlot slot1 = future1.get(1, TimeUnit.SECONDS);
 			assertTrue(future1.isDone());
@@ -215,7 +215,7 @@ public class SlotPoolTest extends TestLogger {
 
 			SlotPoolGateway slotPoolGateway = setupSlotPool(slotPool, resourceManagerGateway, mainThreadExecutor);
 			Scheduler scheduler = setupScheduler(slotPoolGateway, mainThreadExecutor);
-			executeInMainThreadAndJoin(() -> slotPoolGateway.registerTaskManager(taskManagerLocation.getResourceID()));
+			slotPoolGateway.registerTaskManager(taskManagerLocation.getResourceID());
 
 			CompletableFuture<LogicalSlot> future1 = scheduler.allocateSlot(
 				new SlotRequestId(),
@@ -232,7 +232,7 @@ public class SlotPoolTest extends TestLogger {
 				0,
 				DEFAULT_TESTING_PROFILE);
 
-			assertTrue(executeInMainThreadAndJoin(() -> slotPoolGateway.offerSlot(taskManagerLocation, taskManagerGateway, slotOffer)).get());
+			assertTrue(slotPoolGateway.offerSlot(taskManagerLocation, taskManagerGateway, slotOffer));
 
 			LogicalSlot slot1 = future1.get(1, TimeUnit.SECONDS);
 			assertTrue(future1.isDone());
@@ -288,7 +288,7 @@ public class SlotPoolTest extends TestLogger {
 			final TaskManagerLocation invalidTaskManagerLocation = new LocalTaskManagerLocation();
 
 			// slot from unregistered resource
-			assertFalse(executeInMainThreadAndJoin(() -> slotPoolGateway.offerSlot(invalidTaskManagerLocation, taskManagerGateway, slotOffer)).get());
+			assertFalse(slotPoolGateway.offerSlot(invalidTaskManagerLocation, taskManagerGateway, slotOffer));
 
 			final SlotOffer nonRequestedSlotOffer = new SlotOffer(
 				new AllocationID(),
@@ -296,31 +296,31 @@ public class SlotPoolTest extends TestLogger {
 				DEFAULT_TESTING_PROFILE);
 
 			// we'll also accept non requested slots
-			assertTrue(executeInMainThreadAndJoin(() -> slotPoolGateway.offerSlot(taskManagerLocation, taskManagerGateway, nonRequestedSlotOffer)).get());
+			assertTrue(slotPoolGateway.offerSlot(taskManagerLocation, taskManagerGateway, nonRequestedSlotOffer));
 
 			// accepted slot
-			assertTrue(executeInMainThreadAndJoin(() -> slotPoolGateway.offerSlot(taskManagerLocation, taskManagerGateway, slotOffer)).get());
+			assertTrue(slotPoolGateway.offerSlot(taskManagerLocation, taskManagerGateway, slotOffer));
 			LogicalSlot slot = future.get(timeout.toMilliseconds(), TimeUnit.MILLISECONDS);
 			assertTrue(slot.isAlive());
 
 			// duplicated offer with using slot
-			assertTrue(executeInMainThreadAndJoin(() -> slotPoolGateway.offerSlot(taskManagerLocation, taskManagerGateway, slotOffer)).get());
+			assertTrue(slotPoolGateway.offerSlot(taskManagerLocation, taskManagerGateway, slotOffer));
 			assertTrue(slot.isAlive());
 
 			final SlotOffer anotherSlotOfferWithSameAllocationId = new SlotOffer(
 				slotRequest.getAllocationId(),
 				1,
 				DEFAULT_TESTING_PROFILE);
-			assertFalse(executeInMainThreadAndJoin(() -> slotPoolGateway.offerSlot(taskManagerLocation, taskManagerGateway, anotherSlotOfferWithSameAllocationId)).get());
+			assertFalse(slotPoolGateway.offerSlot(taskManagerLocation, taskManagerGateway, anotherSlotOfferWithSameAllocationId));
 
 			TaskManagerLocation anotherTaskManagerLocation = new LocalTaskManagerLocation();
-			assertFalse(executeInMainThreadAndJoin(() -> slotPoolGateway.offerSlot(anotherTaskManagerLocation, taskManagerGateway, slotOffer)).get());
+			assertFalse(slotPoolGateway.offerSlot(anotherTaskManagerLocation, taskManagerGateway, slotOffer));
 
 			// duplicated offer with free slot
 			executeInMainThreadAndJoin(slot::releaseSlot);
-			assertTrue(executeInMainThreadAndJoin(() -> slotPoolGateway.offerSlot(taskManagerLocation, taskManagerGateway, slotOffer)).get());
-			assertFalse(executeInMainThreadAndJoin(() -> slotPoolGateway.offerSlot(taskManagerLocation, taskManagerGateway, anotherSlotOfferWithSameAllocationId)).get());
-			assertFalse(executeInMainThreadAndJoin(() -> slotPoolGateway.offerSlot(anotherTaskManagerLocation, taskManagerGateway, slotOffer)).get());
+			assertTrue(slotPoolGateway.offerSlot(taskManagerLocation, taskManagerGateway, slotOffer));
+			assertFalse(slotPoolGateway.offerSlot(taskManagerLocation, taskManagerGateway, anotherSlotOfferWithSameAllocationId));
+			assertFalse(slotPoolGateway.offerSlot(anotherTaskManagerLocation, taskManagerGateway, slotOffer));
 		}
 	}
 
@@ -333,7 +333,7 @@ public class SlotPoolTest extends TestLogger {
 		try (SlotPool slotPool = new SlotPool(jobId)) {
 			SlotPoolGateway slotPoolGateway = setupSlotPool(slotPool, resourceManagerGateway, mainThreadExecutor);
 			Scheduler scheduler = setupScheduler(slotPoolGateway, mainThreadExecutor);
-			executeInMainThreadAndJoin(() -> slotPoolGateway.registerTaskManager(taskManagerLocation.getResourceID()));
+			slotPoolGateway.registerTaskManager(taskManagerLocation.getResourceID());
 
 			CompletableFuture<LogicalSlot> future1 = scheduler.allocateSlot(
 				new SlotRequestId(),
@@ -356,7 +356,7 @@ public class SlotPoolTest extends TestLogger {
 				0,
 				DEFAULT_TESTING_PROFILE);
 
-			assertTrue(executeInMainThreadAndJoin(() -> slotPoolGateway.offerSlot(taskManagerLocation, taskManagerGateway, slotOffer)).get());
+			assertTrue(slotPoolGateway.offerSlot(taskManagerLocation, taskManagerGateway, slotOffer));
 
 			LogicalSlot slot1 = future1.get(1, TimeUnit.SECONDS);
 			assertTrue(future1.isDone());
@@ -367,7 +367,7 @@ public class SlotPoolTest extends TestLogger {
 
 			slot1.tryAssignPayload(dummyPayload);
 
-			executeInMainThreadAndJoin(() -> slotPoolGateway.releaseTaskManager(taskManagerLocation.getResourceID(), null));
+			slotPoolGateway.releaseTaskManager(taskManagerLocation.getResourceID(), null);
 
 			releaseFuture.get();
 			assertFalse(slot1.isAlive());
@@ -492,9 +492,9 @@ public class SlotPoolTest extends TestLogger {
 
 			final SlotOffer slotOffer = new SlotOffer(allocationId1, 0, ResourceProfile.UNKNOWN);
 
-			executeInMainThreadAndJoin(() -> slotPoolGateway.registerTaskManager(taskManagerLocation.getResourceID())).get();
+			slotPoolGateway.registerTaskManager(taskManagerLocation.getResourceID());
 
-			assertTrue(executeInMainThreadAndJoin(() -> slotPoolGateway.offerSlot(taskManagerLocation, taskManagerGateway, slotOffer)).get());
+			assertTrue(slotPoolGateway.offerSlot(taskManagerLocation, taskManagerGateway, slotOffer));
 
 			// the slot offer should fulfill the second slot request
 			assertEquals(allocationId1, slotFuture2.get().getAllocationId());
@@ -513,7 +513,7 @@ public class SlotPoolTest extends TestLogger {
 		try (SlotPool slotPool = new SlotPool(jobId)) {
 			SlotPoolGateway slotPoolGateway = setupSlotPool(slotPool, resourceManagerGateway, mainThreadExecutor);
 
-			executeInMainThreadAndJoin(() -> slotPoolGateway.registerTaskManager(taskManagerLocation.getResourceID()));
+			slotPoolGateway.registerTaskManager(taskManagerLocation.getResourceID());
 
 			final int numSlotOffers = 2;
 
@@ -539,9 +539,7 @@ public class SlotPoolTest extends TestLogger {
 					}
 				});
 
-			final CompletableFuture<Collection<SlotOffer>> acceptedSlotOffersFuture = executeInMainThreadAndJoin(() -> slotPoolGateway.offerSlots(taskManagerLocation, taskManagerGateway, slotOffers));
-
-			final Collection<SlotOffer> acceptedSlotOffers = acceptedSlotOffersFuture.get(timeout.toMilliseconds(), TimeUnit.MILLISECONDS);
+			final Collection<SlotOffer> acceptedSlotOffers = slotPoolGateway.offerSlots(taskManagerLocation, taskManagerGateway, slotOffers);
 
 			assertThat(acceptedSlotOffers, Matchers.equalTo(slotOffers));
 
@@ -587,19 +585,13 @@ public class SlotPoolTest extends TestLogger {
 			final SlotOffer slotToExpire = new SlotOffer(expiredSlotID, 0, ResourceProfile.UNKNOWN);
 			final SlotOffer slotToNotExpire = new SlotOffer(freshSlotID, 1, ResourceProfile.UNKNOWN);
 
-			assertThat(
-				executeInMainThreadAndJoin(() -> slotPoolGateway.registerTaskManager(taskManagerLocation.getResourceID())).get(),
-				Matchers.is(Acknowledge.get()));
+			slotPoolGateway.registerTaskManager(taskManagerLocation.getResourceID());
 
-			assertThat(
-				executeInMainThreadAndJoin(() -> slotPoolGateway.offerSlot(taskManagerLocation, taskManagerGateway, slotToExpire)).get(),
-				Matchers.is(true));
+			assertTrue(slotPoolGateway.offerSlot(taskManagerLocation, taskManagerGateway, slotToExpire));
 
 			clock.advanceTime(timeout.toMilliseconds() - 1L, TimeUnit.MILLISECONDS);
 
-			assertThat(
-				executeInMainThreadAndJoin(() -> slotPoolGateway.offerSlot(taskManagerLocation, taskManagerGateway, slotToNotExpire)).get(),
-				Matchers.is(true));
+			assertTrue(slotPoolGateway.offerSlot(taskManagerLocation, taskManagerGateway, slotToNotExpire));
 
 			clock.advanceTime(1L, TimeUnit.MILLISECONDS);
 
@@ -646,13 +638,9 @@ public class SlotPoolTest extends TestLogger {
 			final CompletableFuture<Acknowledge> responseFuture = new CompletableFuture<>();
 			responseQueue.add(responseFuture);
 
-			assertThat(
-				executeInMainThreadAndJoin(() -> slotPoolGateway.registerTaskManager(taskManagerLocation.getResourceID())).get(),
-				Matchers.is(Acknowledge.get()));
+			slotPoolGateway.registerTaskManager(taskManagerLocation.getResourceID());
 
-			assertThat(
-				executeInMainThreadAndJoin(() -> slotPoolGateway.offerSlot(taskManagerLocation, taskManagerGateway, slotToExpire)).get(),
-				Matchers.is(true));
+			assertTrue(slotPoolGateway.offerSlot(taskManagerLocation, taskManagerGateway, slotToExpire));
 
 			clock.advanceTime(timeout.toMilliseconds(), TimeUnit.MILLISECONDS);
 
@@ -676,7 +664,7 @@ public class SlotPoolTest extends TestLogger {
 			allocatedSlotFuture = allocateSlot(scheduler, new SlotRequestId());
 
 			// release the TaskExecutor before we get a response from the slot releasing
-			executeInMainThreadAndJoin(() -> slotPoolGateway.releaseTaskManager(taskManagerLocation.getResourceID(), null)).get();
+			slotPoolGateway.releaseTaskManager(taskManagerLocation.getResourceID(), null);
 
 			// let the slot releasing fail --> since the owning TaskExecutor is no longer registered
 			// the slot should be discarded
@@ -725,8 +713,8 @@ public class SlotPoolTest extends TestLogger {
 				slotOffers.add(new SlotOffer(allocationIds.take(), i, ResourceProfile.UNKNOWN));
 			}
 
-			executeInMainThreadAndJoin(() -> slotPoolGateway.registerTaskManager(taskManagerLocation.getResourceID()));
-			executeInMainThreadAndJoin(() -> slotPoolGateway.offerSlots(taskManagerLocation, taskManagerGateway, slotOffers));
+			slotPoolGateway.registerTaskManager(taskManagerLocation.getResourceID());
+			slotPoolGateway.offerSlots(taskManagerLocation, taskManagerGateway, slotOffers);
 
 			// wait for the completion of both slot futures
 			FutureUtils.waitForAll(slotRequestFutures.values()).get();
@@ -742,21 +730,21 @@ public class SlotPoolTest extends TestLogger {
 			// fail allocations one by one
 			for (int i = 0; i < parallelism - 1; i++) {
 				final SlotOffer slotOffer = slotOffers.get(i);
-				final CompletableFuture<SerializableOptional<ResourceID>> emptyTaskExecutorFuture =
-					executeInMainThreadAndJoin(() -> slotPoolGateway.failAllocation(
+				final Optional<ResourceID> emptyTaskExecutorFuture =
+					slotPoolGateway.failAllocation(
 						slotOffer.getAllocationId(),
-						failException));
+						failException);
 
-				assertThat(emptyTaskExecutorFuture.get().isPresent(), is(false));
+				assertThat(emptyTaskExecutorFuture.isPresent(), is(false));
 				assertThat(freedSlots.take(), is(equalTo(slotOffer.getAllocationId())));
 			}
 
 			final SlotOffer slotOffer = slotOffers.get(parallelism - 1);
-			final CompletableFuture<SerializableOptional<ResourceID>> emptyTaskExecutorFuture =
-				executeInMainThreadAndJoin(() -> slotPoolGateway.failAllocation(
+			final Optional<ResourceID> emptyTaskExecutorFuture =
+				slotPoolGateway.failAllocation(
 					slotOffer.getAllocationId(),
-					failException));
-			assertThat(emptyTaskExecutorFuture.get().get(), is(equalTo(taskManagerLocation.getResourceID())));
+					failException);
+			assertThat(emptyTaskExecutorFuture.get(), is(equalTo(taskManagerLocation.getResourceID())));
 			assertThat(freedSlots.take(), is(equalTo(slotOffer.getAllocationId())));
 
 		}
@@ -782,10 +770,9 @@ public class SlotPoolTest extends TestLogger {
 			assertThat(slotFuture.isDone(), is(false));
 
 			final FlinkException cause = new FlinkException("Fail pending slot request failure.");
-			final CompletableFuture<SerializableOptional<ResourceID>> responseFuture =
-				executeInMainThreadAndJoin(() -> slotPoolGateway.failAllocation(allocationId, cause));
+			final Optional<ResourceID> responseFuture = slotPoolGateway.failAllocation(allocationId, cause);
 
-			assertThat(responseFuture.get().isPresent(), is(false));
+			assertThat(responseFuture.isPresent(), is(false));
 
 			try {
 				slotFuture.get();

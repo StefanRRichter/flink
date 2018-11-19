@@ -150,7 +150,7 @@ public class SchedulerTestBase extends TestLogger {
 			final SlotPoolGateway slotPoolGateway = slotPool;
 
 			try {
-				slotPoolGateway.registerTaskManager(resourceId).get();
+				slotPoolGateway.registerTaskManager(resourceId);
 			} catch (Exception e) {
 				throw new RuntimeException("Unexpected exception occurred. This indicates a programming bug.", e);
 			}
@@ -173,7 +173,7 @@ public class SchedulerTestBase extends TestLogger {
 				acceptedSlotOffers = slotPoolGateway.offerSlots(
 					taskManagerLocation,
 					taskManagerGateway,
-					slotOffers).get();
+					slotOffers);
 			} catch (Exception e) {
 				throw new RuntimeException("Unexpected exception occurred. This indicates a programming bug.", e);
 			}
@@ -186,7 +186,7 @@ public class SchedulerTestBase extends TestLogger {
 		@Override
 		public void releaseTaskManager(ResourceID resourceId) {
 			try {
-				slotPool.releaseTaskManager(resourceId, null).get();
+				slotPool.releaseTaskManager(resourceId, null);
 			} catch (Exception e) {
 				throw new RuntimeException("Should not have happened.", e);
 			}

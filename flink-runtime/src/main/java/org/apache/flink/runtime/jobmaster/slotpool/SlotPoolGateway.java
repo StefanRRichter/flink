@@ -25,12 +25,10 @@ import org.apache.flink.runtime.clusterframework.types.ResourceProfile;
 import org.apache.flink.runtime.jobmanager.slots.TaskManagerGateway;
 import org.apache.flink.runtime.jobmaster.SlotInfo;
 import org.apache.flink.runtime.jobmaster.SlotRequestId;
-import org.apache.flink.runtime.messages.Acknowledge;
 import org.apache.flink.runtime.resourcemanager.ResourceManagerGateway;
 import org.apache.flink.runtime.rpc.RpcTimeout;
 import org.apache.flink.runtime.taskexecutor.slot.SlotOffer;
 import org.apache.flink.runtime.taskmanager.TaskManagerLocation;
-import org.apache.flink.types.SerializableOptional;
 
 import javax.annotation.Nonnull;
 
@@ -78,18 +76,16 @@ public interface SlotPoolGateway extends AllocatedSlotActions {
 	 * Registers a TaskExecutor with the given {@link ResourceID} at {@link SlotPool}.
 	 *
 	 * @param resourceID identifying the TaskExecutor to register
-	 * @return Future acknowledge which is completed after the TaskExecutor has been registered
 	 */
-	CompletableFuture<Acknowledge> registerTaskManager(ResourceID resourceID);
+	void registerTaskManager(ResourceID resourceID);
 
 	/**
 	 * Releases a TaskExecutor with the given {@link ResourceID} from the {@link SlotPool}.
 	 *
 	 * @param resourceId identifying the TaskExecutor which shall be released from the SlotPool
 	 * @param cause for the releasing of the TaskManager
-	 * @return Future acknowledge which is completed after the TaskExecutor has been released
 	 */
-	CompletableFuture<Acknowledge> releaseTaskManager(final ResourceID resourceId, final Exception cause);
+	void releaseTaskManager(final ResourceID resourceId, final Exception cause);
 
 	/**
 	 * Offers a slot to the {@link SlotPool}. The slot offer can be accepted or
@@ -100,7 +96,7 @@ public interface SlotPoolGateway extends AllocatedSlotActions {
 	 * @param slotOffer slot which is offered to the {@link SlotPool}
 	 * @return True (future) if the slot has been accepted, otherwise false (future)
 	 */
-	CompletableFuture<Boolean> offerSlot(
+	boolean offerSlot(
 		TaskManagerLocation taskManagerLocation,
 		TaskManagerGateway taskManagerGateway,
 		SlotOffer slotOffer);
@@ -116,7 +112,7 @@ public interface SlotPoolGateway extends AllocatedSlotActions {
 	 * @return A collection of accepted slot offers (future). The remaining slot offers are
 	 * 			implicitly rejected.
 	 */
-	CompletableFuture<Collection<SlotOffer>> offerSlots(
+	Collection<SlotOffer> offerSlots(
 		TaskManagerLocation taskManagerLocation,
 		TaskManagerGateway taskManagerGateway,
 		Collection<SlotOffer> offers);
@@ -128,7 +124,7 @@ public interface SlotPoolGateway extends AllocatedSlotActions {
 	 * @param cause of the failure
 	 * @return An optional task executor id if this task executor has no more slots registered
 	 */
-	CompletableFuture<SerializableOptional<ResourceID>> failAllocation(AllocationID allocationID, Exception cause);
+	Optional<ResourceID> failAllocation(AllocationID allocationID, Exception cause);
 
 	// ------------------------------------------------------------------------
 	//  allocating and disposing slots

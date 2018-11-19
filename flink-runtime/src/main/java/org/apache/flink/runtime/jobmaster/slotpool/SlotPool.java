@@ -44,7 +44,6 @@ import org.apache.flink.runtime.taskexecutor.slot.SlotOffer;
 import org.apache.flink.runtime.taskmanager.TaskManagerLocation;
 import org.apache.flink.runtime.util.clock.Clock;
 import org.apache.flink.runtime.util.clock.SystemClock;
-import org.apache.flink.types.SerializableOptional;
 import org.apache.flink.util.FlinkException;
 import org.apache.flink.util.Preconditions;
 
@@ -68,7 +67,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.function.Function;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 import static org.apache.flink.util.Preconditions.checkNotNull;
 
@@ -472,26 +470,18 @@ public class SlotPool implements SlotPoolGateway, AllocatedSlotActions, AutoClos
 	}
 
 	@Override
-	public CompletableFuture<Collection<SlotOffer>> offerSlots(
+	public Collection<SlotOffer> offerSlots(
 			TaskManagerLocation taskManagerLocation,
 			TaskManagerGateway taskManagerGateway,
 			Collection<SlotOffer> offers) {
 
-		List<CompletableFuture<Optional<SlotOffer>>> acceptedSlotOffers = offers.stream().map(
-			offer -> offerSlot(
-					taskManagerLocation,
-					taskManagerGateway,
-					offer)
-				.<Optional<SlotOffer>>thenApply(
-					(acceptedSlot) -> acceptedSlot ? Optional.of(offer) : Optional.empty()
-				)
-		).collect(Collectors.toList());
-
-		CompletableFuture<Collection<Optional<SlotOffer>>> optionalSlotOffers = FutureUtils.combineAll(acceptedSlotOffers);
-
-		return optionalSlotOffers.thenApply(collection -> collection.stream()
-				.flatMap(opt -> opt.map(Stream::of).orElseGet(Stream::empty))
-				.collect(Collectors.toList()));
+		ArrayList<SlotOffer> acceptedOffers = new ArrayList<>(offers.size());
+		for (SlotOffer offer : offers) {
+			if (offerSlot(taskManagerLocation, taskManagerGateway, offer)) {
+				acceptedOffers.add(offer);
+			}
+		}
+		return acceptedOffers;
 	}
 
 	/**
@@ -506,7 +496,7 @@ public class SlotPool implements SlotPoolGateway, AllocatedSlotActions, AutoClos
 	 * @return True if we accept the offering
 	 */
 	@Override
-	public CompletableFuture<Boolean> offerSlot(
+	public boolean offerSlot(
 			final TaskManagerLocation taskManagerLocation,
 			final TaskManagerGateway taskManagerGateway,
 			final SlotOffer slotOffer) {
@@ -518,7 +508,7 @@ public class SlotPool implements SlotPoolGateway, AllocatedSlotActions, AutoClos
 		if (!registeredTaskManagers.contains(resourceID)) {
 			log.debug("Received outdated slot offering [{}] from unregistered TaskManager: {}",
 					slotOffer.getAllocationId(), taskManagerLocation);
-			return CompletableFuture.completedFuture(false);
+			return false;
 		}
 
 		// check whether we have already using this slot
@@ -541,11 +531,11 @@ public class SlotPool implements SlotPoolGateway, AllocatedSlotActions, AutoClos
 
 				// return true here so that the sender will get a positive acknowledgement to the retry
 				// and mark the offering as a success
-				return CompletableFuture.completedFuture(true);
+				return true;
 			} else {
 				// the allocation has been fulfilled by another slot, reject the offer so the task executor
 				// will offer the slot to the resource manager
-				return CompletableFuture.completedFuture(false);
+				return false;
 			}
 		}
 
@@ -579,7 +569,7 @@ public class SlotPool implements SlotPoolGateway, AllocatedSlotActions, AutoClos
 
 		// we accepted the request in any case. slot will be released after it idled for
 		// too long and timed out
-		return CompletableFuture.completedFuture(true);
+		return true;
 	}
 
 
@@ -602,12 +592,12 @@ public class SlotPool implements SlotPoolGateway, AllocatedSlotActions, AutoClos
 	 * @return Optional task executor if it has no more slots registered
 	 */
 	@Override
-	public CompletableFuture<SerializableOptional<ResourceID>> failAllocation(final AllocationID allocationID, final Exception cause) {
+	public Optional<ResourceID> failAllocation(final AllocationID allocationID, final Exception cause) {
 		final PendingRequest pendingRequest = pendingRequests.removeKeyB(allocationID);
 		if (pendingRequest != null) {
 			// request was still pending
 			failPendingRequest(pendingRequest, cause);
-			return CompletableFuture.completedFuture(SerializableOptional.empty());
+			return Optional.empty();
 		}
 		else {
 			return tryFailingAllocatedSlot(allocationID, cause);
@@ -616,7 +606,7 @@ public class SlotPool implements SlotPoolGateway, AllocatedSlotActions, AutoClos
 		// TODO: add some unit tests when the previous two are ready, the allocation may failed at any phase
 	}
 
-	private CompletableFuture<SerializableOptional<ResourceID>> tryFailingAllocatedSlot(AllocationID allocationID, Exception cause) {
+	private Optional<ResourceID> tryFailingAllocatedSlot(AllocationID allocationID, Exception cause) {
 		AllocatedSlot allocatedSlot = availableSlots.tryRemove(allocationID);
 
 		if (allocatedSlot == null) {
@@ -635,11 +625,11 @@ public class SlotPool implements SlotPoolGateway, AllocatedSlotActions, AutoClos
 			final ResourceID taskManagerId = allocatedSlot.getTaskManagerId();
 
 			if (!availableSlots.containsTaskManager(taskManagerId) && !allocatedSlots.containResource(taskManagerId)) {
-				return CompletableFuture.completedFuture(SerializableOptional.of(taskManagerId));
+				return Optional.of(taskManagerId);
 			}
 		}
 
-		return CompletableFuture.completedFuture(SerializableOptional.empty());
+		return Optional.empty();
 	}
 
 	// ------------------------------------------------------------------------
@@ -651,14 +641,11 @@ public class SlotPool implements SlotPoolGateway, AllocatedSlotActions, AutoClos
 	 * Also it provides a way for us to keep "dead" or "abnormal" TaskManagers out of this pool.
 	 *
 	 * @param resourceID The id of the TaskManager
-	 * @return Future acknowledge if th operation was successful
 	 */
 	@Override
-	public CompletableFuture<Acknowledge> registerTaskManager(final ResourceID resourceID) {
+	public void registerTaskManager(final ResourceID resourceID) {
 		log.debug("Register new TaskExecutor {}.", resourceID);
 		registeredTaskManagers.add(resourceID);
-
-		return CompletableFuture.completedFuture(Acknowledge.get());
 	}
 
 	/**
@@ -669,12 +656,10 @@ public class SlotPool implements SlotPoolGateway, AllocatedSlotActions, AutoClos
 	 * @param cause for the releasing of the TaskManager
 	 */
 	@Override
-	public CompletableFuture<Acknowledge> releaseTaskManager(final ResourceID resourceId, final Exception cause) {
+	public void releaseTaskManager(final ResourceID resourceId, final Exception cause) {
 		if (registeredTaskManagers.remove(resourceId)) {
 			releaseTaskManagerInternal(resourceId, cause);
 		}
-
-		return CompletableFuture.completedFuture(Acknowledge.get());
 	}
 
 	// ------------------------------------------------------------------------

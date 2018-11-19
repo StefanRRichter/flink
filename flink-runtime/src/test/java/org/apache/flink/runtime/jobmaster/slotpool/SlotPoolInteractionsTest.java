@@ -248,9 +248,9 @@ public class SlotPoolInteractionsTest extends TestLogger {
 			final TaskManagerLocation taskManagerLocation = new LocalTaskManagerLocation();
 			final TaskManagerGateway taskManagerGateway = new SimpleAckingTaskManagerGateway();
 
-			pool.registerTaskManager(taskManagerLocation.getResourceID()).get();
+			pool.registerTaskManager(taskManagerLocation.getResourceID());
 
-			assertTrue(pool.offerSlot(taskManagerLocation, taskManagerGateway, slotOffer).get());
+			assertTrue(pool.offerSlot(taskManagerLocation, taskManagerGateway, slotOffer));
 
 			assertTrue(pool.containsAvailableSlot(allocationId));
 		}
