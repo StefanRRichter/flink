@@ -22,6 +22,7 @@ import org.apache.flink.api.common.JobID;
 import org.apache.flink.runtime.JobException;
 import org.apache.flink.runtime.akka.AkkaUtils;
 import org.apache.flink.runtime.concurrent.Executors;
+import org.apache.flink.runtime.concurrent.ScheduledExecutorServiceAdapter;
 import org.apache.flink.runtime.execution.ExecutionState;
 import org.apache.flink.runtime.executiongraph.failover.FailoverStrategy;
 import org.apache.flink.runtime.executiongraph.failover.FailoverStrategy.Factory;
@@ -130,6 +131,7 @@ public class FailoverRegionTest extends TestLogger {
 			new DummyJobInformation(
 				jobId,
 				jobName),
+			new ScheduledExecutorServiceAdapter(TestingUtils.defaultExecutor()),
 			TestingUtils.defaultExecutor(),
 			TestingUtils.defaultExecutor(),
 			AkkaUtils.getDefaultTimeout(),
@@ -252,6 +254,7 @@ public class FailoverRegionTest extends TestLogger {
 				new DummyJobInformation(
 					jobId,
 					jobName),
+				new ScheduledExecutorServiceAdapter(TestingUtils.defaultExecutor()),
 				TestingUtils.defaultExecutor(),
 				TestingUtils.defaultExecutor(),
 				AkkaUtils.getDefaultTimeout(),
@@ -324,6 +327,7 @@ public class FailoverRegionTest extends TestLogger {
 			new DummyJobInformation(
 				jobId,
 				jobName),
+			new ScheduledExecutorServiceAdapter(TestingUtils.defaultExecutor()),
 			TestingUtils.defaultExecutor(),
 			TestingUtils.defaultExecutor(),
 			AkkaUtils.getDefaultTimeout(),
@@ -433,6 +437,7 @@ public class FailoverRegionTest extends TestLogger {
 			new DummyJobInformation(
 				jobId,
 				jobName),
+			new ScheduledExecutorServiceAdapter(TestingUtils.defaultExecutor()),
 			TestingUtils.defaultExecutor(),
 			TestingUtils.defaultExecutor(),
 			AkkaUtils.getDefaultTimeout(),

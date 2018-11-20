@@ -1284,6 +1284,8 @@ class JobManager(
           executionGraph,
           jobGraph,
           flinkConfiguration,
+          //TODO how to get a main-thread executor here?
+          new ScheduledExecutorServiceAdapter(futureExecutor),
           futureExecutor,
           ioExecutor,
           scheduler,

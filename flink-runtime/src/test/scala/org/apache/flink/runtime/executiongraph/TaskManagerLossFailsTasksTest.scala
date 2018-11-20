@@ -23,6 +23,7 @@ import java.util.concurrent.Executors
 import org.apache.flink.api.common.{ExecutionConfig, JobID}
 import org.apache.flink.configuration.Configuration
 import org.apache.flink.runtime.akka.AkkaUtils
+import org.apache.flink.runtime.concurrent.ScheduledExecutorServiceAdapter
 import org.apache.flink.runtime.executiongraph.ExecutionGraphTestUtils.SimpleActorGateway
 import org.apache.flink.runtime.executiongraph.restart.NoRestartStrategy
 import org.apache.flink.runtime.jobgraph.{JobGraph, JobStatus, JobVertex}
@@ -31,9 +32,7 @@ import org.apache.flink.runtime.jobmanager.slots.ActorTaskManagerGateway
 import org.apache.flink.runtime.testingUtils.TestingUtils
 import org.apache.flink.runtime.testtasks.NoOpInvokable
 import org.apache.flink.util.SerializedValue
-
 import org.junit.runner.RunWith
-
 import org.scalatest.junit.JUnitRunner
 import org.scalatest.{Matchers, WordSpecLike}
 
@@ -63,6 +62,7 @@ class TaskManagerLossFailsTasksTest extends WordSpecLike with Matchers {
         val jobGraph = new JobGraph("Pointwise job", sender)
 
         val eg = new ExecutionGraph(
+          new ScheduledExecutorServiceAdapter(executor),
           executor,
           executor,
           new JobID(),

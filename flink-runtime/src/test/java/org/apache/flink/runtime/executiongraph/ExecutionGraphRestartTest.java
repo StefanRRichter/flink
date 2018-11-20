@@ -29,6 +29,7 @@ import org.apache.flink.runtime.JobException;
 import org.apache.flink.runtime.akka.AkkaUtils;
 import org.apache.flink.runtime.clusterframework.types.ResourceID;
 import org.apache.flink.runtime.concurrent.ScheduledExecutor;
+import org.apache.flink.runtime.concurrent.ScheduledExecutorServiceAdapter;
 import org.apache.flink.runtime.execution.ExecutionState;
 import org.apache.flink.runtime.execution.SuppressRestartsException;
 import org.apache.flink.runtime.executiongraph.restart.FixedDelayRestartStrategy;
@@ -196,6 +197,7 @@ public class ExecutionGraphRestartTest extends TestLogger {
 
 		// Blocking program
 		ExecutionGraph executionGraph = new ExecutionGraph(
+			new ScheduledExecutorServiceAdapter(TestingUtils.defaultExecutor()),
 			TestingUtils.defaultExecutor(),
 			TestingUtils.defaultExecutor(),
 			new JobID(),
@@ -502,6 +504,7 @@ public class ExecutionGraphRestartTest extends TestLogger {
 		ControllableRestartStrategy controllableRestartStrategy = new ControllableRestartStrategy(timeout);
 
 		ExecutionGraph eg = new ExecutionGraph(
+			new ScheduledExecutorServiceAdapter(TestingUtils.defaultExecutor()),
 			TestingUtils.defaultExecutor(),
 			TestingUtils.defaultExecutor(),
 			new JobID(),
@@ -952,6 +955,7 @@ public class ExecutionGraphRestartTest extends TestLogger {
 
 	private static ExecutionGraph newExecutionGraph(RestartStrategy restartStrategy, SlotProvider slotProvider) throws IOException {
 		return new ExecutionGraph(
+			new ScheduledExecutorServiceAdapter(TestingUtils.defaultExecutor()),
 			TestingUtils.defaultExecutor(),
 			TestingUtils.defaultExecutor(),
 			new JobID(),

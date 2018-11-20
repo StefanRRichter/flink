@@ -23,6 +23,7 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.runtime.JobException;
 import org.apache.flink.runtime.clusterframework.types.SlotProfile;
 import org.apache.flink.runtime.concurrent.ScheduledExecutor;
+import org.apache.flink.runtime.concurrent.ScheduledExecutorServiceAdapter;
 import org.apache.flink.runtime.execution.ExecutionState;
 import org.apache.flink.runtime.execution.SuppressRestartsException;
 import org.apache.flink.runtime.executiongraph.metrics.RestartTimeGauge;
@@ -85,6 +86,7 @@ public class ExecutionGraphMetricsTest extends TestLogger {
 			TestingRestartStrategy testingRestartStrategy = new TestingRestartStrategy();
 
 			ExecutionGraph executionGraph = new ExecutionGraph(
+				new ScheduledExecutorServiceAdapter(executor),
 				executor,
 				executor,
 				jobGraph.getJobID(),
