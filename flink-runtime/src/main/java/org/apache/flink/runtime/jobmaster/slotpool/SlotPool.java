@@ -217,6 +217,9 @@ public class SlotPool implements SlotPoolGateway, AllocatedSlotActions, AutoClos
 
 	@Override
 	public void connectToResourceManager(ResourceManagerGateway resourceManagerGateway) {
+
+		jmMainThreadScheduledExecutor.ensureIsMainThread();
+
 		this.resourceManagerGateway = checkNotNull(resourceManagerGateway);
 
 		// work on all slots waiting for this connection
@@ -230,6 +233,9 @@ public class SlotPool implements SlotPoolGateway, AllocatedSlotActions, AutoClos
 
 	@Override
 	public void disconnectResourceManager() {
+
+		jmMainThreadScheduledExecutor.ensureIsMainThread();
+
 		this.resourceManagerGateway = null;
 	}
 
@@ -397,6 +403,9 @@ public class SlotPool implements SlotPoolGateway, AllocatedSlotActions, AutoClos
 	public Optional<AllocatedSlotContext> allocateAvailableSlot(
 		@Nonnull SlotRequestId slotRequestId,
 		@Nonnull AllocationID allocationID) {
+
+		jmMainThreadScheduledExecutor.ensureIsMainThread();
+
 		AllocatedSlot allocatedSlot = availableSlots.tryRemove(allocationID);
 		if (allocatedSlot != null) {
 			allocatedSlots.add(slotRequestId, allocatedSlot);
@@ -413,6 +422,8 @@ public class SlotPool implements SlotPoolGateway, AllocatedSlotActions, AutoClos
 		@Nonnull ResourceProfile resourceProfile,
 		Time timeout) {
 
+		jmMainThreadScheduledExecutor.ensureIsMainThread();
+
 		return requestNewAllocatedSlotInternal(slotRequestId, resourceProfile, timeout)
 			.thenApply((Function.identity()));
 	}
@@ -420,6 +431,9 @@ public class SlotPool implements SlotPoolGateway, AllocatedSlotActions, AutoClos
 	@Override
 	@Nonnull
 	public Collection<SlotInfo> getAvailableSlotsInformation() {
+
+		jmMainThreadScheduledExecutor.ensureIsMainThread();
+
 		return availableSlots.listSlotInfo();
 	}
 
@@ -475,6 +489,8 @@ public class SlotPool implements SlotPoolGateway, AllocatedSlotActions, AutoClos
 			TaskManagerGateway taskManagerGateway,
 			Collection<SlotOffer> offers) {
 
+		jmMainThreadScheduledExecutor.ensureIsMainThread();
+
 		ArrayList<SlotOffer> acceptedOffers = new ArrayList<>(offers.size());
 		for (SlotOffer offer : offers) {
 			if (offerSlot(taskManagerLocation, taskManagerGateway, offer)) {
@@ -500,6 +516,8 @@ public class SlotPool implements SlotPoolGateway, AllocatedSlotActions, AutoClos
 			final TaskManagerLocation taskManagerLocation,
 			final TaskManagerGateway taskManagerGateway,
 			final SlotOffer slotOffer) {
+
+		jmMainThreadScheduledExecutor.ensureIsMainThread();
 
 		// check if this TaskManager is valid
 		final ResourceID resourceID = taskManagerLocation.getResourceID();
@@ -593,6 +611,9 @@ public class SlotPool implements SlotPoolGateway, AllocatedSlotActions, AutoClos
 	 */
 	@Override
 	public Optional<ResourceID> failAllocation(final AllocationID allocationID, final Exception cause) {
+
+		jmMainThreadScheduledExecutor.ensureIsMainThread();
+
 		final PendingRequest pendingRequest = pendingRequests.removeKeyB(allocationID);
 		if (pendingRequest != null) {
 			// request was still pending
@@ -644,6 +665,7 @@ public class SlotPool implements SlotPoolGateway, AllocatedSlotActions, AutoClos
 	 */
 	@Override
 	public void registerTaskManager(final ResourceID resourceID) {
+		jmMainThreadScheduledExecutor.ensureIsMainThread();
 		log.debug("Register new TaskExecutor {}.", resourceID);
 		registeredTaskManagers.add(resourceID);
 	}
@@ -657,6 +679,7 @@ public class SlotPool implements SlotPoolGateway, AllocatedSlotActions, AutoClos
 	 */
 	@Override
 	public void releaseTaskManager(final ResourceID resourceId, final Exception cause) {
+		jmMainThreadScheduledExecutor.ensureIsMainThread();
 		if (registeredTaskManagers.remove(resourceId)) {
 			releaseTaskManagerInternal(resourceId, cause);
 		}

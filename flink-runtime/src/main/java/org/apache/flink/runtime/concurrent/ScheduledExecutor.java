@@ -89,4 +89,14 @@ public interface ScheduledExecutor extends Executor {
 		long initialDelay,
 		long delay,
 		TimeUnit unit);
+
+	default boolean isMainThread() {
+		throw new UnsupportedOperationException("Not implemented.");
+	}
+
+	default void ensureIsMainThread() {
+		if (!isMainThread()) {
+			throw new IllegalStateException("Not running in job master main thread, but in " + Thread.currentThread());
+		}
+	}
 }

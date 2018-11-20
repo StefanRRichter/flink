@@ -44,7 +44,6 @@ import org.apache.flink.runtime.clusterframework.types.AllocationID;
 import org.apache.flink.runtime.concurrent.FutureUtils;
 import org.apache.flink.runtime.concurrent.FutureUtils.ConjunctFuture;
 import org.apache.flink.runtime.concurrent.ScheduledExecutor;
-import org.apache.flink.runtime.concurrent.ScheduledExecutorServiceAdapter;
 import org.apache.flink.runtime.execution.ExecutionState;
 import org.apache.flink.runtime.execution.SuppressRestartsException;
 import org.apache.flink.runtime.executiongraph.failover.FailoverStrategy;
@@ -834,6 +833,9 @@ public class ExecutionGraph implements AccessExecutionGraph {
 
 	public void attachJobGraph(List<JobVertex> topologiallySorted) throws JobException {
 
+		// TODO this is called during contruction, even before the endpoint is ready?
+//		ensureRunningInJobMasterMainThread();
+
 		LOG.debug("Attaching {} topologically sorted vertices to existing job graph with {} " +
 				"vertices and {} intermediate results.",
 				topologiallySorted.size(), tasks.size(), intermediateResults.size());
@@ -882,6 +884,8 @@ public class ExecutionGraph implements AccessExecutionGraph {
 	}
 
 	public void scheduleForExecution() throws JobException {
+
+		mainThreadExecutor.ensureIsMainThread();
 
 		final long currentGlobalModVersion = globalModVersion;
 
@@ -1022,6 +1026,9 @@ public class ExecutionGraph implements AccessExecutionGraph {
 	}
 
 	public void cancel() {
+
+		mainThreadExecutor.ensureIsMainThread();
+
 		while (true) {
 			JobStatus current = state;
 
@@ -1094,6 +1101,9 @@ public class ExecutionGraph implements AccessExecutionGraph {
 	}
 
 	public void stop() throws StoppingException {
+
+		mainThreadExecutor.ensureIsMainThread();
+
 		if (isStoppable) {
 			for (ExecutionVertex ev : this.getAllExecutionVertices()) {
 				if (ev.getNumberOfInputs() == 0) { // send signal to sources only
@@ -1117,6 +1127,9 @@ public class ExecutionGraph implements AccessExecutionGraph {
 	 * @param suspensionCause Cause of the suspension
 	 */
 	public void suspend(Throwable suspensionCause) {
+
+		mainThreadExecutor.ensureIsMainThread();
+
 		while (true) {
 			JobStatus currentState = state;
 
@@ -1172,6 +1185,9 @@ public class ExecutionGraph implements AccessExecutionGraph {
 	 * @param t The exception that caused the failure.
 	 */
 	public void failGlobal(Throwable t) {
+
+		mainThreadExecutor.ensureIsMainThread();
+
 		while (true) {
 			JobStatus current = state;
 			// stay in these states
@@ -1222,6 +1238,9 @@ public class ExecutionGraph implements AccessExecutionGraph {
 	}
 
 	public void restart(long expectedGlobalVersion) {
+
+		mainThreadExecutor.ensureIsMainThread();
+
 		try {
 			synchronized (progressLock) {
 				// check the global version to see whether this recovery attempt is still valid
@@ -1297,6 +1316,7 @@ public class ExecutionGraph implements AccessExecutionGraph {
 	 * job vertex that is not part of this ExecutionGraph).
 	 */
 	public void restoreLatestCheckpointedState(boolean errorIfNoCheckpoint, boolean allowNonRestoredState) throws Exception {
+		mainThreadExecutor.ensureIsMainThread();
 		synchronized (progressLock) {
 			if (checkpointCoordinator != null) {
 				checkpointCoordinator.restoreLatestCheckpointedState(getAllVertices(), errorIfNoCheckpoint, allowNonRestoredState);
@@ -1311,6 +1331,9 @@ public class ExecutionGraph implements AccessExecutionGraph {
 	 */
 	@Override
 	public ArchivedExecutionConfig getArchivedExecutionConfig() {
+
+		mainThreadExecutor.ensureIsMainThread();
+
 		// create a summary of all relevant data accessed in the web interface's JobConfigHandler
 		try {
 			ExecutionConfig executionConfig = jobInformation.getSerializedExecutionConfig().deserializeValue(userClassLoader);
@@ -1373,6 +1396,7 @@ public class ExecutionGraph implements AccessExecutionGraph {
 	}
 
 	private boolean transitionState(JobStatus current, JobStatus newState, Throwable error) {
+
 		// consistency check
 		if (current.isTerminalState()) {
 			String message = "Job is trying to leave terminal state " + current;
@@ -1516,7 +1540,7 @@ public class ExecutionGraph implements AccessExecutionGraph {
 					LOG.info("Restarting the job {} ({}).", getJobName(), getJobID());
 
 					RestartCallback restarter = new ExecutionGraphRestartCallback(this, globalModVersionForRestart);
-					restartStrategy.restart(restarter, new ScheduledExecutorServiceAdapter(futureExecutor));
+					restartStrategy.restart(restarter, getMainThreadExecutor());
 
 					return true;
 				}
@@ -1650,6 +1674,8 @@ public class ExecutionGraph implements AccessExecutionGraph {
 	 */
 	public void scheduleOrUpdateConsumers(ResultPartitionID partitionId) throws ExecutionGraphException {
 
+		mainThreadExecutor.ensureIsMainThread();
+
 		final Execution execution = currentExecutions.get(partitionId.getProducerId());
 
 		if (execution == null) {
@@ -1676,6 +1702,7 @@ public class ExecutionGraph implements AccessExecutionGraph {
 	}
 
 	void deregisterExecution(Execution exec) {
+		mainThreadExecutor.ensureIsMainThread();
 		Execution contained = currentExecutions.remove(exec.getAttemptId());
 
 		if (contained != null && contained != exec) {

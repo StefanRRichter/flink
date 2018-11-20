@@ -21,6 +21,7 @@ package org.apache.flink.runtime.jobmaster.slotpool;
 import org.apache.flink.api.common.time.Time;
 import org.apache.flink.runtime.clusterframework.types.SlotProfile;
 import org.apache.flink.runtime.concurrent.FutureUtils;
+import org.apache.flink.runtime.concurrent.ScheduledExecutor;
 import org.apache.flink.runtime.instance.SlotSharingGroupId;
 import org.apache.flink.runtime.jobmanager.scheduler.CoLocationConstraint;
 import org.apache.flink.runtime.jobmanager.scheduler.Locality;
@@ -89,6 +90,12 @@ public class Scheduler implements SlotProvider, SlotOwner {
 		};
 	}
 
+	private void ensureRunningInMainThread() {
+		if (componentMainThreadExecutor instanceof ScheduledExecutor) {
+			((ScheduledExecutor) componentMainThreadExecutor).ensureIsMainThread();
+		}
+	}
+
 	public void start(@Nonnull Executor mainThreadExecutor) {
 		this.componentMainThreadExecutor = mainThreadExecutor;
 	}
@@ -102,6 +109,9 @@ public class Scheduler implements SlotProvider, SlotOwner {
 		SlotProfile slotProfile,
 		boolean allowQueuedScheduling,
 		Time allocationTimeout) {
+
+		ensureRunningInMainThread();
+
 		log.debug("Received slot request [{}] for task: {}", slotRequestId, scheduledUnit.getTaskToExecute());
 
 		final CompletableFuture<LogicalSlot> allocationResultFuture = new CompletableFuture<>();
@@ -133,6 +143,8 @@ public class Scheduler implements SlotProvider, SlotOwner {
 		@Nullable SlotSharingGroupId slotSharingGroupId,
 		Throwable cause) {
 
+		ensureRunningInMainThread();
+
 		return CompletableFuture.supplyAsync(() -> {
 			if (slotSharingGroupId != null) {
 				releaseSharedSlot(slotRequestId, slotSharingGroupId, cause);
@@ -145,6 +157,8 @@ public class Scheduler implements SlotProvider, SlotOwner {
 
 	@Override
 	public CompletableFuture<Boolean> returnAllocatedSlot(LogicalSlot logicalSlot) {
+
+		ensureRunningInMainThread();
 
 		SlotRequestId slotRequestId = logicalSlot.getSlotRequestId();
 		SlotSharingGroupId slotSharingGroupId = logicalSlot.getSlotSharingGroupId();

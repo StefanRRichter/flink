@@ -36,6 +36,7 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.BooleanSupplier;
 
 import static org.apache.flink.util.Preconditions.checkNotNull;
 
@@ -90,7 +91,7 @@ public abstract class RpcEndpoint implements RpcGateway {
 
 		this.rpcServer = rpcService.startServer(this);
 
-		this.mainThreadExecutor = new MainThreadExecutor(rpcServer);
+		this.mainThreadExecutor = new MainThreadExecutor(rpcServer, this::isCurrentMainThread);
 	}
 
 	/**
@@ -322,9 +323,11 @@ public abstract class RpcEndpoint implements RpcGateway {
 	protected static class MainThreadExecutor implements ScheduledExecutor {
 
 		private final MainThreadExecutable gateway;
+		private final BooleanSupplier mainThreadCheck;
 
-		MainThreadExecutor(MainThreadExecutable gateway) {
+		MainThreadExecutor(MainThreadExecutable gateway, BooleanSupplier mainThreadCheck) {
 			this.gateway = Preconditions.checkNotNull(gateway);
+			this.mainThreadCheck = Preconditions.checkNotNull(mainThreadCheck);
 		}
 
 		public void runAsync(Runnable runnable) {
@@ -364,6 +367,11 @@ public abstract class RpcEndpoint implements RpcGateway {
 		@Override
 		public ScheduledFuture<?> scheduleWithFixedDelay(Runnable command, long initialDelay, long delay, TimeUnit unit) {
 			throw new UnsupportedOperationException("Not implemented because the method is currently not required.");
+		}
+
+		@Override
+		public boolean isMainThread() {
+			return mainThreadCheck.getAsBoolean();
 		}
 	}
 }

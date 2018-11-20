@@ -61,4 +61,9 @@ public class ScheduledExecutorServiceAdapter implements ScheduledExecutor {
 	public void execute(Runnable command) {
 		scheduledExecutorService.execute(command);
 	}
+
+	@Override
+	public boolean isMainThread() {
+		return true;
+	}
 }
