@@ -52,7 +52,6 @@ import static org.junit.Assert.fail;
 /**
  * Tests for the {@link Scheduler} when scheduling individual tasks.
  */
-@Ignore
 public class SchedulerIsolatedTasksTest extends SchedulerTestBase {
 	
 	@Test

@@ -51,6 +51,7 @@ import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.Executor;
+import java.util.function.Supplier;
 
 /**
  * Scheduler that assigns tasks to slots. This class is currently work in progress, comments will be updated as we
@@ -91,9 +92,16 @@ public class Scheduler implements SlotProvider, SlotOwner {
 	}
 
 	private void ensureRunningInMainThread() {
+//		if (componentMainThreadExecutor instanceof ScheduledExecutor) {
+//			((ScheduledExecutor) componentMainThreadExecutor).ensureIsMainThread();
+//		}
+	}
+
+	private boolean isRunningInMainThread() {
 		if (componentMainThreadExecutor instanceof ScheduledExecutor) {
-			((ScheduledExecutor) componentMainThreadExecutor).ensureIsMainThread();
+			return ((ScheduledExecutor) componentMainThreadExecutor).isMainThread();
 		}
+		return false;
 	}
 
 	public void start(@Nonnull Executor mainThreadExecutor) {
@@ -115,7 +123,8 @@ public class Scheduler implements SlotProvider, SlotOwner {
 		log.debug("Received slot request [{}] for task: {}", slotRequestId, scheduledUnit.getTaskToExecute());
 
 		final CompletableFuture<LogicalSlot> allocationResultFuture = new CompletableFuture<>();
-		componentMainThreadExecutor.execute(() -> {
+
+		Runnable runnable = () -> {
 
 			CompletableFuture<LogicalSlot> allocationFuture = scheduledUnit.getSlotSharingGroupId() == null ?
 				allocateSingleSlot(slotRequestId, slotProfile, allowQueuedScheduling, allocationTimeout) :
@@ -132,7 +141,15 @@ public class Scheduler implements SlotProvider, SlotOwner {
 					allocationResultFuture.complete(slot);
 				}
 			});
-		});
+		};
+
+		if (isRunningInMainThread()) {
+			runnable.run();
+		} else {
+			log.warn("PROBLEM: #allocateSlot was called from outside the JM main thread by " + Thread.currentThread(),
+				new Exception("Thread model violation."));
+			componentMainThreadExecutor.execute(runnable);
+		}
 
 		return allocationResultFuture;
 	}
@@ -145,20 +162,26 @@ public class Scheduler implements SlotProvider, SlotOwner {
 
 		ensureRunningInMainThread();
 
-		return CompletableFuture.supplyAsync(() -> {
+		Supplier<Acknowledge> supplier = () -> {
 			if (slotSharingGroupId != null) {
 				releaseSharedSlot(slotRequestId, slotSharingGroupId, cause);
 			} else {
 				slotPoolGateway.releaseSlot(slotRequestId, cause);
 			}
 			return Acknowledge.get();
-		}, componentMainThreadExecutor);
+		};
+
+		if (isRunningInMainThread()) {
+			return CompletableFuture.completedFuture(supplier.get());
+		} else {
+			log.warn("PROBLEM: #cancelSlotRequest was called from outside the JM main thread by " + Thread.currentThread(),
+				new Exception("Thread model violation."));
+			return CompletableFuture.supplyAsync(supplier, componentMainThreadExecutor);
+		}
 	}
 
 	@Override
 	public CompletableFuture<Boolean> returnAllocatedSlot(LogicalSlot logicalSlot) {
-
-		ensureRunningInMainThread();
 
 		SlotRequestId slotRequestId = logicalSlot.getSlotRequestId();
 		SlotSharingGroupId slotSharingGroupId = logicalSlot.getSlotSharingGroupId();
