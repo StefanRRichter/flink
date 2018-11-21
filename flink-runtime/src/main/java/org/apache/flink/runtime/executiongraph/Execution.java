@@ -757,8 +757,8 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 				// TODO The current approach may send many update messages even though the consuming
 				// task has already been deployed with all necessary information. We have to check
 				// whether this is a problem and fix it, if it is.
-				CompletableFuture.supplyAsync(
-					() -> {
+//				CompletableFuture.supplyAsync(
+//					() -> {
 						try {
 							final ExecutionGraph executionGraph = consumerVertex.getExecutionGraph();
 							consumerVertex.scheduleForExecution(
@@ -770,10 +770,10 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 							consumerVertex.fail(new IllegalStateException("Could not schedule consumer " +
 									"vertex " + consumerVertex, t));
 						}
-
-						return null;
-					},
-					executor);
+//
+//						return null;
+//					},
+//					executor);
 
 				// double check to resolve race conditions
 				if (consumerVertex.getExecutionState() == RUNNING) {
