@@ -28,6 +28,7 @@ import org.apache.flink.core.testutils.OneShotLatch;
 import org.apache.flink.runtime.JobException;
 import org.apache.flink.runtime.akka.AkkaUtils;
 import org.apache.flink.runtime.clusterframework.types.ResourceID;
+import org.apache.flink.runtime.concurrent.ComponentMainThreadExecutorServiceAdapter;
 import org.apache.flink.runtime.concurrent.ScheduledExecutor;
 import org.apache.flink.runtime.execution.ExecutionState;
 import org.apache.flink.runtime.execution.SuppressRestartsException;
@@ -516,6 +517,7 @@ public class ExecutionGraphRestartTest extends TestLogger {
 
 		assertEquals(JobStatus.CREATED, eg.getState());
 
+		eg.start(new ComponentMainThreadExecutorServiceAdapter(TestingUtils.defaultExecutor()));
 		eg.scheduleForExecution();
 
 		assertEquals(JobStatus.RUNNING, eg.getState());
@@ -939,7 +941,6 @@ public class ExecutionGraphRestartTest extends TestLogger {
 
 		ExecutionGraph eg = newExecutionGraph(restartStrategy, slotProvider);
 		eg.attachJobGraph(jobGraph.getVerticesSortedTopologicallyFromSources());
-
 		return eg;
 	}
 
@@ -951,7 +952,7 @@ public class ExecutionGraphRestartTest extends TestLogger {
 	}
 
 	private static ExecutionGraph newExecutionGraph(RestartStrategy restartStrategy, SlotProvider slotProvider) throws IOException {
-		return new ExecutionGraph(
+		ExecutionGraph executionGraph = new ExecutionGraph(
 			TestingUtils.defaultExecutor(),
 			TestingUtils.defaultExecutor(),
 			new JobID(),
@@ -961,6 +962,8 @@ public class ExecutionGraphRestartTest extends TestLogger {
 			AkkaUtils.getDefaultTimeout(),
 			restartStrategy,
 			slotProvider);
+		executionGraph.start(new ComponentMainThreadExecutorServiceAdapter(TestingUtils.defaultExecutor()));
+		return executionGraph;
 	}
 
 	private static void restartAfterFailure(ExecutionGraph eg, FiniteDuration timeout, boolean haltAfterRestart) throws InterruptedException, TimeoutException {

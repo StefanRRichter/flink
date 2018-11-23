@@ -30,6 +30,7 @@ import org.apache.flink.runtime.clusterframework.types.AllocationID;
 import org.apache.flink.runtime.clusterframework.types.ResourceID;
 import org.apache.flink.runtime.clusterframework.types.ResourceProfile;
 import org.apache.flink.runtime.clusterframework.types.SlotProfile;
+import org.apache.flink.runtime.concurrent.ComponentMainThreadExecutor;
 import org.apache.flink.runtime.concurrent.FutureUtils;
 import org.apache.flink.runtime.deployment.InputChannelDeploymentDescriptor;
 import org.apache.flink.runtime.deployment.PartialInputChannelDeploymentDescriptor;
@@ -214,7 +215,7 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 		this.attemptNumber = attemptNumber;
 
 		this.stateTimestamps = new long[ExecutionState.values().length];
-		markTimestamp(ExecutionState.CREATED, startTimestamp);
+		markTimestamp(CREATED, startTimestamp);
 
 		this.partialInputChannelDeploymentDescriptors = new ConcurrentLinkedQueue<>();
 		this.terminalStateFuture = new CompletableFuture<>();
@@ -279,6 +280,9 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 	 */
 	@VisibleForTesting
 	boolean tryAssignResource(final LogicalSlot logicalSlot) {
+
+		ensureRunningInMainThread();
+
 		checkNotNull(logicalSlot);
 
 		// only allow to set the assigned resource in state SCHEDULED or CREATED
@@ -359,6 +363,7 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 	/**
 	 * Gets a future that completes once the task execution reaches a terminal state.
 	 * The future will be completed with specific state that the execution reached.
+	 * This future is always completed from the job master's main thread.
 	 *
 	 * @return A future which is completed once the execution reaches a terminal state
 	 */
@@ -370,6 +375,7 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 	/**
 	 * Gets the release future which is completed once the execution reaches a terminal
 	 * state and the assigned resource has been released.
+	 * This future is always completed from the job master's main thread.
 	 *
 	 * @return A future which is completed once the assigned resource has been released
 	 */
@@ -410,7 +416,10 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 			boolean queued,
 			LocationPreferenceConstraint locationPreferenceConstraint,
 			@Nonnull Set<AllocationID> allPreviousExecutionGraphAllocationIds) {
-		final Time allocationTimeout = vertex.getExecutionGraph().getAllocationTimeout();
+
+		ensureRunningInMainThread();
+		final ExecutionGraph executionGraph = vertex.getExecutionGraph();
+		final Time allocationTimeout = executionGraph.getAllocationTimeout();
 		try {
 			final CompletableFuture<Execution> allocationFuture = allocateAndAssignSlotForExecution(
 				slotProvider,
@@ -419,11 +428,17 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 				allPreviousExecutionGraphAllocationIds,
 				allocationTimeout);
 
-			// IMPORTANT: We have to use the synchronous handle operation (direct executor) here so
-			// that we directly deploy the tasks if the slot allocation future is completed. This is
-			// necessary for immediate deployment.
-			final CompletableFuture<Void> deploymentFuture = allocationFuture.thenAccept(
-				(FutureConsumerWithException<Execution, Exception>) value -> deploy());
+			FutureConsumerWithException<Execution, Exception> deployment = value -> deploy();
+			final CompletableFuture<Void> deploymentFuture;
+			if (allocationFuture.isDone()) {
+				deploymentFuture = allocationFuture.thenAccept(deployment);
+			} else if (queued) {
+				deploymentFuture = allocationFuture.thenAcceptAsync(
+					deployment, vertex.getExecutionGraph().getJobMasterMainThreadExecutor());
+			} else {
+				deploymentFuture = FutureUtils.completedExceptionally(
+					new IllegalArgumentException("The slot allocation future has not been completed yet."));
+			}
 
 			deploymentFuture.whenComplete(
 				(Void ignored, Throwable failure) -> {
@@ -442,11 +457,6 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 						markFailed(schedulingFailureCause);
 					}
 				});
-
-			// if tasks have to scheduled immediately check that the task has been deployed
-			if (!queued && !deploymentFuture.isDone()) {
-				deploymentFuture.completeExceptionally(new IllegalArgumentException("The slot allocation future has not been completed yet."));
-			}
 
 			return deploymentFuture;
 		} catch (IllegalExecutionStateException e) {
@@ -475,6 +485,8 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 			Time allocationTimeout) throws IllegalExecutionStateException {
 
 		checkNotNull(slotProvider);
+
+		ensureRunningInMainThread();
 
 		final SlotSharingGroup sharingGroup = vertex.getJobVertex().getSlotSharingGroup();
 		final CoLocationConstraint locationConstraint = vertex.getLocationConstraint();
@@ -507,8 +519,13 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 
 			final SlotRequestId slotRequestId = new SlotRequestId();
 
-			final CompletableFuture<LogicalSlot> logicalSlotFuture = preferredLocationsFuture
-				.thenCompose(
+			final ComponentMainThreadExecutor mainThreadExecutor =
+				vertex.getExecutionGraph().getJobMasterMainThreadExecutor();
+
+			final CompletableFuture<LogicalSlot> logicalSlotFuture =
+				FutureUtils.composeAsyncIfNotDone(
+					preferredLocationsFuture,
+					mainThreadExecutor,
 					(Collection<TaskManagerLocation> preferredLocations) ->
 						slotProvider.allocateSlot(
 							slotRequestId,
@@ -522,7 +539,7 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 							allocationTimeout));
 
 			// register call back to cancel slot request in case that the execution gets canceled
-			releaseFuture.whenComplete(
+			releaseFuture.whenComplete( //coming from this future, we expect to be inside the component main thread
 				(Object ignored, Throwable throwable) -> {
 					if (logicalSlotFuture.cancel(false)) {
 						slotProvider.cancelSlotRequest(
@@ -532,19 +549,21 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 					}
 				});
 
-			return logicalSlotFuture.thenApply(
+			return FutureUtils.applyAsyncIfNotDone(
+				logicalSlotFuture,
+				mainThreadExecutor,
 				(LogicalSlot logicalSlot) -> {
 					if (tryAssignResource(logicalSlot)) {
 						return this;
 					} else {
 						// release the slot
 						logicalSlot.releaseSlot(new FlinkException("Could not assign logical slot to execution " + this + '.'));
-
-						throw new CompletionException(new FlinkException("Could not assign slot " + logicalSlot + " to execution " + this + " because it has already been assigned "));
+						throw new CompletionException(
+							new FlinkException(
+								"Could not assign slot " + logicalSlot + " to execution " + this + " because it has already been assigned "));
 					}
 				});
-		}
-		else {
+		} else {
 			// call race, already deployed, or already done
 			throw new IllegalExecutionStateException(this, CREATED, state);
 		}
@@ -556,6 +575,8 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 	 * @throws JobException if the execution cannot be deployed to the assigned resource
 	 */
 	public void deploy() throws JobException {
+		ensureRunningInMainThread();
+
 		final LogicalSlot slot  = assignedResource;
 
 		checkNotNull(slot, "In order to deploy the execution we first have to assign a resource via tryAssignResource.");
@@ -612,23 +633,23 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 			final TaskManagerGateway taskManagerGateway = slot.getTaskManagerGateway();
 
 			final CompletableFuture<Acknowledge> submitResultFuture = taskManagerGateway.submitTask(deployment, rpcTimeout);
+			ComponentMainThreadExecutor jobMasterMainThreadExecutor =
+				vertex.getExecutionGraph().getJobMasterMainThreadExecutor();
 
-			submitResultFuture.whenCompleteAsync(
-				(ack, failure) -> {
-					// only respond to the failure case
-					if (failure != null) {
-						if (failure instanceof TimeoutException) {
-							String taskname = vertex.getTaskNameWithSubtaskIndex() + " (" + attemptId + ')';
+			FutureUtils.whenCompleteAsyncIfNotDone(submitResultFuture, jobMasterMainThreadExecutor, (ack, failure) -> {
+				// only respond to the failure case
+				if (failure != null) {
+					if (failure instanceof TimeoutException) {
+						String taskname = vertex.getTaskNameWithSubtaskIndex() + " (" + attemptId + ')';
 
-							markFailed(new Exception(
-								"Cannot deploy task " + taskname + " - TaskManager (" + getAssignedResourceLocation()
-									+ ") not responding after a rpcTimeout of " + rpcTimeout, failure));
-						} else {
-							markFailed(failure);
-						}
+						markFailed(new Exception(
+							"Cannot deploy task " + taskname + " - TaskManager (" + getAssignedResourceLocation()
+								+ ") not responding after a rpcTimeout of " + rpcTimeout, failure));
+					} else {
+						markFailed(failure);
 					}
-				},
-				executor);
+				}
+			});
 		}
 		catch (Throwable t) {
 			markFailed(t);
@@ -640,6 +661,7 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 	 * Sends stop RPC call.
 	 */
 	public void stop() {
+		ensureRunningInMainThread();
 		final LogicalSlot slot = assignedResource;
 
 		if (slot != null) {
@@ -664,6 +686,7 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 
 		// because of several possibly previous states, we need to again loop until we make a
 		// successful atomic state transition
+		ensureRunningInMainThread();
 		while (true) {
 
 			ExecutionState current = this.state;
@@ -719,6 +742,7 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 	}
 
 	void scheduleOrUpdateConsumers(List<List<ExecutionEdge>> allConsumers) {
+		ensureRunningInMainThread();
 		final int numConsumers = allConsumers.size();
 
 		if (numConsumers > 1) {
@@ -755,23 +779,17 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 				// TODO The current approach may send many update messages even though the consuming
 				// task has already been deployed with all necessary information. We have to check
 				// whether this is a problem and fix it, if it is.
-				CompletableFuture.supplyAsync(
-					() -> {
-						try {
-							final ExecutionGraph executionGraph = consumerVertex.getExecutionGraph();
-							consumerVertex.scheduleForExecution(
-								executionGraph.getSlotProvider(),
-								executionGraph.isQueuedSchedulingAllowed(),
-								LocationPreferenceConstraint.ANY, // there must be at least one known location
-								Collections.emptySet());
-						} catch (Throwable t) {
-							consumerVertex.fail(new IllegalStateException("Could not schedule consumer " +
-									"vertex " + consumerVertex, t));
-						}
-
-						return null;
-					},
-					executor);
+				try {
+					final ExecutionGraph executionGraph = consumerVertex.getExecutionGraph();
+					consumerVertex.scheduleForExecution(
+						executionGraph.getSlotProvider(),
+						executionGraph.isQueuedSchedulingAllowed(),
+						LocationPreferenceConstraint.ANY, // there must be at least one known location
+						Collections.emptySet());
+				} catch (Throwable t) {
+					consumerVertex.fail(new IllegalStateException("Could not schedule consumer " +
+						"vertex " + consumerVertex, t));
+				}
 
 				// double check to resolve race conditions
 				if (consumerVertex.getExecutionState() == RUNNING) {
@@ -850,7 +868,14 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 	 */
 	@Override
 	public void fail(Throwable t) {
-		processFail(t, false);
+		ComponentMainThreadExecutor mainThreadExecutor = vertex.getExecutionGraph().getJobMasterMainThreadExecutor();
+
+		//TODO, the slotpool is currently calling this from a different thread sometimes via payload.fail()
+		if (mainThreadExecutor.isMainThread()) {
+			processFail(t, false);
+		} else {
+			mainThreadExecutor.execute(() -> processFail(t, false));
+		}
 	}
 
 	/**
@@ -950,6 +975,8 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 	}
 
 	void markFinished(Map<String, Accumulator<?, ?>> userAccumulators, IOMetrics metrics) {
+
+		ensureRunningInMainThread();
 
 		// this call usually comes during RUNNING, but may also come while still in deploying (very fast tasks!)
 		while (true) {
@@ -1083,12 +1110,12 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 	}
 
 	private boolean processFail(Throwable t, boolean isCallback, Map<String, Accumulator<?, ?>> userAccumulators, IOMetrics metrics) {
-
 		// damn, we failed. This means only that we keep our books and notify our parent JobExecutionVertex
 		// the actual computation on the task manager is cleaned up by the TaskManager that noticed the failure
 
 		// we may need to loop multiple times (in the presence of concurrent calls) in order to
 		// atomically switch to failed
+		ensureRunningInMainThread();
 		while (true) {
 			ExecutionState current = this.state;
 
@@ -1213,7 +1240,7 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 						fail(new Exception("Task could not be canceled.", failure));
 					}
 				},
-				executor);
+				getVertex().getExecutionGraph().getJobMasterMainThreadExecutor());
 		}
 	}
 
@@ -1251,7 +1278,7 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 						fail(new IllegalStateException("Update task on TaskManager " + taskManagerLocation +
 							" failed due to:", failure));
 					}
-				}, executor);
+				}, getVertex().getExecutionGraph().getJobMasterMainThreadExecutor());
 		}
 	}
 
@@ -1262,10 +1289,19 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 	 * @param cause for the resource release, null if none
 	 */
 	private void releaseAssignedResource(@Nullable Throwable cause) {
+
+		ensureRunningInMainThread();
+
 		final LogicalSlot slot = assignedResource;
 
+
 		if (slot != null) {
-			slot.releaseSlot(cause).whenComplete(
+			ComponentMainThreadExecutor jobMasterMainThreadExecutor =
+				getVertex().getExecutionGraph().getJobMasterMainThreadExecutor();
+
+			FutureUtils.whenCompleteAsyncIfNotDone(
+				slot.releaseSlot(cause),
+				jobMasterMainThreadExecutor,
 				(Object ignored, Throwable throwable) -> {
 					if (throwable != null) {
 						releaseFuture.completeExceptionally(throwable);
@@ -1440,5 +1476,9 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 	@Override
 	public ArchivedExecution archive() {
 		return new ArchivedExecution(this);
+	}
+
+	private void ensureRunningInMainThread() {
+		vertex.getExecutionGraph().ensureRunningInJobMasterMainThread();
 	}
 }

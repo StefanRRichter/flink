@@ -33,7 +33,6 @@ import javax.annotation.Nullable;
 
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicReferenceFieldUpdater;
-import java.util.function.Function;
 
 /**
  * Implementation of the {@link LogicalSlot} which is used by the {@link SlotPool}.
@@ -122,8 +121,8 @@ public class SingleLogicalSlot implements LogicalSlot, AllocatedSlot.Payload {
 	@Override
 	public CompletableFuture<?> releaseSlot(@Nullable Throwable cause) {
 		if (STATE_UPDATER.compareAndSet(this, State.ALIVE, State.RELEASING)) {
-			final CompletableFuture<?> payloadTerminalStateFuture = signalPayloadRelease(cause);
-			returnSlotToOwner(payloadTerminalStateFuture);
+			final CompletableFuture<?> payloadTerminalStateFuture = signalPayloadRelease(cause); //TODO
+			returnSlotToOwner(payloadTerminalStateFuture); //TODO
 		}
 
 		return releaseFuture;
@@ -171,21 +170,19 @@ public class SingleLogicalSlot implements LogicalSlot, AllocatedSlot.Payload {
 
 	private CompletableFuture<?> signalPayloadRelease(Throwable cause) {
 		tryAssignPayload(TERMINATED_PAYLOAD);
-		payload.fail(cause);
+		payload.fail(cause); //TODO this goes from the pool against the execution, has to by sync'ed back into the jm main thread
 
-		return payload.getTerminalStateFuture();
+		return payload.getTerminalStateFuture(); // TODO this goes from the execution/jm-main thread to the pool
 	}
 
 	private void returnSlotToOwner(CompletableFuture<?> terminalStateFuture) {
-		final CompletableFuture<Boolean> slotReturnFuture = terminalStateFuture.handle((Object ignored, Throwable throwable) -> {
+		terminalStateFuture.handle((Object ignored, Throwable throwable) -> {
 			if (state == State.RELEASING) {
 				return slotOwner.returnAllocatedSlot(this);
 			} else {
 				return CompletableFuture.completedFuture(true);
 			}
-		}).thenCompose(Function.identity());
-
-		slotReturnFuture.whenComplete(
+		}).whenComplete( //TODO this could be inside the job master main thread, should be inside slot pool main thread
 			(Object ignored, Throwable throwable) -> {
 				markReleased();
 

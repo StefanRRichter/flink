@@ -29,6 +29,7 @@ import org.apache.flink.runtime.executiongraph.GlobalModVersionMismatch;
 import org.apache.flink.runtime.executiongraph.IntermediateResult;
 import org.apache.flink.runtime.jobmanager.scheduler.NoResourceAvailableException;
 import org.apache.flink.util.FlinkRuntimeException;
+import org.apache.flink.util.Preconditions;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -89,6 +90,8 @@ public class RestartIndividualStrategy extends FailoverStrategy {
 	@Override
 	public void onTaskFailure(Execution taskExecution, Throwable cause) {
 
+		Preconditions.checkState(executionGraph.getJobMasterMainThreadExecutor().isMainThread());
+
 		// to better handle the lack of resources (potentially by a scale-in), we
 		// make failures due to missing resources global failures 
 		if (cause instanceof NoResourceAvailableException) {
@@ -111,7 +114,8 @@ public class RestartIndividualStrategy extends FailoverStrategy {
 		final ExecutionVertex vertexToRecover = taskExecution.getVertex(); 
 		final long globalModVersion = taskExecution.getGlobalModVersion();
 
-		terminationFuture.thenAcceptAsync(
+
+		terminationFuture.thenAccept(
 			(ExecutionState value) -> {
 				try {
 					long createTimestamp = System.currentTimeMillis();
@@ -120,13 +124,11 @@ public class RestartIndividualStrategy extends FailoverStrategy {
 				}
 				catch (GlobalModVersionMismatch e) {
 					// this happens if a concurrent global recovery happens. simply do nothing.
-				}
-				catch (Exception e) {
+				} catch (Exception e) {
 					executionGraph.failGlobal(
-							new Exception("Error during fine grained recovery - triggering full recovery", e));
+						new Exception("Error during fine grained recovery - triggering full recovery", e));
 				}
-			},
-			callbackExecutor);
+			});
 	}
 
 	@Override

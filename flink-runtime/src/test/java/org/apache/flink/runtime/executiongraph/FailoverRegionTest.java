@@ -21,6 +21,7 @@ package org.apache.flink.runtime.executiongraph;
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.runtime.JobException;
 import org.apache.flink.runtime.akka.AkkaUtils;
+import org.apache.flink.runtime.concurrent.ComponentMainThreadExecutorServiceAdapter;
 import org.apache.flink.runtime.concurrent.Executors;
 import org.apache.flink.runtime.execution.ExecutionState;
 import org.apache.flink.runtime.executiongraph.failover.FailoverStrategy;
@@ -138,6 +139,7 @@ public class FailoverRegionTest extends TestLogger {
 			slotProvider);
 
 		eg.attachJobGraph(ordered);
+		eg.start(new ComponentMainThreadExecutorServiceAdapter(TestingUtils.defaultExecutor()));
 
 		RestartPipelinedRegionStrategy strategy = (RestartPipelinedRegionStrategy)eg.getFailoverStrategy();
 
@@ -265,6 +267,7 @@ public class FailoverRegionTest extends TestLogger {
 			e.printStackTrace();
 			fail("Job failed with exception: " + e.getMessage());
 		}
+		eg.start(new ComponentMainThreadExecutorServiceAdapter(TestingUtils.defaultExecutor()));
 		eg.scheduleForExecution();
 		RestartPipelinedRegionStrategy strategy = (RestartPipelinedRegionStrategy)eg.getFailoverStrategy();
 
@@ -446,7 +449,7 @@ public class FailoverRegionTest extends TestLogger {
 			e.printStackTrace();
 			fail("Job failed with exception: " + e.getMessage());
 		}
-
+		eg.start(new ComponentMainThreadExecutorServiceAdapter(TestingUtils.defaultExecutor()));
 		eg.scheduleForExecution();
 		return eg;
 	}

@@ -29,6 +29,7 @@ import org.apache.flink.runtime.jobmanager.scheduler.CoLocationGroup;
 import org.apache.flink.runtime.jobmanager.scheduler.LocationPreferenceConstraint;
 import org.apache.flink.util.AbstractID;
 import org.apache.flink.util.FlinkException;
+import org.apache.flink.util.Preconditions;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -138,6 +139,7 @@ public class FailoverRegion {
 
 	// cancel all executions in this sub graph
 	private void cancel(final long globalModVersionOfFailover) {
+		Preconditions.checkState(executionGraph.getJobMasterMainThreadExecutor().isMainThread());
 		while (true) {
 			JobStatus curStatus = this.state;
 			if (curStatus.equals(JobStatus.RUNNING)) {
@@ -152,10 +154,7 @@ public class FailoverRegion {
 					}
 
 					final FutureUtils.ConjunctFuture<Void> allTerminal = FutureUtils.waitForAll(futures);
-					allTerminal.thenAcceptAsync(
-						(Void value) -> allVerticesInTerminalState(globalModVersionOfFailover),
-						executor);
-
+					allTerminal.thenAccept((Void value) -> allVerticesInTerminalState(globalModVersionOfFailover));
 					break;
 				}
 			}

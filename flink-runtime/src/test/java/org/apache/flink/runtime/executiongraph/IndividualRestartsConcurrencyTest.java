@@ -28,6 +28,7 @@ import org.apache.flink.runtime.checkpoint.CheckpointStatsTracker;
 import org.apache.flink.runtime.checkpoint.PendingCheckpoint;
 import org.apache.flink.runtime.checkpoint.StandaloneCheckpointIDCounter;
 import org.apache.flink.runtime.checkpoint.StandaloneCompletedCheckpointStore;
+import org.apache.flink.runtime.concurrent.ComponentMainThreadExecutorServiceAdapter;
 import org.apache.flink.runtime.deployment.TaskDeploymentDescriptor;
 import org.apache.flink.runtime.execution.ExecutionState;
 import org.apache.flink.runtime.executiongraph.failover.FailoverStrategy;
@@ -442,6 +443,7 @@ public class IndividualRestartsConcurrencyTest extends TestLogger {
 
 		JobGraph jg = new JobGraph(jid, "testjob", jv);
 		graph.attachJobGraph(jg.getVerticesSortedTopologicallyFromSources());
+		graph.start(new ComponentMainThreadExecutorServiceAdapter(TestingUtils.defaultExecutor()));
 
 		return graph;
 	}

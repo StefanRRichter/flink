@@ -56,7 +56,7 @@ public class ExecutionGraphRestartCallback implements RestartCallback {
 	@Override
 	public void triggerFullRecovery() {
 		if (used.compareAndSet(false, true)) {
-			execGraph.restart(expectedGlobalModVersion);
+			execGraph.restart(expectedGlobalModVersion); //TODO this is currently called outside the main thread, e.g. by DelayRestartStrategy
 		}
 	}
 }

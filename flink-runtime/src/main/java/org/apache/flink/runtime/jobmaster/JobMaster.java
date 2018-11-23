@@ -1114,25 +1114,23 @@ public class JobMaster extends FencedRpcEndpoint<JobMasterId> implements JobMast
 
 	private void resetAndScheduleExecutionGraph() throws Exception {
 		validateRunsInMainThread();
-
-		final CompletableFuture<Void> executionGraphAssignedFuture;
-
+		MainThreadExecutor mainThreadExecutor = getMainThreadExecutor();
 		if (executionGraph.getState() == JobStatus.CREATED) {
-			executionGraphAssignedFuture = CompletableFuture.completedFuture(null);
+			scheduleExecutionGraph();
 		} else {
 			suspendAndClearExecutionGraphFields(new FlinkException("ExecutionGraph is being reset in order to be rescheduled."));
 			final JobManagerJobMetricGroup newJobManagerJobMetricGroup = jobMetricGroupFactory.create(jobGraph);
 			final ExecutionGraph newExecutionGraph = createAndRestoreExecutionGraph(newJobManagerJobMetricGroup);
 
-			executionGraphAssignedFuture = executionGraph.getTerminationFuture().handleAsync(
-				(JobStatus ignored, Throwable throwable) -> {
-					assignExecutionGraph(newExecutionGraph, newJobManagerJobMetricGroup);
-					return null;
-				},
-				getMainThreadExecutor());
+			executionGraph.getTerminationFuture()
+				.handleAsync(
+					(JobStatus ignored, Throwable throwable) -> {
+						assignExecutionGraph(newExecutionGraph, newJobManagerJobMetricGroup);
+						return null;
+					},
+					mainThreadExecutor)
+				.thenRun(this::scheduleExecutionGraph);
 		}
-
-		executionGraphAssignedFuture.thenRun(this::scheduleExecutionGraph);
 	}
 
 	private void scheduleExecutionGraph() {

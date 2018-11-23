@@ -310,7 +310,8 @@ public abstract class RpcEndpoint implements RpcGateway {
 	}
 
 	public boolean isCurrentMainThread() {
-		return currentMainThread.get() == Thread.currentThread();
+		Thread expected = currentMainThread.get();
+		return expected == Thread.currentThread() || expected == null;
 	}
 
 	// ------------------------------------------------------------------------
@@ -331,7 +332,11 @@ public abstract class RpcEndpoint implements RpcGateway {
 		}
 
 		public void runAsync(Runnable runnable) {
-			gateway.runAsync(runnable);
+//			if (isMainThread()) {
+//				runnable.run();
+//			} else {
+				gateway.runAsync(runnable);
+//			}
 		}
 
 		public <V> CompletableFuture<V> callAsync(Callable<V> callable, Time callTimeout) {

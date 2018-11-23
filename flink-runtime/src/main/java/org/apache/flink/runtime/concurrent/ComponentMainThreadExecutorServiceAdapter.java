@@ -18,8 +18,6 @@
 
 package org.apache.flink.runtime.concurrent;
 
-import org.apache.flink.annotation.VisibleForTesting;
-
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.function.BooleanSupplier;
 
@@ -31,11 +29,6 @@ public class ComponentMainThreadExecutorServiceAdapter
 	extends ScheduledExecutorServiceAdapter implements ComponentMainThreadExecutor {
 
 	private final BooleanSupplier mainThreadCheck;
-
-	@VisibleForTesting
-	public ComponentMainThreadExecutorServiceAdapter(ScheduledExecutorService scheduledExecutorService) {
-		this(scheduledExecutorService, () -> true);
-	}
 
 	public ComponentMainThreadExecutorServiceAdapter(
 		ScheduledExecutorService scheduledExecutorService,
