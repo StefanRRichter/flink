@@ -20,7 +20,6 @@ package org.apache.flink.runtime.executiongraph;
 
 import org.apache.flink.api.common.time.Time;
 import org.apache.flink.configuration.Configuration;
-import org.apache.flink.runtime.JobException;
 import org.apache.flink.runtime.clusterframework.types.SlotProfile;
 import org.apache.flink.runtime.concurrent.ScheduledExecutor;
 import org.apache.flink.runtime.execution.ExecutionState;
@@ -43,7 +42,6 @@ import org.apache.flink.util.TestLogger;
 
 import org.junit.Test;
 
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
@@ -59,11 +57,13 @@ import static org.mockito.Mockito.when;
 
 public class ExecutionGraphMetricsTest extends TestLogger {
 
+	private final ComponentMainThreadTestExecutor testMainThread = new ComponentMainThreadTestExecutor();
+
 	/**
 	 * This test tests that the restarting time metric correctly displays restarting times.
 	 */
 	@Test
-	public void testExecutionGraphRestartTimeMetric() throws JobException, IOException, InterruptedException {
+	public void testExecutionGraphRestartTimeMetric() throws Exception {
 		final ScheduledExecutorService executor = Executors.newSingleThreadScheduledExecutor();
 		try {
 			// setup execution graph with mocked scheduling logic
@@ -101,122 +101,134 @@ public class ExecutionGraphMetricsTest extends TestLogger {
 			assertEquals(0L, restartingTime.getValue().longValue());
 
 			executionGraph.attachJobGraph(jobGraph.getVerticesSortedTopologicallyFromSources());
+			executionGraph.start(testMainThread.getMainThreadExecutor());
 
-			// start execution
-			executionGraph.scheduleForExecution();
-			assertEquals(0L, restartingTime.getValue().longValue());
 
 			List<ExecutionAttemptID> executionIDs = new ArrayList<>();
 
-			for (ExecutionVertex executionVertex: executionGraph.getAllExecutionVertices()) {
-				executionIDs.add(executionVertex.getCurrentExecutionAttempt().getAttemptId());
-			}
+			testMainThread.execute(() -> {
+				// start execution
+				executionGraph.scheduleForExecution();
+				assertEquals(0L, restartingTime.getValue().longValue());
 
-			// tell execution graph that the tasks are in state running --> job status switches to state running
-			for (ExecutionAttemptID executionID : executionIDs) {
-				executionGraph.updateState(new TaskExecutionState(jobGraph.getJobID(), executionID, ExecutionState.RUNNING));
-			}
+				for (ExecutionVertex executionVertex : executionGraph.getAllExecutionVertices()) {
+					executionIDs.add(executionVertex.getCurrentExecutionAttempt().getAttemptId());
+				}
 
-			assertEquals(JobStatus.RUNNING, executionGraph.getState());
-			assertEquals(0L, restartingTime.getValue().longValue());
+				// tell execution graph that the tasks are in state running --> job status switches to state running
+				for (ExecutionAttemptID executionID : executionIDs) {
+					executionGraph.updateState(new TaskExecutionState(jobGraph.getJobID(), executionID, ExecutionState.RUNNING));
+				}
 
-			// add some pause such that RUNNING and RESTARTING timestamps are not the same
-			Thread.sleep(1L);
+				assertEquals(JobStatus.RUNNING, executionGraph.getState());
+				assertEquals(0L, restartingTime.getValue().longValue());
 
-			// fail the job so that it goes into state restarting
-			for (ExecutionAttemptID executionID : executionIDs) {
-				executionGraph.updateState(new TaskExecutionState(jobGraph.getJobID(), executionID, ExecutionState.FAILED, new Exception()));
-			}
-
-			assertEquals(JobStatus.RESTARTING, executionGraph.getState());
-
-			long firstRestartingTimestamp = executionGraph.getStatusTimestamp(JobStatus.RESTARTING);
-
-			long previousRestartingTime = restartingTime.getValue();
-
-			// check that the restarting time is monotonically increasing
-			for (int i = 0; i < 2; i++) {
-				// add some pause to let the currentRestartingTime increase
+				// add some pause such that RUNNING and RESTARTING timestamps are not the same
 				Thread.sleep(1L);
 
-				long currentRestartingTime = restartingTime.getValue();
+				// fail the job so that it goes into state restarting
+				for (ExecutionAttemptID executionID : executionIDs) {
+					executionGraph.updateState(new TaskExecutionState(jobGraph.getJobID(), executionID, ExecutionState.FAILED, new Exception()));
+				}
+			});
 
-				assertTrue(currentRestartingTime >= previousRestartingTime);
-				previousRestartingTime = currentRestartingTime;
-			}
+			long firstRestartingTimestamp =
+				testMainThread.execute(() -> executionGraph.getStatusTimestamp(JobStatus.RESTARTING));
 
-			// check that we have measured some restarting time
-			assertTrue(previousRestartingTime > 0);
+			testMainThread.execute(() -> {
+				assertEquals(JobStatus.RESTARTING, executionGraph.getState());
 
-			// restart job
-			testingRestartStrategy.restartExecutionGraph();
+				long previousRestartingTime = restartingTime.getValue();
 
-			executionIDs.clear();
+				// check that the restarting time is monotonically increasing
+				for (int i = 0; i < 2; i++) {
+					// add some pause to let the currentRestartingTime increase
+					Thread.sleep(1L);
 
-			for (ExecutionVertex executionVertex: executionGraph.getAllExecutionVertices()) {
-				executionIDs.add(executionVertex.getCurrentExecutionAttempt().getAttemptId());
-			}
+					long currentRestartingTime = restartingTime.getValue();
 
-			for (ExecutionAttemptID executionID : executionIDs) {
-				executionGraph.updateState(new TaskExecutionState(jobGraph.getJobID(), executionID, ExecutionState.RUNNING));
-			}
+					assertTrue(currentRestartingTime >= previousRestartingTime);
+					previousRestartingTime = currentRestartingTime;
+				}
 
-			assertEquals(JobStatus.RUNNING, executionGraph.getState());
+				// check that we have measured some restarting time
+				assertTrue(previousRestartingTime > 0);
 
-			assertTrue(firstRestartingTimestamp != 0);
+				// restart job
+				testingRestartStrategy.restartExecutionGraph();
 
-			previousRestartingTime = restartingTime.getValue();
+				executionIDs.clear();
 
-			// check that the restarting time does not increase after we've reached the running state
-			for (int i = 0; i < 2; i++) {
-				long currentRestartingTime = restartingTime.getValue();
+				for (ExecutionVertex executionVertex : executionGraph.getAllExecutionVertices()) {
+					executionIDs.add(executionVertex.getCurrentExecutionAttempt().getAttemptId());
+				}
 
-				assertTrue(currentRestartingTime == previousRestartingTime);
-				previousRestartingTime = currentRestartingTime;
-			}
+				for (ExecutionAttemptID executionID : executionIDs) {
+					executionGraph.updateState(new TaskExecutionState(jobGraph.getJobID(), executionID, ExecutionState.RUNNING));
+				}
 
-			// add some pause such that the RUNNING and RESTARTING timestamps are not the same
-			Thread.sleep(1L);
+				assertEquals(JobStatus.RUNNING, executionGraph.getState());
 
-			// fail job again
-			for (ExecutionAttemptID executionID : executionIDs) {
-				executionGraph.updateState(new TaskExecutionState(jobGraph.getJobID(), executionID, ExecutionState.FAILED, new Exception()));
-			}
+				assertTrue(firstRestartingTimestamp != 0);
 
-			assertEquals(JobStatus.RESTARTING, executionGraph.getState());
+				previousRestartingTime = restartingTime.getValue();
 
-			long secondRestartingTimestamp = executionGraph.getStatusTimestamp(JobStatus.RESTARTING);
+				// check that the restarting time does not increase after we've reached the running state
+				for (int i = 0; i < 2; i++) {
+					long currentRestartingTime = restartingTime.getValue();
 
-			assertTrue(firstRestartingTimestamp != secondRestartingTimestamp);
+					assertTrue(currentRestartingTime == previousRestartingTime);
+					previousRestartingTime = currentRestartingTime;
+				}
 
-			previousRestartingTime = restartingTime.getValue();
-
-			// check that the restarting time is increasing again
-			for (int i = 0; i < 2; i++) {
-				// add some pause to the let currentRestartingTime increase
+				// add some pause such that the RUNNING and RESTARTING timestamps are not the same
 				Thread.sleep(1L);
-				long currentRestartingTime = restartingTime.getValue();
 
-				assertTrue(currentRestartingTime >= previousRestartingTime);
-				previousRestartingTime = currentRestartingTime;
-			}
+				// fail job again
+				for (ExecutionAttemptID executionID : executionIDs) {
+					executionGraph.updateState(new TaskExecutionState(jobGraph.getJobID(), executionID, ExecutionState.FAILED, new Exception()));
+				}
+			});
 
-			assertTrue(previousRestartingTime > 0);
+			testMainThread.execute(() -> {
+				assertEquals(JobStatus.RESTARTING, executionGraph.getState());
 
-			// now lets fail the job while it is in restarting and see whether the restarting time then stops to increase
-			// for this to work, we have to use a SuppressRestartException
-			executionGraph.failGlobal(new SuppressRestartsException(new Exception()));
-	
-			assertEquals(JobStatus.FAILED, executionGraph.getState());
+				long secondRestartingTimestamp = executionGraph.getStatusTimestamp(JobStatus.RESTARTING);
 
-			previousRestartingTime = restartingTime.getValue();
+				assertTrue(firstRestartingTimestamp != secondRestartingTimestamp);
 
-			for (int i = 0; i < 10; i++) {
-				long currentRestartingTime = restartingTime.getValue();
+				long previousRestartingTime = restartingTime.getValue();
 
-				assertTrue(currentRestartingTime == previousRestartingTime);
-				previousRestartingTime = currentRestartingTime;
-			}
+				// check that the restarting time is increasing again
+				for (int i = 0; i < 2; i++) {
+					// add some pause to the let currentRestartingTime increase
+					Thread.sleep(1L);
+					long currentRestartingTime = restartingTime.getValue();
+
+					assertTrue(currentRestartingTime >= previousRestartingTime);
+					previousRestartingTime = currentRestartingTime;
+				}
+
+				assertTrue(previousRestartingTime > 0);
+
+				// now lets fail the job while it is in restarting and see whether the restarting time then stops to increase
+				// for this to work, we have to use a SuppressRestartException
+				executionGraph.failGlobal(new SuppressRestartsException(new Exception()));
+
+			});
+
+			testMainThread.execute(() -> {
+				assertEquals(JobStatus.FAILED, executionGraph.getState());
+
+				long previousRestartingTime = restartingTime.getValue();
+
+				for (int i = 0; i < 10; i++) {
+					long currentRestartingTime = restartingTime.getValue();
+
+					assertTrue(currentRestartingTime == previousRestartingTime);
+					previousRestartingTime = currentRestartingTime;
+				}
+			});
 		} finally {
 			executor.shutdownNow();
 		}

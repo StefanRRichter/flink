@@ -885,6 +885,7 @@ public class JobMasterTest extends TestLogger {
 			final JobMasterGateway jobMasterGateway = jobMaster.getSelfGateway(JobMasterGateway.class);
 
 			ExecutionGraph eg = jobMaster.getExecutionGraph();
+
 			ExecutionVertex ev = eg.getAllExecutionVertices().iterator().next();
 
 			final SupplierWithException<SerializedInputSplit, Exception> inputSplitSupplier = () -> jobMasterGateway.requestNextInputSplit(
@@ -901,7 +902,7 @@ public class JobMasterTest extends TestLogger {
 			final long maxWaitMillis = 2000L;
 			ExecutionGraphTestUtils.waitUntilExecutionVertexState(ev, ExecutionState.SCHEDULED, maxWaitMillis);
 
-			eg.failGlobal(new Exception("Testing exception"));
+			CompletableFuture.runAsync(() -> eg.failGlobal(new Exception("Testing exception")), eg.getJobMasterMainThreadExecutor()).get();
 
 			ExecutionGraphTestUtils.waitUntilExecutionVertexState(ev, ExecutionState.SCHEDULED, maxWaitMillis);
 
