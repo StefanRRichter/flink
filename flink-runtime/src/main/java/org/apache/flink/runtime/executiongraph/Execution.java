@@ -426,8 +426,8 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 			// IMPORTANT: We have to use the synchronous handle operation (direct executor) here so
 			// that we directly deploy the tasks if the slot allocation future is completed. This is
 			// necessary for immediate deployment.
-			final CompletableFuture<Void> deploymentFuture = allocationFuture.thenAccept(
-				(FutureConsumerWithException<Execution, Exception>) value -> deploy());
+			final CompletableFuture<Void> deploymentFuture = allocationFuture.thenAcceptAsync(
+				(FutureConsumerWithException<Execution, Exception>) value -> deploy(), vertex.getExecutionGraph().getJobMasterMainThreadExecutor());
 
 			deploymentFuture.whenComplete(
 				(Void ignored, Throwable failure) -> {
@@ -512,7 +512,8 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 				calculatePreferredLocations(locationPreferenceConstraint);
 
 			final SlotRequestId slotRequestId = new SlotRequestId();
-			final ComponentMainThreadExecutor mainThreadExecutor = vertex.getExecutionGraph().getMainThreadExecutor();
+			final ComponentMainThreadExecutor mainThreadExecutor =
+				vertex.getExecutionGraph().getJobMasterMainThreadExecutor();
 
 			final CompletableFuture<LogicalSlot> logicalSlotFuture = preferredLocationsFuture
 				.thenComposeAsync(
@@ -539,7 +540,7 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 					}
 				}, mainThreadExecutor);
 
-			return logicalSlotFuture.thenApply(
+			return logicalSlotFuture.thenApplyAsync(
 				(LogicalSlot logicalSlot) -> {
 					if (tryAssignResource(logicalSlot)) {
 						return this;
@@ -637,7 +638,7 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 						}
 					}
 				},
-				vertex.getExecutionGraph().getMainThreadExecutor());
+				vertex.getExecutionGraph().getJobMasterMainThreadExecutor());
 		}
 		catch (Throwable t) {
 			markFailed(t);
@@ -1094,7 +1095,7 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 
 		// we may need to loop multiple times (in the presence of concurrent calls) in order to
 		// atomically switch to failed
-		ensureRunningInMainThread();
+//		ensureRunningInMainThread();
 		while (true) {
 			ExecutionState current = this.state;
 
@@ -1219,7 +1220,7 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 						fail(new Exception("Task could not be canceled.", failure));
 					}
 				},
-				getVertex().getExecutionGraph().getMainThreadExecutor());
+				getVertex().getExecutionGraph().getJobMasterMainThreadExecutor());
 		}
 	}
 
@@ -1257,7 +1258,7 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 						fail(new IllegalStateException("Update task on TaskManager " + taskManagerLocation +
 							" failed due to:", failure));
 					}
-				}, getVertex().getExecutionGraph().getMainThreadExecutor());
+				}, getVertex().getExecutionGraph().getJobMasterMainThreadExecutor());
 		}
 	}
 
@@ -1449,6 +1450,6 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 	}
 
 	private void ensureRunningInMainThread() {
-		vertex.getExecutionGraph().ensureRunningInMainThread();
+		vertex.getExecutionGraph().ensureRunningInJobMasterMainThread();
 	}
 }

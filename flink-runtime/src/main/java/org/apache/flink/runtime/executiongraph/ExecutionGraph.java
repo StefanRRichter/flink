@@ -879,7 +879,7 @@ public class ExecutionGraph implements AccessExecutionGraph {
 
 	public void scheduleForExecution() throws JobException {
 
-		ensureRunningInMainThread();
+		ensureRunningInJobMasterMainThread();
 
 		final long currentGlobalModVersion = globalModVersion;
 
@@ -911,7 +911,7 @@ public class ExecutionGraph implements AccessExecutionGraph {
 							failGlobal(ExceptionUtils.stripCompletionException(throwable));
 						}
 					},
-					getMainThreadExecutor());
+					getJobMasterMainThreadExecutor());
 			} else {
 				newSchedulingFuture.cancel(false);
 			}
@@ -950,7 +950,7 @@ public class ExecutionGraph implements AccessExecutionGraph {
 	 * The future can also be completed exceptionally if an error happened.
 	 */
 	private CompletableFuture<Void> scheduleEager(SlotProvider slotProvider, final Time timeout) {
-		ensureRunningInMainThread();
+		ensureRunningInJobMasterMainThread();
 		checkState(state == JobStatus.RUNNING, "job is not running currently");
 
 		// Important: reserve all the space we need up front.
@@ -995,7 +995,7 @@ public class ExecutionGraph implements AccessExecutionGraph {
 									t));
 						}
 					}
-				}, getMainThreadExecutor())
+				}, getJobMasterMainThreadExecutor())
 			// Generate a more specific failure message for the eager scheduling
 			.exceptionally(
 				(Throwable throwable) -> {
@@ -1020,7 +1020,7 @@ public class ExecutionGraph implements AccessExecutionGraph {
 
 	public void cancel() {
 
-		ensureRunningInMainThread();
+		ensureRunningInJobMasterMainThread();
 
 		while (true) {
 			JobStatus current = state;
@@ -1047,7 +1047,7 @@ public class ExecutionGraph implements AccessExecutionGraph {
 
 					// we build a future that is complete once all vertices have reached a terminal state
 					final ConjunctFuture<Void> allTerminal = FutureUtils.waitForAll(futures);
-					allTerminal.whenComplete(
+					allTerminal.whenCompleteAsync(
 						(Void value, Throwable throwable) -> {
 							if (throwable != null) {
 								transitionState(
@@ -1062,7 +1062,7 @@ public class ExecutionGraph implements AccessExecutionGraph {
 								allVerticesInTerminalState(globalVersionForRestart);
 							}
 						}
-					);
+					, getJobMasterMainThreadExecutor());
 
 					return;
 				}
@@ -1095,7 +1095,7 @@ public class ExecutionGraph implements AccessExecutionGraph {
 
 	public void stop() throws StoppingException {
 
-		ensureRunningInMainThread();
+		ensureRunningInJobMasterMainThread();
 
 		if (isStoppable) {
 			for (ExecutionVertex ev : this.getAllExecutionVertices()) {
@@ -1121,7 +1121,7 @@ public class ExecutionGraph implements AccessExecutionGraph {
 	 */
 	public void suspend(Throwable suspensionCause) {
 
-		ensureRunningInMainThread();
+		ensureRunningInJobMasterMainThread();
 
 		while (true) {
 			JobStatus currentState = state;
@@ -1179,7 +1179,7 @@ public class ExecutionGraph implements AccessExecutionGraph {
 	 */
 	public void failGlobal(Throwable t) {
 
-		ensureRunningInMainThread();
+		ensureRunningInJobMasterMainThread();
 
 		while (true) {
 			JobStatus current = state;
@@ -1211,7 +1211,7 @@ public class ExecutionGraph implements AccessExecutionGraph {
 				}
 
 				final ConjunctFuture<Void> allTerminal = FutureUtils.waitForAll(futures);
-				allTerminal.whenComplete(
+				allTerminal.whenCompleteAsync(
 					(Void ignored, Throwable throwable) -> {
 						if (throwable != null) {
 							transitionState(
@@ -1221,7 +1221,7 @@ public class ExecutionGraph implements AccessExecutionGraph {
 						} else {
 							allVerticesInTerminalState(globalVersionForRestart);
 						}
-					});
+					}, jobMasterMainThreadExecutor);
 
 				return;
 			}
@@ -1232,7 +1232,7 @@ public class ExecutionGraph implements AccessExecutionGraph {
 
 	public void restart(long expectedGlobalVersion) {
 
-		ensureRunningInMainThread();
+		ensureRunningInJobMasterMainThread();
 
 		try {
 			synchronized (progressLock) {
@@ -1309,7 +1309,7 @@ public class ExecutionGraph implements AccessExecutionGraph {
 	 * job vertex that is not part of this ExecutionGraph).
 	 */
 	public void restoreLatestCheckpointedState(boolean errorIfNoCheckpoint, boolean allowNonRestoredState) throws Exception {
-		ensureRunningInMainThread();
+		ensureRunningInJobMasterMainThread();
 		synchronized (progressLock) {
 			if (checkpointCoordinator != null) {
 				checkpointCoordinator.restoreLatestCheckpointedState(getAllVertices(), errorIfNoCheckpoint, allowNonRestoredState);
@@ -1325,7 +1325,7 @@ public class ExecutionGraph implements AccessExecutionGraph {
 	@Override
 	public ArchivedExecutionConfig getArchivedExecutionConfig() {
 
-		ensureRunningInMainThread();
+		ensureRunningInJobMasterMainThread();
 
 		// create a summary of all relevant data accessed in the web interface's JobConfigHandler
 		try {
@@ -1389,7 +1389,7 @@ public class ExecutionGraph implements AccessExecutionGraph {
 	}
 
 	private boolean transitionState(JobStatus current, JobStatus newState, Throwable error) {
-		ensureRunningInMainThread();
+		ensureRunningInJobMasterMainThread();
 		// consistency check
 		if (current.isTerminalState()) {
 			String message = "Job is trying to leave terminal state " + current;
@@ -1533,7 +1533,7 @@ public class ExecutionGraph implements AccessExecutionGraph {
 					LOG.info("Restarting the job {} ({}).", getJobName(), getJobID());
 
 					RestartCallback restarter = new ExecutionGraphRestartCallback(this, globalModVersionForRestart);
-					restartStrategy.restart(restarter, getMainThreadExecutor());
+					restartStrategy.restart(restarter, getJobMasterMainThreadExecutor());
 
 					return true;
 				}
@@ -1667,7 +1667,7 @@ public class ExecutionGraph implements AccessExecutionGraph {
 	 */
 	public void scheduleOrUpdateConsumers(ResultPartitionID partitionId) throws ExecutionGraphException {
 
-		ensureRunningInMainThread();
+		ensureRunningInJobMasterMainThread();
 
 		final Execution execution = currentExecutions.get(partitionId.getProducerId());
 
@@ -1695,7 +1695,7 @@ public class ExecutionGraph implements AccessExecutionGraph {
 	}
 
 	void deregisterExecution(Execution exec) {
-		ensureRunningInMainThread();
+//		ensureRunningInJobMasterMainThread();
 		Execution contained = currentExecutions.remove(exec.getAttemptId());
 
 		if (contained != null && contained != exec) {
@@ -1832,8 +1832,8 @@ public class ExecutionGraph implements AccessExecutionGraph {
 		}
 	}
 
-	void ensureRunningInMainThread() {
-		if (!mainThreadExecutor.isMainThread()) {
+	void ensureRunningInJobMasterMainThread() {
+		if (jobMasterMainThreadExecutor != null && !jobMasterMainThreadExecutor.isMainThread()) {
 			IllegalStateException ise = new IllegalStateException("Not running in job master main thread, but in " + Thread.currentThread());
 			LOG.error("Wrong thread!", ise);
 			throw ise;

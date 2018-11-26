@@ -331,11 +331,11 @@ public abstract class RpcEndpoint implements RpcGateway {
 		}
 
 		public void runAsync(Runnable runnable) {
-			if (isMainThread()) {
-				runnable.run();
-			} else {
+//			if (isMainThread()) {
+//				runnable.run();
+//			} else {
 				gateway.runAsync(runnable);
-			}
+//			}
 		}
 
 		public <V> CompletableFuture<V> callAsync(Callable<V> callable, Time callTimeout) {

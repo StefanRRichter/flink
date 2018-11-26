@@ -111,7 +111,7 @@ public class RestartIndividualStrategy extends FailoverStrategy {
 
 		final ExecutionVertex vertexToRecover = taskExecution.getVertex(); 
 		final long globalModVersion = taskExecution.getGlobalModVersion();
-		final ScheduledExecutor mainThreadExecutor = executionGraph.getMainThreadExecutor();
+		final ScheduledExecutor mainThreadExecutor = executionGraph.getJobMasterMainThreadExecutor();
 
 		terminationFuture.thenAcceptAsync(
 			(ExecutionState value) -> {
