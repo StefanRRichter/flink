@@ -1048,6 +1048,7 @@ public class JobMaster extends FencedRpcEndpoint<JobMasterId> implements JobMast
 		//   - on notification of the leader, the connection will be established and
 		//     the slot pool will start requesting slots
 		resourceManagerLeaderRetriever.start(new ResourceManagerLeaderListener());
+		executionGraph.start(getMainThreadExecutor());
 	}
 
 	private void setNewFencingToken(JobMasterId newJobMasterId) {
