@@ -42,6 +42,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BiFunction;
+import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 
@@ -58,7 +59,6 @@ public class FutureUtils {
 	// ------------------------------------------------------------------------
 	//  retrying operations
 	// ------------------------------------------------------------------------
-
 
 	/**
 	 * Retry the given operation the given number of times in case of a failure.
@@ -777,6 +777,48 @@ public class FutureUtils {
 		}, Executors.directExecutionContext());
 
 		return result;
+	}
+
+	/**
+	 * This function takes a {@link CompletableFuture} and a function to apply to this future. If the input future
+	 * is already done, this function returns {@link CompletableFuture#thenApply(Function)}. Otherwise, the return
+	 * value is {@link CompletableFuture#thenApplyAsync(Function, Executor)} with the given executor.
+	 *
+	 * @param completableFuture the completable future for which we want to apply.
+	 * @param executor the executor to run the apply function if the future is not yet done.
+	 * @param applyFun the function to apply.
+	 * @param <IN> type of the input future.
+	 * @param <OUT> type of the output future.
+	 * @return a completable future that is applying the given function to the input future.
+	 */
+	public static <IN, OUT> CompletableFuture<OUT> applyAsyncIfNotDone(
+		CompletableFuture<IN> completableFuture,
+		Executor executor,
+		Function<IN, OUT> applyFun) {
+		return completableFuture.isDone() ?
+			completableFuture.thenApply(applyFun) :
+			completableFuture.thenApplyAsync(applyFun, executor);
+	}
+
+	/**
+	 * This function takes a {@link CompletableFuture} and a function to compose with this future. If the input future
+	 * is already done, this function returns {@link CompletableFuture#thenCompose(Function)}. Otherwise, the return
+	 * value is {@link CompletableFuture#thenComposeAsync(Function, Executor)} with the given executor.
+	 *
+	 * @param completableFuture the completable future for which we want to compose.
+	 * @param executor the executor to run the compose function if the future is not yet done.
+	 * @param composeFun the function to compose.
+	 * @param <IN> type of the input future.
+	 * @param <OUT> type of the output future.
+	 * @return a completable future that is a composition of the input future and the function.
+	 */
+	public static <IN, OUT> CompletableFuture<OUT> composeAsyncIfNotDone(
+		CompletableFuture<IN> completableFuture,
+		Executor executor,
+		Function<IN, CompletionStage<OUT>> composeFun) {
+		return completableFuture.isDone() ?
+			completableFuture.thenCompose(composeFun) :
+			completableFuture.thenComposeAsync(composeFun, executor);
 	}
 
 	/**

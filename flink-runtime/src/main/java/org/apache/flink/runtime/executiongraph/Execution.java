@@ -75,7 +75,6 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicReferenceFieldUpdater;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import static org.apache.flink.runtime.execution.ExecutionState.CANCELED;
@@ -518,28 +517,25 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 
 
 			final SlotRequestId slotRequestId = new SlotRequestId();
-			final Function<Collection<TaskManagerLocation>, CompletableFuture<LogicalSlot>> allocationOperation =
-				(Collection<TaskManagerLocation> preferredLocations) ->
-					slotProvider.allocateSlot(
-						slotRequestId,
-						toSchedule,
-						queued,
-						new SlotProfile(
-							ResourceProfile.UNKNOWN,
-							preferredLocations,
-							previousAllocationIDs,
-							allPreviousExecutionGraphAllocationIds),
-						allocationTimeout);
 
 			final ComponentMainThreadExecutor mainThreadExecutor =
 				vertex.getExecutionGraph().getJobMasterMainThreadExecutor();
 
-			final CompletableFuture<LogicalSlot> logicalSlotFuture;
-			if (preferredLocationsFuture.isDone()) {
-				logicalSlotFuture = preferredLocationsFuture.thenCompose(allocationOperation);
-			} else {
-				logicalSlotFuture = preferredLocationsFuture.thenComposeAsync(allocationOperation, mainThreadExecutor);
-			}
+			final CompletableFuture<LogicalSlot> logicalSlotFuture =
+				FutureUtils.composeAsyncIfNotDone(
+					preferredLocationsFuture,
+					mainThreadExecutor,
+					(Collection<TaskManagerLocation> preferredLocations) ->
+						slotProvider.allocateSlot(
+							slotRequestId,
+							toSchedule,
+							queued,
+							new SlotProfile(
+								ResourceProfile.UNKNOWN,
+								preferredLocations,
+								previousAllocationIDs,
+								allPreviousExecutionGraphAllocationIds),
+							allocationTimeout));
 
 			// register call back to cancel slot request in case that the execution gets canceled
 			releaseFuture.whenCompleteAsync(
@@ -552,19 +548,21 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 					}
 				}, mainThreadExecutor);
 
-			return logicalSlotFuture.thenApply(
+			return FutureUtils.applyAsyncIfNotDone(
+				logicalSlotFuture,
+				mainThreadExecutor,
 				(LogicalSlot logicalSlot) -> {
 					if (tryAssignResource(logicalSlot)) {
 						return this;
 					} else {
 						// release the slot
 						logicalSlot.releaseSlot(new FlinkException("Could not assign logical slot to execution " + this + '.'));
-
-						throw new CompletionException(new FlinkException("Could not assign slot " + logicalSlot + " to execution " + this + " because it has already been assigned "));
+						throw new CompletionException(
+							new FlinkException(
+								"Could not assign slot " + logicalSlot + " to execution " + this + " because it has already been assigned "));
 					}
 				});
-		}
-		else {
+		} else {
 			// call race, already deployed, or already done
 			throw new IllegalExecutionStateException(this, CREATED, state);
 		}
