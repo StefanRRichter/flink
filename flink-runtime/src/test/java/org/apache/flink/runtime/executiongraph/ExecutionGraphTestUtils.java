@@ -30,7 +30,6 @@ import org.apache.flink.runtime.blob.VoidBlobWriter;
 import org.apache.flink.runtime.checkpoint.StandaloneCheckpointRecoveryFactory;
 import org.apache.flink.runtime.clusterframework.types.AllocationID;
 import org.apache.flink.runtime.clusterframework.types.ResourceID;
-import org.apache.flink.runtime.concurrent.ComponentMainThreadExecutorServiceAdapter;
 import org.apache.flink.runtime.deployment.TaskDeploymentDescriptor;
 import org.apache.flink.runtime.execution.ExecutionState;
 import org.apache.flink.runtime.executiongraph.failover.FailoverRegion;
@@ -461,7 +460,7 @@ public class ExecutionGraphTestUtils {
 			timeout,
 			TEST_LOGGER);
 
-		executionGraph.start(new ComponentMainThreadExecutorServiceAdapter(executor));
+		executionGraph.start(TestComponentMainThreadExecutor.forMainThread());
 
 		return executionGraph;
 	}
@@ -590,7 +589,7 @@ public class ExecutionGraphTestUtils {
 			new NoRestartStrategy(),
 			new Scheduler(ExecutionContext$.MODULE$.fromExecutor(executor)));
 
-		graph.start(new ComponentMainThreadExecutorServiceAdapter(executor));
+		graph.start(TestComponentMainThreadExecutor.forMainThread());
 
 		return spy(new ExecutionJobVertex(graph, ajv, 1, AkkaUtils.getDefaultTimeout()));
 	}

@@ -27,7 +27,6 @@ import org.apache.flink.runtime.blob.VoidBlobWriter;
 import org.apache.flink.runtime.checkpoint.StandaloneCheckpointRecoveryFactory;
 import org.apache.flink.runtime.clusterframework.types.AllocationID;
 import org.apache.flink.runtime.clusterframework.types.ResourceID;
-import org.apache.flink.runtime.concurrent.ComponentMainThreadExecutorServiceAdapter;
 import org.apache.flink.runtime.deployment.TaskDeploymentDescriptor;
 import org.apache.flink.runtime.execution.ExecutionState;
 import org.apache.flink.runtime.executiongraph.restart.NoRestartStrategy;
@@ -621,7 +620,7 @@ public class ExecutionGraphSchedulingTest extends TestLogger {
 			VoidBlobWriter.getInstance(),
 			timeout,
 			log);
-		eg.start(new ComponentMainThreadExecutorServiceAdapter(executor));
+		eg.start(TestComponentMainThreadExecutor.forMainThread());
 		return eg;
 	}
 

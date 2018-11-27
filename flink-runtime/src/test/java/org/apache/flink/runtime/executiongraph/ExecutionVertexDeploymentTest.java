@@ -337,6 +337,9 @@ public class ExecutionVertexDeploymentTest extends TestLogger {
 			// execute exceptionallyAsync call in Execution#deployToSlot
 			queue.triggerNextAction();
 
+			// handle returning interaction with TM gateway
+			queue.triggerNextAction();
+
 			assertEquals(ExecutionState.FAILED, vertex.getExecutionState());
 
 			assertEquals(testError, vertex.getFailureCause());

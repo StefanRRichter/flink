@@ -22,7 +22,6 @@ import org.apache.flink.api.common.time.Time;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.core.testutils.OneShotLatch;
 import org.apache.flink.runtime.clusterframework.types.SlotProfile;
-import org.apache.flink.runtime.concurrent.ComponentMainThreadExecutorServiceAdapter;
 import org.apache.flink.runtime.concurrent.ScheduledExecutor;
 import org.apache.flink.runtime.execution.ExecutionState;
 import org.apache.flink.runtime.execution.SuppressRestartsException;
@@ -123,7 +122,7 @@ public class ExecutionGraphMetricsTest extends TestLogger {
 			assertEquals(0L, restartingTime.getValue().longValue());
 
 			executionGraph.attachJobGraph(jobGraph.getVerticesSortedTopologicallyFromSources());
-			executionGraph.start(new ComponentMainThreadExecutorServiceAdapter(executor));
+			executionGraph.start(TestComponentMainThreadExecutor.forMainThread());
 
 			// start execution
 			executionGraph.scheduleForExecution();
