@@ -310,7 +310,8 @@ public abstract class RpcEndpoint implements RpcGateway {
 	}
 
 	public boolean isCurrentMainThread() {
-		return currentMainThread.get() == Thread.currentThread();
+		Thread expected = currentMainThread.get();
+		return expected == Thread.currentThread() || expected == null;
 	}
 
 	// ------------------------------------------------------------------------
