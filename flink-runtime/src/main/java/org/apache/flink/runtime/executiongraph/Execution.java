@@ -75,6 +75,7 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicReferenceFieldUpdater;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import static org.apache.flink.runtime.execution.ExecutionState.CANCELED;
@@ -215,7 +216,7 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 		this.attemptNumber = attemptNumber;
 
 		this.stateTimestamps = new long[ExecutionState.values().length];
-		markTimestamp(ExecutionState.CREATED, startTimestamp);
+		markTimestamp(CREATED, startTimestamp);
 
 		this.partialInputChannelDeploymentDescriptors = new ConcurrentLinkedQueue<>();
 		this.terminalStateFuture = new CompletableFuture<>();
@@ -280,6 +281,9 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 	 */
 	@VisibleForTesting
 	boolean tryAssignResource(final LogicalSlot logicalSlot) {
+
+		ensureRunningInMainThread();
+
 		checkNotNull(logicalSlot);
 
 		// only allow to set the assigned resource in state SCHEDULED or CREATED
@@ -423,11 +427,17 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 				allPreviousExecutionGraphAllocationIds,
 				allocationTimeout);
 
-			// IMPORTANT: We have to use the synchronous handle operation (direct executor) here so
-			// that we directly deploy the tasks if the slot allocation future is completed. This is
-			// necessary for immediate deployment.
-			final CompletableFuture<Void> deploymentFuture = allocationFuture.thenAcceptAsync(
-				(FutureConsumerWithException<Execution, Exception>) value -> deploy(), vertex.getExecutionGraph().getJobMasterMainThreadExecutor());
+			FutureConsumerWithException<Execution, Exception> deployment = value -> deploy();
+			final CompletableFuture<Void> deploymentFuture;
+			if (allocationFuture.isDone()) {
+				deploymentFuture = allocationFuture.thenAccept(deployment);
+			} else if (queued) {
+				deploymentFuture = allocationFuture.thenAcceptAsync(
+					deployment, vertex.getExecutionGraph().getJobMasterMainThreadExecutor());
+			} else {
+				deploymentFuture = FutureUtils.completedExceptionally(
+					new IllegalArgumentException("The slot allocation future has not been completed yet."));
+			}
 
 			deploymentFuture.whenComplete(
 				(Void ignored, Throwable failure) -> {
@@ -446,11 +456,6 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 						markFailed(schedulingFailureCause);
 					}
 				});
-
-			// if tasks have to scheduled immediately check that the task has been deployed
-			if (!queued && !deploymentFuture.isDone()) {
-				deploymentFuture.completeExceptionally(new IllegalArgumentException("The slot allocation future has not been completed yet."));
-			}
 
 			return deploymentFuture;
 		} catch (IllegalExecutionStateException e) {
@@ -511,23 +516,30 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 			final CompletableFuture<Collection<TaskManagerLocation>> preferredLocationsFuture =
 				calculatePreferredLocations(locationPreferenceConstraint);
 
+
 			final SlotRequestId slotRequestId = new SlotRequestId();
+			final Function<Collection<TaskManagerLocation>, CompletableFuture<LogicalSlot>> allocationOperation =
+				(Collection<TaskManagerLocation> preferredLocations) ->
+					slotProvider.allocateSlot(
+						slotRequestId,
+						toSchedule,
+						queued,
+						new SlotProfile(
+							ResourceProfile.UNKNOWN,
+							preferredLocations,
+							previousAllocationIDs,
+							allPreviousExecutionGraphAllocationIds),
+						allocationTimeout);
+
 			final ComponentMainThreadExecutor mainThreadExecutor =
 				vertex.getExecutionGraph().getJobMasterMainThreadExecutor();
 
-			final CompletableFuture<LogicalSlot> logicalSlotFuture = preferredLocationsFuture
-				.thenComposeAsync(
-					(Collection<TaskManagerLocation> preferredLocations) ->
-						slotProvider.allocateSlot(
-							slotRequestId,
-							toSchedule,
-							queued,
-							new SlotProfile(
-								ResourceProfile.UNKNOWN,
-								preferredLocations,
-								previousAllocationIDs,
-								allPreviousExecutionGraphAllocationIds),
-							allocationTimeout), mainThreadExecutor);
+			final CompletableFuture<LogicalSlot> logicalSlotFuture;
+			if (preferredLocationsFuture.isDone()) {
+				logicalSlotFuture = preferredLocationsFuture.thenCompose(allocationOperation);
+			} else {
+				logicalSlotFuture = preferredLocationsFuture.thenComposeAsync(allocationOperation, mainThreadExecutor);
+			}
 
 			// register call back to cancel slot request in case that the execution gets canceled
 			releaseFuture.whenCompleteAsync(
@@ -540,7 +552,7 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 					}
 				}, mainThreadExecutor);
 
-			return logicalSlotFuture.thenApplyAsync(
+			return logicalSlotFuture.thenApply(
 				(LogicalSlot logicalSlot) -> {
 					if (tryAssignResource(logicalSlot)) {
 						return this;
@@ -1095,7 +1107,7 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 
 		// we may need to loop multiple times (in the presence of concurrent calls) in order to
 		// atomically switch to failed
-//		ensureRunningInMainThread();
+		ensureRunningInMainThread();
 		while (true) {
 			ExecutionState current = this.state;
 

@@ -30,6 +30,7 @@ import org.apache.flink.runtime.blob.VoidBlobWriter;
 import org.apache.flink.runtime.checkpoint.StandaloneCheckpointRecoveryFactory;
 import org.apache.flink.runtime.clusterframework.types.AllocationID;
 import org.apache.flink.runtime.clusterframework.types.ResourceID;
+import org.apache.flink.runtime.concurrent.ComponentMainThreadExecutorServiceAdapter;
 import org.apache.flink.runtime.deployment.TaskDeploymentDescriptor;
 import org.apache.flink.runtime.execution.ExecutionState;
 import org.apache.flink.runtime.executiongraph.failover.FailoverRegion;
@@ -443,7 +444,7 @@ public class ExecutionGraphTestUtils {
 		checkNotNull(vertices);
 		checkNotNull(timeout);
 
-		return ExecutionGraphBuilder.buildGraph(
+		ExecutionGraph executionGraph = ExecutionGraphBuilder.buildGraph(
 			null,
 			new JobGraph(jid, "test job", vertices),
 			new Configuration(),
@@ -459,6 +460,10 @@ public class ExecutionGraphTestUtils {
 			VoidBlobWriter.getInstance(),
 			timeout,
 			TEST_LOGGER);
+
+		executionGraph.start(new ComponentMainThreadExecutorServiceAdapter(executor));
+
+		return executionGraph;
 	}
 
 	public static JobVertex createNoOpVertex(int parallelism) {
@@ -584,6 +589,8 @@ public class ExecutionGraphTestUtils {
 			AkkaUtils.getDefaultTimeout(),
 			new NoRestartStrategy(),
 			new Scheduler(ExecutionContext$.MODULE$.fromExecutor(executor)));
+
+		graph.start(new ComponentMainThreadExecutorServiceAdapter(executor));
 
 		return spy(new ExecutionJobVertex(graph, ajv, 1, AkkaUtils.getDefaultTimeout()));
 	}

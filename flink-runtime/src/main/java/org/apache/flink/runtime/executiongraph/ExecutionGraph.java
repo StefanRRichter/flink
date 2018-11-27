@@ -1428,6 +1428,7 @@ public class ExecutionGraph implements AccessExecutionGraph {
 	 * Once all vertices are in the FINISHED state, the program is successfully done.
 	 */
 	void vertexFinished() {
+		ensureRunningInJobMasterMainThread();
 		final int numFinished = verticesFinished.incrementAndGet();
 		if (numFinished == numVerticesTotal) {
 			// done :-)
@@ -1587,6 +1588,7 @@ public class ExecutionGraph implements AccessExecutionGraph {
 	 * @return True, if the task update was properly applied, false, if the execution attempt was not found.
 	 */
 	public boolean updateState(TaskExecutionState state) {
+		ensureRunningInJobMasterMainThread();
 		final Execution attempt = currentExecutions.get(state.getID());
 
 		if (attempt != null) {

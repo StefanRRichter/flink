@@ -33,6 +33,7 @@ import org.apache.flink.runtime.blob.PermanentBlobService;
 import org.apache.flink.runtime.blob.VoidBlobWriter;
 import org.apache.flink.runtime.checkpoint.CheckpointRetentionPolicy;
 import org.apache.flink.runtime.checkpoint.StandaloneCheckpointRecoveryFactory;
+import org.apache.flink.runtime.concurrent.ComponentMainThreadExecutorServiceAdapter;
 import org.apache.flink.runtime.deployment.InputGateDeploymentDescriptor;
 import org.apache.flink.runtime.deployment.ResultPartitionDeploymentDescriptor;
 import org.apache.flink.runtime.deployment.TaskDeploymentDescriptor;
@@ -168,6 +169,8 @@ public class ExecutionGraphDeploymentTest extends TestLogger {
 				ExecutionGraph.class.getClassLoader(),
 				blobWriter,
 				AkkaUtils.getDefaultTimeout());
+
+			eg.start(new ComponentMainThreadExecutorServiceAdapter(TestingUtils.defaultExecutor()));
 
 			checkJobOffloaded(eg);
 
@@ -439,10 +442,12 @@ public class ExecutionGraphDeploymentTest extends TestLogger {
 			jobId,
 			"failing test job");
 
+		DirectScheduledExecutorService directExecutor = new DirectScheduledExecutorService();
+
 		// execution graph that executes actions synchronously
 		ExecutionGraph eg = new ExecutionGraph(
 			jobInformation,
-			new DirectScheduledExecutorService(),
+			directExecutor,
 			TestingUtils.defaultExecutor(),
 			AkkaUtils.getDefaultTimeout(),
 			new NoRestartStrategy(),
@@ -451,6 +456,8 @@ public class ExecutionGraphDeploymentTest extends TestLogger {
 			ExecutionGraph.class.getClassLoader(),
 			blobWriter,
 			AkkaUtils.getDefaultTimeout());
+
+		eg.start(new ComponentMainThreadExecutorServiceAdapter(directExecutor));
 
 		checkJobOffloaded(eg);
 
@@ -521,10 +528,12 @@ public class ExecutionGraphDeploymentTest extends TestLogger {
 			jobId,
 			"some job");
 
+		DirectScheduledExecutorService executorService = new DirectScheduledExecutorService();
+
 		// execution graph that executes actions synchronously
 		ExecutionGraph eg = new ExecutionGraph(
 			jobInformation,
-			new DirectScheduledExecutorService(),
+			executorService,
 			TestingUtils.defaultExecutor(),
 			AkkaUtils.getDefaultTimeout(),
 			new NoRestartStrategy(),
@@ -534,6 +543,8 @@ public class ExecutionGraphDeploymentTest extends TestLogger {
 			blobWriter,
 			AkkaUtils.getDefaultTimeout());
 		checkJobOffloaded(eg);
+
+		eg.start(new ComponentMainThreadExecutorServiceAdapter(executorService));
 		
 		eg.setQueuedSchedulingAllowed(false);
 
