@@ -21,8 +21,9 @@ package org.apache.flink.runtime.executiongraph;
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.api.common.time.Time;
 import org.apache.flink.core.testutils.ManuallyTriggeredDirectExecutor;
+import org.apache.flink.runtime.JobException;
 import org.apache.flink.runtime.blob.VoidBlobWriter;
-import org.apache.flink.runtime.concurrent.ComponentMainThreadExecutorServiceAdapter;
+import org.apache.flink.runtime.concurrent.ComponentMainThreadExecutor;
 import org.apache.flink.runtime.execution.ExecutionState;
 import org.apache.flink.runtime.execution.SuppressRestartsException;
 import org.apache.flink.runtime.executiongraph.failover.FailoverStrategy;
@@ -31,18 +32,21 @@ import org.apache.flink.runtime.executiongraph.failover.RestartPipelinedRegionSt
 import org.apache.flink.runtime.executiongraph.restart.FixedDelayRestartStrategy;
 import org.apache.flink.runtime.executiongraph.restart.RestartStrategy;
 import org.apache.flink.runtime.executiongraph.utils.SimpleSlotProvider;
-import org.apache.flink.runtime.jobmaster.slotpool.SlotProvider;
 import org.apache.flink.runtime.jobgraph.JobGraph;
 import org.apache.flink.runtime.jobgraph.JobStatus;
 import org.apache.flink.runtime.jobgraph.JobVertex;
+import org.apache.flink.runtime.jobmaster.slotpool.SlotProvider;
 import org.apache.flink.runtime.testingUtils.TestingUtils;
 import org.apache.flink.runtime.testtasks.NoOpInvokable;
-import org.apache.flink.runtime.testutils.DirectScheduledExecutorService;
 import org.apache.flink.util.TestLogger;
 
 import org.junit.Test;
 
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.Executor;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeoutException;
 
 import static org.apache.flink.runtime.executiongraph.ExecutionGraphTestUtils.waitUntilExecutionState;
 import static org.apache.flink.runtime.executiongraph.ExecutionGraphTestUtils.waitUntilJobStatus;
@@ -76,6 +80,8 @@ public class PipelinedRegionFailoverConcurrencyTest extends TestLogger {
 		final JobID jid = new JobID();
 		final int parallelism = 2;
 
+		TestComponentMainThreadExecutor mainThreadExecutor =
+			TestComponentMainThreadExecutor.forSingeThreadExecutor(Executors.newSingleThreadScheduledExecutor());
 		final ManuallyTriggeredDirectExecutor executor = new ManuallyTriggeredDirectExecutor();
 
 		final SimpleSlotProvider slotProvider = new SimpleSlotProvider(jid, parallelism);
@@ -85,6 +91,7 @@ public class PipelinedRegionFailoverConcurrencyTest extends TestLogger {
 				new FailoverPipelinedRegionWithCustomExecutor(executor),
 				new FixedDelayRestartStrategy(Integer.MAX_VALUE, 0),
 				slotProvider,
+				mainThreadExecutor,
 				2);
 
 		final ExecutionJobVertex ejv = graph.getVerticesTopologically().iterator().next();
@@ -141,6 +148,9 @@ public class PipelinedRegionFailoverConcurrencyTest extends TestLogger {
 		final JobID jid = new JobID();
 		final int parallelism = 2;
 
+		TestComponentMainThreadExecutor mainThreadExecutor =
+			TestComponentMainThreadExecutor.forSingeThreadExecutor(Executors.newSingleThreadScheduledExecutor());
+
 		final ManuallyTriggeredDirectExecutor executor = new ManuallyTriggeredDirectExecutor();
 
 		final SimpleSlotProvider slotProvider = new SimpleSlotProvider(jid, parallelism);
@@ -150,17 +160,28 @@ public class PipelinedRegionFailoverConcurrencyTest extends TestLogger {
 				new FailoverPipelinedRegionWithCustomExecutor(executor),
 				new FixedDelayRestartStrategy(Integer.MAX_VALUE, 0),
 				slotProvider,
+				mainThreadExecutor,
 				2);
 
 		final ExecutionJobVertex ejv = graph.getVerticesTopologically().iterator().next();
 		final ExecutionVertex vertex1 = ejv.getTaskVertices()[0];
 		final ExecutionVertex vertex2 = ejv.getTaskVertices()[1];
 
-		graph.scheduleForExecution();
+		CompletableFuture.supplyAsync(() -> {
+			try {
+				graph.scheduleForExecution();
+				return null;
+			} catch (JobException e) {
+				throw new CompletionException(e);
+			}
+		}, mainThreadExecutor).get();
 		assertEquals(JobStatus.RUNNING, graph.getState());
 
 		// let one of the vertices fail - that triggers a local recovery action
-		vertex1.getCurrentExecutionAttempt().fail(new Exception("test failure"));
+		CompletableFuture.supplyAsync(() -> {
+			vertex1.getCurrentExecutionAttempt().fail(new Exception("test failure"));
+			return null;
+		}, mainThreadExecutor).get();
 		assertEquals(ExecutionState.FAILED, vertex1.getCurrentExecutionAttempt().getState());
 
 		// graph should still be running and the failover recovery action should be queued
@@ -168,7 +189,10 @@ public class PipelinedRegionFailoverConcurrencyTest extends TestLogger {
 		assertEquals(1, executor.numQueuedRunnables());
 
 		// now cancel the job
-		graph.failGlobal(new SuppressRestartsException(new Exception("test exception")));
+		CompletableFuture.supplyAsync(() -> {
+			graph.failGlobal(new SuppressRestartsException(new Exception("test exception")));
+			return null;
+		}, mainThreadExecutor).get();
 
 		assertEquals(JobStatus.FAILING, graph.getState());
 		assertEquals(ExecutionState.FAILED, vertex1.getCurrentExecutionAttempt().getState());
@@ -178,7 +202,10 @@ public class PipelinedRegionFailoverConcurrencyTest extends TestLogger {
 		executor.trigger();
 
 		// now report that cancelling is complete for the other vertex
-		vertex2.getCurrentExecutionAttempt().cancelingComplete();
+		CompletableFuture.supplyAsync(() -> {
+			vertex2.getCurrentExecutionAttempt().cancelingComplete();
+			return null;
+		}, mainThreadExecutor).get();
 
 		assertEquals(JobStatus.FAILED, graph.getState());
 		assertTrue(vertex1.getCurrentExecutionAttempt().getState().isTerminal());
@@ -205,15 +232,18 @@ public class PipelinedRegionFailoverConcurrencyTest extends TestLogger {
 		final JobID jid = new JobID();
 		final int parallelism = 2;
 
-		final ManuallyTriggeredDirectExecutor executor = new ManuallyTriggeredDirectExecutor();
+		TestComponentMainThreadExecutor mainThreadExecutor =
+			TestComponentMainThreadExecutor.forSingeThreadExecutor(Executors.newSingleThreadScheduledExecutor());
+		final ManuallyTriggeredDirectExecutor failoverTriggeredExecutor = new ManuallyTriggeredDirectExecutor();
 
 		final SimpleSlotProvider slotProvider = new SimpleSlotProvider(jid, parallelism);
 
 		final ExecutionGraph graph = createSampleGraph(
 				jid,
-				new FailoverPipelinedRegionWithCustomExecutor(executor),
+				new FailoverPipelinedRegionWithCustomExecutor(failoverTriggeredExecutor),
 				new FixedDelayRestartStrategy(2, 0), // twice restart, no delay
 				slotProvider,
+				mainThreadExecutor,
 				2);
 		RestartPipelinedRegionStrategy strategy = (RestartPipelinedRegionStrategy)graph.getFailoverStrategy();
 
@@ -221,41 +251,91 @@ public class PipelinedRegionFailoverConcurrencyTest extends TestLogger {
 		final ExecutionVertex vertex1 = ejv.getTaskVertices()[0];
 		final ExecutionVertex vertex2 = ejv.getTaskVertices()[1];
 
-		graph.scheduleForExecution();
+		CompletableFuture.supplyAsync(() -> {
+			try {
+				graph.scheduleForExecution();
+				return null;
+			} catch (JobException e) {
+				throw new CompletionException(e);
+			}
+		}, mainThreadExecutor).get();
 		assertEquals(JobStatus.RUNNING, graph.getState());
 		assertEquals(JobStatus.RUNNING, strategy.getFailoverRegion(vertex1).getState());
 
 		// let one of the vertices fail - that triggers a local recovery action
-		vertex2.getCurrentExecutionAttempt().fail(new Exception("test failure"));
+		CompletableFuture.supplyAsync(() -> {
+			vertex2.getCurrentExecutionAttempt().fail(new Exception("test failure"));
+			return null;
+		}, mainThreadExecutor).get();
 		assertEquals(ExecutionState.FAILED, vertex2.getCurrentExecutionAttempt().getState());
 		assertEquals(JobStatus.CANCELLING, strategy.getFailoverRegion(vertex2).getState());
 
 		// graph should still be running and the failover recovery action should be queued
 		assertEquals(JobStatus.RUNNING, graph.getState());
-		assertEquals(1, executor.numQueuedRunnables());
+		assertEquals(1, failoverTriggeredExecutor.numQueuedRunnables());
 
 		// now cancel the job
-		graph.failGlobal(new Exception("test exception"));
+		CompletableFuture.supplyAsync(() -> {
+			graph.failGlobal(new Exception("test exception"));
+			return null;
+		}, mainThreadExecutor).get();
 
 		assertEquals(JobStatus.FAILING, graph.getState());
 		assertEquals(ExecutionState.FAILED, vertex2.getCurrentExecutionAttempt().getState());
 		assertEquals(ExecutionState.CANCELING, vertex1.getCurrentExecutionAttempt().getState());
 
 		// now report that cancelling is complete for the other vertex
-		vertex1.getCurrentExecutionAttempt().cancelingComplete();
+		CompletableFuture.supplyAsync(() -> {
+			vertex1.getCurrentExecutionAttempt().cancelingComplete();
+			return null;
+		}, mainThreadExecutor).get();
 
-		waitUntilJobStatus(graph, JobStatus.RUNNING, 1000);
+		CompletableFuture.supplyAsync(() -> {
+			try {
+				waitUntilJobStatus(graph, JobStatus.RUNNING, 1000);
+			} catch (TimeoutException e) {
+				throw new CompletionException(e);
+			}
+			return null;
+		}, mainThreadExecutor).get();
+
 		assertEquals(JobStatus.RUNNING, graph.getState());
 
-		waitUntilExecutionState(vertex1.getCurrentExecutionAttempt(), ExecutionState.DEPLOYING, 1000);
-		waitUntilExecutionState(vertex2.getCurrentExecutionAttempt(), ExecutionState.DEPLOYING, 1000);
-		vertex1.getCurrentExecutionAttempt().switchToRunning();
-		vertex2.getCurrentExecutionAttempt().switchToRunning();
+		CompletableFuture.supplyAsync(() -> {
+			try {
+				waitUntilExecutionState(vertex1.getCurrentExecutionAttempt(), ExecutionState.DEPLOYING, 1000);
+			} catch (TimeoutException e) {
+				throw new RuntimeException(e);
+			}
+			return null;
+		}, mainThreadExecutor).get();
+//		waitUntilExecutionState(vertex1.getCurrentExecutionAttempt(), ExecutionState.DEPLOYING, 1000);
+
+		CompletableFuture.supplyAsync(() -> {
+			try {
+				waitUntilExecutionState(vertex2.getCurrentExecutionAttempt(), ExecutionState.DEPLOYING, 1000);
+			} catch (TimeoutException e) {
+				throw new RuntimeException(e);
+			}
+			return null;
+		}, mainThreadExecutor).get();
+//		waitUntilExecutionState(vertex2.getCurrentExecutionAttempt(), ExecutionState.DEPLOYING, 1000);
+
+		CompletableFuture.supplyAsync(() -> {
+			vertex1.getCurrentExecutionAttempt().switchToRunning();
+			return null;
+		}, mainThreadExecutor).get();
+//		vertex1.getCurrentExecutionAttempt().switchToRunning();
+		CompletableFuture.supplyAsync(() -> {
+			vertex2.getCurrentExecutionAttempt().switchToRunning();
+			return null;
+		}, mainThreadExecutor).get();
+//		vertex2.getCurrentExecutionAttempt().switchToRunning();
 		assertEquals(ExecutionState.RUNNING, vertex1.getCurrentExecutionAttempt().getState());
 		assertEquals(ExecutionState.RUNNING, vertex2.getCurrentExecutionAttempt().getState());
 
 		// let the recovery action continue - this should do nothing any more
-		executor.trigger();
+		failoverTriggeredExecutor.trigger();
 
 		// validate that the graph is still peachy
 		assertEquals(JobStatus.RUNNING, graph.getState());
@@ -272,14 +352,30 @@ public class PipelinedRegionFailoverConcurrencyTest extends TestLogger {
 		assertEquals(0, slotProvider.getNumberOfAvailableSlots());
 
 		// validate that a task failure then can be handled by the local recovery
-		vertex2.getCurrentExecutionAttempt().fail(new Exception("test failure"));
-		assertEquals(1, executor.numQueuedRunnables());
+		CompletableFuture.supplyAsync(() -> {
+			vertex2.getCurrentExecutionAttempt().fail(new Exception("test failure"));
+			return null;
+		}, mainThreadExecutor).get();
+//		vertex2.getCurrentExecutionAttempt().fail(new Exception("test failure"));
+		assertEquals(1, failoverTriggeredExecutor.numQueuedRunnables());
 
 		// let the local recovery action continue - this should recover the vertex2
-		executor.trigger();
+		failoverTriggeredExecutor.trigger();
 
-		waitUntilExecutionState(vertex2.getCurrentExecutionAttempt(), ExecutionState.DEPLOYING, 1000);
-		vertex2.getCurrentExecutionAttempt().switchToRunning();
+		CompletableFuture.supplyAsync(() -> {
+			try {
+				waitUntilExecutionState(vertex2.getCurrentExecutionAttempt(), ExecutionState.DEPLOYING, 1000);
+			} catch (TimeoutException e) {
+				throw new CompletionException(e);
+			}
+			return null;
+		}, mainThreadExecutor).get();
+//		waitUntilExecutionState(vertex2.getCurrentExecutionAttempt(), ExecutionState.DEPLOYING, 1000);
+		CompletableFuture.supplyAsync(() -> {
+			vertex2.getCurrentExecutionAttempt().switchToRunning();
+			return null;
+		}, mainThreadExecutor).get();
+//		vertex2.getCurrentExecutionAttempt().switchToRunning();
 
 		// validate that the local recovery result
 		assertEquals(JobStatus.RUNNING, graph.getState());
@@ -305,6 +401,7 @@ public class PipelinedRegionFailoverConcurrencyTest extends TestLogger {
 			Factory failoverStrategy,
 			RestartStrategy restartStrategy,
 			SlotProvider slotProvider,
+			ComponentMainThreadExecutor mainThreadExecutor,
 			int parallelism) throws Exception {
 
 		final JobInformation jobInformation = new DummyJobInformation(
@@ -332,7 +429,7 @@ public class PipelinedRegionFailoverConcurrencyTest extends TestLogger {
 		JobGraph jg = new JobGraph(jid, "testjob", jv);
 		graph.attachJobGraph(jg.getVerticesSortedTopologicallyFromSources());
 
-		graph.start(new ComponentMainThreadExecutorServiceAdapter(new DirectScheduledExecutorService()));
+		graph.start(mainThreadExecutor);
 
 		return graph;
 	}
