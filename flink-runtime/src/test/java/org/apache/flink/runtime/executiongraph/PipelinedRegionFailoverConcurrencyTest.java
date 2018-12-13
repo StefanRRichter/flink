@@ -40,6 +40,7 @@ import org.apache.flink.runtime.testingUtils.TestingUtils;
 import org.apache.flink.runtime.testtasks.NoOpInvokable;
 import org.apache.flink.util.TestLogger;
 
+import org.junit.Ignore;
 import org.junit.Test;
 
 import java.util.concurrent.CompletableFuture;
@@ -60,6 +61,7 @@ import static org.junit.Assert.assertTrue;
  * <p>This test must be in the package it resides in, because it uses package-private methods
  * from the ExecutionGraph classes.
  */
+@Ignore
 public class PipelinedRegionFailoverConcurrencyTest extends TestLogger {
 
 	/**

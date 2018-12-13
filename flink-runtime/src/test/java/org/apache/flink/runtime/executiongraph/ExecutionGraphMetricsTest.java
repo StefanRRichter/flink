@@ -20,7 +20,6 @@ package org.apache.flink.runtime.executiongraph;
 
 import org.apache.flink.api.common.time.Time;
 import org.apache.flink.configuration.Configuration;
-import org.apache.flink.core.testutils.OneShotLatch;
 import org.apache.flink.runtime.clusterframework.types.SlotProfile;
 import org.apache.flink.runtime.concurrent.ScheduledExecutor;
 import org.apache.flink.runtime.execution.ExecutionState;
@@ -40,17 +39,14 @@ import org.apache.flink.runtime.taskmanager.TaskExecutionState;
 import org.apache.flink.runtime.testtasks.NoOpInvokable;
 import org.apache.flink.util.SerializedValue;
 import org.apache.flink.util.TestLogger;
-import org.apache.flink.util.function.ThrowingRunnable;
 
 import org.junit.Test;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
-import java.util.function.Supplier;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
@@ -60,25 +56,6 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 public class ExecutionGraphMetricsTest extends TestLogger {
-
-
-	private void execute(ThrowingRunnable<?> runnable, Executor executor) throws Exception {
-		OneShotLatch oneShotLatch = new OneShotLatch();
-		Runnable runAndWait = () -> {
-			try {
-				runnable.run();
-			} catch (Throwable throwable) {
-				throw new RuntimeException(throwable);
-			}
-			oneShotLatch.trigger();
-		};
-		executor.execute(runAndWait);
-		oneShotLatch.await();
-	}
-
-	private <T> T execute(Supplier<T> supplier, Executor executor) throws Exception {
-		return CompletableFuture.supplyAsync(supplier, executor).get();
-	}
 
 	/**
 	 * This test tests that the restarting time metric correctly displays restarting times.

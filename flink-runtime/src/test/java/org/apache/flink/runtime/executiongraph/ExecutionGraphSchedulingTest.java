@@ -58,6 +58,7 @@ import org.apache.flink.util.FlinkException;
 import org.apache.flink.util.TestLogger;
 
 import org.junit.After;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.mockito.verification.Timeout;
 
@@ -94,6 +95,7 @@ import static org.mockito.Mockito.when;
  * for example the order of deployments is correct and that bulk slot allocation
  * works properly.
  */
+@Ignore
 public class ExecutionGraphSchedulingTest extends TestLogger {
 
 	private final ScheduledExecutorService executor = Executors.newSingleThreadScheduledExecutor();

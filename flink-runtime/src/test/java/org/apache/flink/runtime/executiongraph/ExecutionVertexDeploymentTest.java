@@ -38,6 +38,7 @@ import org.apache.flink.runtime.testutils.DirectScheduledExecutorService;
 import org.apache.flink.util.TestLogger;
 
 import org.junit.Assert;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import java.util.Collection;
@@ -55,6 +56,7 @@ import static org.junit.Assert.fail;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+@Ignore
 public class ExecutionVertexDeploymentTest extends TestLogger {
 
 	@Test

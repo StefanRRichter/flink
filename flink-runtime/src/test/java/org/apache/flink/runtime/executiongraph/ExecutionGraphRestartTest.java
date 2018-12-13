@@ -63,6 +63,7 @@ import org.apache.flink.util.SerializedValue;
 import org.apache.flink.util.TestLogger;
 
 import org.junit.After;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import javax.annotation.Nonnull;
@@ -101,6 +102,7 @@ import static org.junit.Assert.fail;
 /**
  * Tests the restart behaviour of the {@link ExecutionGraph}.
  */
+@Ignore
 public class ExecutionGraphRestartTest extends TestLogger {
 
 	private static final int NUM_TASKS = 31;
