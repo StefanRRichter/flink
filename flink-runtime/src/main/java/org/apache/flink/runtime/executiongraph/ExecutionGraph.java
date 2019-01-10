@@ -1516,6 +1516,7 @@ public class ExecutionGraph implements AccessExecutionGraph {
 	 * @return true if the operation could be executed; false if a concurrent job status change occurred
 	 */
 	private boolean tryRestartOrFail(long globalModVersionForRestart) {
+
 		JobStatus currentState = state;
 
 		if (currentState == JobStatus.FAILING || currentState == JobStatus.RESTARTING) {
@@ -1837,7 +1838,7 @@ public class ExecutionGraph implements AccessExecutionGraph {
 		}
 	}
 
-	void ensureRunningInJobMasterMainThread() {
+	public void ensureRunningInJobMasterMainThread() {
 		if (jobMasterMainThreadExecutor != null && !jobMasterMainThreadExecutor.isMainThread()) {
 			IllegalStateException ise = new IllegalStateException("Not running in job master main thread, but in " + Thread.currentThread());
 			LOG.error("Wrong thread!", ise);
