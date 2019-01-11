@@ -58,7 +58,6 @@ import org.apache.flink.util.FlinkException;
 import org.apache.flink.util.TestLogger;
 
 import org.junit.After;
-import org.junit.Ignore;
 import org.junit.Test;
 import org.mockito.verification.Timeout;
 
@@ -95,10 +94,10 @@ import static org.mockito.Mockito.when;
  * for example the order of deployments is correct and that bulk slot allocation
  * works properly.
  */
-@Ignore
 public class ExecutionGraphSchedulingTest extends TestLogger {
 
 	private final ScheduledExecutorService executor = Executors.newSingleThreadScheduledExecutor();
+	private final TestMainThreadUtil testMainThread = new TestMainThreadUtil();
 
 	@After
 	public void shutdown() {
@@ -546,55 +545,62 @@ public class ExecutionGraphSchedulingTest extends TestLogger {
 
 		final ExecutionGraph executionGraph = createExecutionGraph(jobGraph, slotProvider);
 
-		executionGraph.scheduleForExecution();
-
-		// wait until we have requested all slots
-		requestedSlotsLatch.await();
-
+		executionGraph.start(testMainThread.getMainThreadExecutor());
 		final Set<SlotRequestId> slotRequestIdsToReturn = ConcurrentHashMap.newKeySet(slotRequestIds.size());
-		slotRequestIdsToReturn.addAll(slotRequestIds.keySet());
 		final CountDownLatch countDownLatch = new CountDownLatch(slotRequestIds.size());
 
-		slotOwner.setReturnAllocatedSlotConsumer(logicalSlot -> {
-			slotRequestIdsToReturn.remove(logicalSlot.getSlotRequestId());
-			countDownLatch.countDown();
-		});
-		slotProvider.setSlotCanceller(slotRequestId -> {
-			slotRequestIdsToReturn.remove(slotRequestId);
-			countDownLatch.countDown();
-		});
+		testMainThread.execute(() -> {
 
-		final OneShotLatch slotRequestsBeingFulfilled = new OneShotLatch();
+				executionGraph.scheduleForExecution();
 
-		// start completing the slot requests asynchronously
-		executor.execute(
-			() -> {
-				slotRequestsBeingFulfilled.trigger();
+				// wait until we have requested all slots
+				requestedSlotsLatch.await();
 
-				for (SlotRequestId slotRequestId : slotRequestIds.keySet()) {
-					final SingleLogicalSlot singleLogicalSlot = createSingleLogicalSlot(slotOwner, taskManagerGateway, slotRequestId);
-					slotProvider.complete(slotRequestId, singleLogicalSlot);
-				}
+				slotRequestIdsToReturn.addAll(slotRequestIds.keySet());
+
+				slotOwner.setReturnAllocatedSlotConsumer(logicalSlot -> {
+					slotRequestIdsToReturn.remove(logicalSlot.getSlotRequestId());
+					countDownLatch.countDown();
+				});
+				slotProvider.setSlotCanceller(slotRequestId -> {
+					slotRequestIdsToReturn.remove(slotRequestId);
+					countDownLatch.countDown();
+				});
+
+				final OneShotLatch slotRequestsBeingFulfilled = new OneShotLatch();
+
+				// start completing the slot requests asynchronously
+				executor.execute(
+					() -> {
+						slotRequestsBeingFulfilled.trigger();
+
+						for (SlotRequestId slotRequestId : slotRequestIds.keySet()) {
+							final SingleLogicalSlot singleLogicalSlot = createSingleLogicalSlot(slotOwner, taskManagerGateway, slotRequestId);
+							slotProvider.complete(slotRequestId, singleLogicalSlot);
+						}
+					});
+
+				// make sure that we complete cancellations of deployed tasks
+				taskManagerGateway.setCancelConsumer(
+					(ExecutionAttemptID executionAttemptId) -> {
+						final Execution execution = executionGraph.getRegisteredExecutions().get(executionAttemptId);
+
+						// if the execution was cancelled in state SCHEDULING, then it might already have been removed
+						if (execution != null) {
+							execution.cancelingComplete();
+						}
+					}
+				);
+
+				slotRequestsBeingFulfilled.await();
+
+				executionGraph.cancel();
 			});
 
-		// make sure that we complete cancellations of deployed tasks
-		taskManagerGateway.setCancelConsumer(
-			(ExecutionAttemptID executionAttemptId) -> {
-				final Execution execution = executionGraph.getRegisteredExecutions().get(executionAttemptId);
-
-				// if the execution was cancelled in state SCHEDULING, then it might already have been removed
-				if (execution != null) {
-					execution.cancelingComplete();
-				}
-			}
-		);
-
-		slotRequestsBeingFulfilled.await();
-
-		executionGraph.cancel();
-
-		countDownLatch.await();
-		assertThat(slotRequestIdsToReturn, is(empty()));
+		testMainThread.execute(() -> {
+			countDownLatch.await();
+			assertThat(slotRequestIdsToReturn, is(empty()));
+		});
 	}
 
 	// ------------------------------------------------------------------------

@@ -114,8 +114,8 @@ public class RestartIndividualStrategy extends FailoverStrategy {
 		final ExecutionVertex vertexToRecover = taskExecution.getVertex(); 
 		final long globalModVersion = taskExecution.getGlobalModVersion();
 
-
-		terminationFuture.thenAccept(
+		// we enqueue this to the main thread executor so that returning slots to the pool can run first
+		terminationFuture.thenAcceptAsync(
 			(ExecutionState value) -> {
 				try {
 					long createTimestamp = System.currentTimeMillis();
@@ -128,7 +128,7 @@ public class RestartIndividualStrategy extends FailoverStrategy {
 					executionGraph.failGlobal(
 						new Exception("Error during fine grained recovery - triggering full recovery", e));
 				}
-			});
+			}, executionGraph.getJobMasterMainThreadExecutor());
 	}
 
 	@Override

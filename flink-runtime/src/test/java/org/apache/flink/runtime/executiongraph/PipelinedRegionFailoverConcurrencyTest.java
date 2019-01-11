@@ -64,6 +64,8 @@ import static org.junit.Assert.assertTrue;
 @Ignore
 public class PipelinedRegionFailoverConcurrencyTest extends TestLogger {
 
+	private final TestMainThreadUtil testMainThread = new TestMainThreadUtil();
+
 	/**
 	 * Tests that a cancellation concurrent to a local failover leads to a properly
 	 * cancelled state.
@@ -82,8 +84,6 @@ public class PipelinedRegionFailoverConcurrencyTest extends TestLogger {
 		final JobID jid = new JobID();
 		final int parallelism = 2;
 
-		TestComponentMainThreadExecutor mainThreadExecutor =
-			TestComponentMainThreadExecutor.forSingeThreadExecutor(Executors.newSingleThreadScheduledExecutor());
 		final ManuallyTriggeredDirectExecutor executor = new ManuallyTriggeredDirectExecutor();
 
 		final SimpleSlotProvider slotProvider = new SimpleSlotProvider(jid, parallelism);
@@ -93,43 +93,47 @@ public class PipelinedRegionFailoverConcurrencyTest extends TestLogger {
 				new FailoverPipelinedRegionWithCustomExecutor(executor),
 				new FixedDelayRestartStrategy(Integer.MAX_VALUE, 0),
 				slotProvider,
-				mainThreadExecutor,
+				testMainThread.getMainThreadExecutor(),
 				2);
 
 		final ExecutionJobVertex ejv = graph.getVerticesTopologically().iterator().next();
 		final ExecutionVertex vertex1 = ejv.getTaskVertices()[0];
 		final ExecutionVertex vertex2 = ejv.getTaskVertices()[1];
 
-		graph.scheduleForExecution();
-		assertEquals(JobStatus.RUNNING, graph.getState());
+		testMainThread.execute(() -> {
 
-		// let one of the vertices fail - that triggers a local recovery action
-		vertex1.getCurrentExecutionAttempt().fail(new Exception("test failure"));
-		assertEquals(ExecutionState.FAILED, vertex1.getCurrentExecutionAttempt().getState());
+			graph.scheduleForExecution();
+			assertEquals(JobStatus.RUNNING, graph.getState());
 
-		// graph should still be running and the failover recovery action should be queued
-		assertEquals(JobStatus.RUNNING, graph.getState());
-		assertEquals(1, executor.numQueuedRunnables());
+			// let one of the vertices fail - that triggers a local recovery action
+			vertex1.getCurrentExecutionAttempt().fail(new Exception("test failure"));
 
-		// now cancel the job
-		graph.cancel();
+			assertEquals(ExecutionState.FAILED, vertex1.getCurrentExecutionAttempt().getState());
 
-		assertEquals(JobStatus.CANCELLING, graph.getState());
-		assertEquals(ExecutionState.FAILED, vertex1.getCurrentExecutionAttempt().getState());
-		assertEquals(ExecutionState.CANCELING, vertex2.getCurrentExecutionAttempt().getState());
+			// graph should still be running and the failover recovery action should be queued
+			assertEquals(JobStatus.RUNNING, graph.getState());
+			assertEquals(1, executor.numQueuedRunnables());
 
-		// let the recovery action continue
-		executor.trigger();
+			// now cancel the job
+			graph.cancel();
 
-		// now report that cancelling is complete for the other vertex
-		vertex2.getCurrentExecutionAttempt().cancelingComplete();
+			assertEquals(JobStatus.CANCELLING, graph.getState());
+			assertEquals(ExecutionState.FAILED, vertex1.getCurrentExecutionAttempt().getState());
+			assertEquals(ExecutionState.CANCELING, vertex2.getCurrentExecutionAttempt().getState());
 
-		assertEquals(JobStatus.CANCELED, graph.getTerminationFuture().get());
-		assertTrue(vertex1.getCurrentExecutionAttempt().getState().isTerminal());
-		assertTrue(vertex2.getCurrentExecutionAttempt().getState().isTerminal());
+			// let the recovery action continue
+			executor.trigger();
 
-		// make sure all slots are recycled
-		assertEquals(parallelism, slotProvider.getNumberOfAvailableSlots());
+			// now report that cancelling is complete for the other vertex
+			vertex2.getCurrentExecutionAttempt().cancelingComplete();
+
+			assertEquals(JobStatus.CANCELED, graph.getTerminationFuture().get());
+			assertTrue(vertex1.getCurrentExecutionAttempt().getState().isTerminal());
+			assertTrue(vertex2.getCurrentExecutionAttempt().getState().isTerminal());
+
+			// make sure all slots are recycled
+			assertEquals(parallelism, slotProvider.getNumberOfAvailableSlots());
+		});
 	}
 
 	/**
