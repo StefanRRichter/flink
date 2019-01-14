@@ -41,7 +41,6 @@ import org.apache.flink.runtime.testingUtils.TestingUtils;
 import org.apache.flink.runtime.testtasks.NoOpInvokable;
 import org.apache.flink.util.TestLogger;
 
-import org.junit.Ignore;
 import org.junit.Test;
 
 import javax.annotation.Nonnull;
@@ -341,7 +340,6 @@ public class ExecutionTest extends TestLogger {
 	 * <p>NOTE: This test only fails spuriously without the fix of this commit. Thus, one has
 	 * to execute this test multiple times to see the failure.
 	 */
-	@Ignore
 	@Test
 	public void testTerminationFutureIsCompletedAfterSlotRelease() throws Exception {
 		final JobVertex jobVertex = createNoOpJobVertex();
@@ -370,21 +368,13 @@ public class ExecutionTest extends TestLogger {
 		CompletableFuture<LogicalSlot> returnedSlotFuture = slotOwner.getReturnedSlotFuture();
 		CompletableFuture<?> terminationFuture = executionVertex.cancel();
 
-		// run canceling in a separate thread to allow an interleaving between termination
-		// future callback registrations
-		CompletableFuture.runAsync(
-			() -> currentExecutionAttempt.cancelingComplete(),
-			TestingUtils.defaultExecutor());
-
-		// to increase probability for problematic interleaving, let the current thread yield the processor
-		Thread.yield();
+		currentExecutionAttempt.cancelingComplete();
 
 		CompletableFuture<Boolean> restartFuture = terminationFuture.thenApply(
 			ignored -> {
 				assertTrue(returnedSlotFuture.isDone());
 				return true;
 			});
-
 
 		// check if the returned slot future was completed first
 		restartFuture.get();
@@ -428,9 +418,11 @@ public class ExecutionTest extends TestLogger {
 		assertThat(execution.getTaskRestore(), is(nullValue()));
 	}
 
-	@Ignore
 	@Test
 	public void testEagerSchedulingFailureReturnsSlot() throws Exception {
+
+		TestMainThreadUtil testMainThreadUtil = new TestMainThreadUtil();
+
 		final JobVertex jobVertex = createNoOpJobVertex();
 		final JobVertexID jobVertexId = jobVertex.getID();
 
@@ -455,6 +447,8 @@ public class ExecutionTest extends TestLogger {
 			slotProvider,
 			new NoRestartStrategy(),
 			jobVertex);
+
+		executionGraph.start(testMainThreadUtil.getMainThreadExecutor());
 
 		ExecutionJobVertex executionJobVertex = executionGraph.getJobVertex(jobVertexId);
 
@@ -481,22 +475,25 @@ public class ExecutionTest extends TestLogger {
 						slotRequestId);
 					slotProvider.complete(slotRequestId, singleLogicalSlot);
 				},
-				executorService);
+				executorService).thenRunAsync(() -> {
+					try {
+						final CompletableFuture<Void> schedulingFuture = execution.scheduleForExecution(
+							slotProvider,
+							false,
+							LocationPreferenceConstraint.ANY,
+							Collections.emptySet());
 
-			final CompletableFuture<Void> schedulingFuture = execution.scheduleForExecution(
-				slotProvider,
-				false,
-				LocationPreferenceConstraint.ANY,
-				Collections.emptySet());
+						try {
+							schedulingFuture.get();
+							// cancel the execution in case we could schedule the execution
+							execution.cancel();
+						} catch (ExecutionException ignored) {
+						}
 
-			try {
-				schedulingFuture.get();
-				// cancel the execution in case we could schedule the execution
-				execution.cancel();
-			} catch (ExecutionException ignored) {
-			}
-
-			assertThat(returnedSlotFuture.get(), is(equalTo(slotRequestIdFuture.get())));
+						assertThat(returnedSlotFuture.get(), is(equalTo(slotRequestIdFuture.get())));
+					} catch (Exception ex) {
+					}
+			}, testMainThreadUtil.getMainThreadExecutor());
 		} finally {
 			executorService.shutdownNow();
 		}
