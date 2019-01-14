@@ -470,7 +470,7 @@ public class IndividualRestartsConcurrencyTest extends TestLogger {
 
 		@Override
 		public FailoverStrategy create(ExecutionGraph executionGraph) {
-			return new RestartIndividualStrategy(executionGraph, executor);
+			return new RestartIndividualStrategy(executionGraph);
 		}
 	}
 

@@ -53,7 +53,7 @@ public class RestartPipelinedRegionStrategy extends FailoverStrategy {
 	private final ExecutionGraph executionGraph;
 
 	/** The executor used for future actions */
-	private final Executor executor;
+	private final Executor mainThreadExecutor;
 
 	/** Fast lookup from vertex to failover region */
 	private final HashMap<ExecutionVertex, FailoverRegion> vertexToRegion;
@@ -66,7 +66,7 @@ public class RestartPipelinedRegionStrategy extends FailoverStrategy {
 	 * @param executionGraph The execution graph on which this FailoverStrategy will work
 	 */
 	public RestartPipelinedRegionStrategy(ExecutionGraph executionGraph) {
-		this(executionGraph, executionGraph.getFutureExecutor());
+		this(executionGraph, executionGraph.getJobMasterMainThreadExecutor());
 	}
 
 	/**
@@ -74,11 +74,11 @@ public class RestartPipelinedRegionStrategy extends FailoverStrategy {
 	 * execution graph and uses the given executor to call restart actions.
 	 * 
 	 * @param executionGraph The execution graph on which this FailoverStrategy will work
-	 * @param executor  The executor used for future actions
+	 * @param mainThreadExecutor  The executor used for future actions
 	 */
-	public RestartPipelinedRegionStrategy(ExecutionGraph executionGraph, Executor executor) {
+	public RestartPipelinedRegionStrategy(ExecutionGraph executionGraph, Executor mainThreadExecutor) {
 		this.executionGraph = checkNotNull(executionGraph);
-		this.executor = checkNotNull(executor);
+		this.mainThreadExecutor = checkNotNull(mainThreadExecutor);
 		this.vertexToRegion = new HashMap<>();
 	}
 
@@ -209,7 +209,7 @@ public class RestartPipelinedRegionStrategy extends FailoverStrategy {
 				executionGraph.getJobName(), executionGraph.getJobID());
 
 		for (List<ExecutionVertex> region : distinctRegions.keySet()) {
-			final FailoverRegion failoverRegion = new FailoverRegion(executionGraph, executor, region);
+			final FailoverRegion failoverRegion = new FailoverRegion(executionGraph, mainThreadExecutor, region);
 			for (ExecutionVertex ev : region) {
 				this.vertexToRegion.put(ev, failoverRegion);
 			}
@@ -232,7 +232,7 @@ public class RestartPipelinedRegionStrategy extends FailoverStrategy {
 			}
 		}
 
-		final FailoverRegion singleRegion = new FailoverRegion(executionGraph, executor, allVertices);
+		final FailoverRegion singleRegion = new FailoverRegion(executionGraph, mainThreadExecutor, allVertices);
 		for (ExecutionVertex ev : allVertices) {
 			vertexToRegion.put(ev, singleRegion);
 		}

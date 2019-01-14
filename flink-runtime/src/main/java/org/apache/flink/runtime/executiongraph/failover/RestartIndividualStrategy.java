@@ -18,6 +18,7 @@
 
 package org.apache.flink.runtime.executiongraph.failover;
 
+import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.metrics.MetricGroup;
 import org.apache.flink.metrics.SimpleCounter;
 import org.apache.flink.runtime.execution.ExecutionState;
@@ -55,20 +56,20 @@ public class RestartIndividualStrategy extends FailoverStrategy {
 	private final ExecutionGraph executionGraph;
 
 	/** The executor that executes restart callbacks */
-	private final Executor callbackExecutor;
+	private final Executor mainThreadExecutor;
 
 	private final SimpleCounter numTaskFailures;
 
 	/**
 	 * Creates a new failover strategy that recovers from failures by restarting only the failed task
 	 * of the execution graph.
-	 * 
+	 *
 	 * <p>The strategy will use the ExecutionGraph's future executor for callbacks.
-	 * 
+	 *
 	 * @param executionGraph The execution graph to handle.
 	 */
 	public RestartIndividualStrategy(ExecutionGraph executionGraph) {
-		this(executionGraph, executionGraph.getFutureExecutor());
+		this(executionGraph, executionGraph.getJobMasterMainThreadExecutor());
 	}
 
 	/**
@@ -76,11 +77,12 @@ public class RestartIndividualStrategy extends FailoverStrategy {
 	 * of the execution graph.
 	 *
 	 * @param executionGraph The execution graph to handle.
-	 * @param callbackExecutor The executor that executes restart callbacks
+	 * @param mainThreadExecutor The executor that executes restart callbacks
 	 */
-	public RestartIndividualStrategy(ExecutionGraph executionGraph, Executor callbackExecutor) {
+	@VisibleForTesting
+	RestartIndividualStrategy(ExecutionGraph executionGraph, Executor mainThreadExecutor) {
 		this.executionGraph = checkNotNull(executionGraph);
-		this.callbackExecutor = checkNotNull(callbackExecutor);
+		this.mainThreadExecutor = checkNotNull(mainThreadExecutor);
 
 		this.numTaskFailures = new SimpleCounter();
 	}
@@ -128,7 +130,7 @@ public class RestartIndividualStrategy extends FailoverStrategy {
 					executionGraph.failGlobal(
 						new Exception("Error during fine grained recovery - triggering full recovery", e));
 				}
-			}, executionGraph.getJobMasterMainThreadExecutor());
+			}, mainThreadExecutor);
 	}
 
 	@Override
