@@ -103,7 +103,6 @@ import static org.junit.Assert.fail;
 /**
  * Tests the restart behaviour of the {@link ExecutionGraph}.
  */
-@Ignore
 public class ExecutionGraphRestartTest extends TestLogger {
 
 	private static final int NUM_TASKS = 31;
