@@ -40,6 +40,10 @@ public class ManuallyTriggeredScheduledExecutor extends ManuallyTriggeredDirectE
 
 	private final ConcurrentLinkedQueue<ScheduledTask<?>> scheduledTasks = new ConcurrentLinkedQueue<>();
 
+	public ManuallyTriggeredScheduledExecutor() {
+		super(Runnable::run);
+	}
+
 	@Override
 	public ScheduledFuture<?> schedule(Runnable command, long delay, TimeUnit unit) {
 		return insertRunnable(command, false);

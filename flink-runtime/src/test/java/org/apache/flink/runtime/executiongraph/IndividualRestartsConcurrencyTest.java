@@ -105,7 +105,7 @@ public class IndividualRestartsConcurrencyTest extends TestLogger {
 		final JobID jid = new JobID();
 		final int parallelism = 2;
 
-		final ManuallyTriggeredDirectExecutor executor = new ManuallyTriggeredDirectExecutor();
+		final ManuallyTriggeredDirectExecutor executor = new ManuallyTriggeredDirectExecutor(testMainThread.getMainThreadExecutor());
 
 		final SimpleSlotProvider slotProvider = new SimpleSlotProvider(jid, parallelism);
 
@@ -115,7 +115,6 @@ public class IndividualRestartsConcurrencyTest extends TestLogger {
 				slotProvider,
 				2);
 
-		graph.start(testMainThread.getMainThreadExecutor());
 		final ExecutionJobVertex ejv = graph.getVerticesTopologically().iterator().next();
 		final ExecutionVertex vertex1 = ejv.getTaskVertices()[0];
 		final ExecutionVertex vertex2 = ejv.getTaskVertices()[1];
@@ -131,9 +130,6 @@ public class IndividualRestartsConcurrencyTest extends TestLogger {
 
 			// graph should still be running and the failover recovery action should be queued
 			assertEquals(JobStatus.RUNNING, graph.getState());
-		});
-
-		testMainThread.execute(() -> {
 			assertEquals(1, executor.numQueuedRunnables());
 
 			// now cancel the job
@@ -144,8 +140,11 @@ public class IndividualRestartsConcurrencyTest extends TestLogger {
 			assertEquals(ExecutionState.CANCELING, vertex2.getCurrentExecutionAttempt().getState());
 
 			// let the recovery action continue
-			executor.trigger();
+		});
 
+		executor.trigger();
+
+		testMainThread.execute(() -> {
 			// now report that cancelling is complete for the other vertex
 			vertex2.getCurrentExecutionAttempt().cancelingComplete();
 
@@ -176,7 +175,8 @@ public class IndividualRestartsConcurrencyTest extends TestLogger {
 		final JobID jid = new JobID();
 		final int parallelism = 2;
 
-		final ManuallyTriggeredDirectExecutor executor = new ManuallyTriggeredDirectExecutor();
+		final ManuallyTriggeredDirectExecutor executor =
+			new ManuallyTriggeredDirectExecutor(testMainThread.getMainThreadExecutor());
 
 		final SimpleSlotProvider slotProvider = new SimpleSlotProvider(jid, parallelism);
 
@@ -239,7 +239,7 @@ public class IndividualRestartsConcurrencyTest extends TestLogger {
 		final JobID jid = new JobID();
 		final int parallelism = 2;
 
-		final ManuallyTriggeredDirectExecutor executor = new ManuallyTriggeredDirectExecutor();
+		final ManuallyTriggeredDirectExecutor executor = new ManuallyTriggeredDirectExecutor(testMainThread.getMainThreadExecutor());
 
 		final SimpleSlotProvider slotProvider = new SimpleSlotProvider(jid, parallelism);
 
@@ -316,7 +316,7 @@ public class IndividualRestartsConcurrencyTest extends TestLogger {
 		when(taskManagerGateway.cancelTask(any(ExecutionAttemptID.class), any(Time.class))).thenReturn(CompletableFuture.completedFuture(Acknowledge.get()));
 
 		final SimpleSlotProvider slotProvider = new SimpleSlotProvider(jid, parallelism, taskManagerGateway);
-		final ManuallyTriggeredDirectExecutor executor = new ManuallyTriggeredDirectExecutor();
+		final ManuallyTriggeredDirectExecutor executor = new ManuallyTriggeredDirectExecutor(testMainThread.getMainThreadExecutor());
 
 		final CheckpointCoordinatorConfiguration checkpointCoordinatorConfiguration = new CheckpointCoordinatorConfiguration(
 			10L,
@@ -453,7 +453,7 @@ public class IndividualRestartsConcurrencyTest extends TestLogger {
 
 		JobGraph jg = new JobGraph(jid, "testjob", jv);
 		graph.attachJobGraph(jg.getVerticesSortedTopologicallyFromSources());
-		graph.start(TestComponentMainThreadExecutor.forMainThread());
+		graph.start(testMainThread.getMainThreadExecutor());
 
 		return graph;
 	}

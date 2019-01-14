@@ -39,7 +39,6 @@ import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicReferenceFieldUpdater;
 
 import static org.apache.flink.util.Preconditions.checkNotNull;
@@ -65,16 +64,12 @@ public class FailoverRegion {
 
 	private final List<ExecutionVertex> connectedExecutionVertexes;
 
-	/** The executor that executes the recovery action after all vertices are in a */
-	private final Executor executor;
-
 	/** Current status of the job execution */
 	private volatile JobStatus state = JobStatus.RUNNING;
 
 
-	public FailoverRegion(ExecutionGraph executionGraph, Executor executor, List<ExecutionVertex> connectedExecutions) {
+	public FailoverRegion(ExecutionGraph executionGraph, List<ExecutionVertex> connectedExecutions) {
 		this.executionGraph = checkNotNull(executionGraph);
-		this.executor = checkNotNull(executor);
 		this.connectedExecutionVertexes = checkNotNull(connectedExecutions);
 
 		LOG.debug("Created failover region {} with vertices: {}", id, connectedExecutions);

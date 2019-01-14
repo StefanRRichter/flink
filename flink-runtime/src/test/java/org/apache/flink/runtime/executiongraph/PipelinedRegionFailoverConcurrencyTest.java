@@ -84,7 +84,7 @@ public class PipelinedRegionFailoverConcurrencyTest extends TestLogger {
 		final JobID jid = new JobID();
 		final int parallelism = 2;
 
-		final ManuallyTriggeredDirectExecutor executor = new ManuallyTriggeredDirectExecutor();
+		final ManuallyTriggeredDirectExecutor executor = new ManuallyTriggeredDirectExecutor(testMainThread.getMainThreadExecutor());
 
 		final SimpleSlotProvider slotProvider = new SimpleSlotProvider(jid, parallelism);
 
@@ -157,7 +157,7 @@ public class PipelinedRegionFailoverConcurrencyTest extends TestLogger {
 		TestComponentMainThreadExecutor mainThreadExecutor =
 			TestComponentMainThreadExecutor.forSingeThreadExecutor(Executors.newSingleThreadScheduledExecutor());
 
-		final ManuallyTriggeredDirectExecutor executor = new ManuallyTriggeredDirectExecutor();
+		final ManuallyTriggeredDirectExecutor executor = new ManuallyTriggeredDirectExecutor(testMainThread.getMainThreadExecutor());
 
 		final SimpleSlotProvider slotProvider = new SimpleSlotProvider(jid, parallelism);
 
@@ -240,7 +240,7 @@ public class PipelinedRegionFailoverConcurrencyTest extends TestLogger {
 
 		TestComponentMainThreadExecutor mainThreadExecutor =
 			TestComponentMainThreadExecutor.forSingeThreadExecutor(Executors.newSingleThreadScheduledExecutor());
-		final ManuallyTriggeredDirectExecutor failoverTriggeredExecutor = new ManuallyTriggeredDirectExecutor();
+		final ManuallyTriggeredDirectExecutor failoverTriggeredExecutor = new ManuallyTriggeredDirectExecutor(testMainThread.getMainThreadExecutor());
 
 		final SimpleSlotProvider slotProvider = new SimpleSlotProvider(jid, parallelism);
 
@@ -452,7 +452,7 @@ public class PipelinedRegionFailoverConcurrencyTest extends TestLogger {
 
 		@Override
 		public FailoverStrategy create(ExecutionGraph executionGraph) {
-			return new RestartPipelinedRegionStrategy(executionGraph, executor);
+			return new RestartPipelinedRegionStrategy(executionGraph);
 		}
 	}
 }

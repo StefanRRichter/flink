@@ -18,7 +18,6 @@
 
 package org.apache.flink.runtime.executiongraph.failover;
 
-import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.metrics.MetricGroup;
 import org.apache.flink.metrics.SimpleCounter;
 import org.apache.flink.runtime.execution.ExecutionState;
@@ -37,7 +36,6 @@ import org.slf4j.LoggerFactory;
 
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.Executor;
 
 import static org.apache.flink.util.Preconditions.checkNotNull;
 
@@ -55,35 +53,16 @@ public class RestartIndividualStrategy extends FailoverStrategy {
 	/** The execution graph to recover */
 	private final ExecutionGraph executionGraph;
 
-	/** The executor that executes restart callbacks */
-	private final Executor mainThreadExecutor;
-
 	private final SimpleCounter numTaskFailures;
 
 	/**
 	 * Creates a new failover strategy that recovers from failures by restarting only the failed task
 	 * of the execution graph.
 	 *
-	 * <p>The strategy will use the ExecutionGraph's future executor for callbacks.
-	 *
 	 * @param executionGraph The execution graph to handle.
 	 */
 	public RestartIndividualStrategy(ExecutionGraph executionGraph) {
-		this(executionGraph, executionGraph.getJobMasterMainThreadExecutor());
-	}
-
-	/**
-	 * Creates a new failover strategy that recovers from failures by restarting only the failed task
-	 * of the execution graph.
-	 *
-	 * @param executionGraph The execution graph to handle.
-	 * @param mainThreadExecutor The executor that executes restart callbacks
-	 */
-	@VisibleForTesting
-	RestartIndividualStrategy(ExecutionGraph executionGraph, Executor mainThreadExecutor) {
 		this.executionGraph = checkNotNull(executionGraph);
-		this.mainThreadExecutor = checkNotNull(mainThreadExecutor);
-
 		this.numTaskFailures = new SimpleCounter();
 	}
 
@@ -130,7 +109,7 @@ public class RestartIndividualStrategy extends FailoverStrategy {
 					executionGraph.failGlobal(
 						new Exception("Error during fine grained recovery - triggering full recovery", e));
 				}
-			}, mainThreadExecutor);
+			}, executionGraph.getJobMasterMainThreadExecutor());
 	}
 
 	@Override

@@ -41,6 +41,7 @@ import org.apache.flink.runtime.testingUtils.TestingUtils;
 import org.apache.flink.runtime.testtasks.NoOpInvokable;
 import org.apache.flink.util.TestLogger;
 
+import org.junit.Ignore;
 import org.junit.Test;
 
 import javax.annotation.Nonnull;
@@ -340,6 +341,7 @@ public class ExecutionTest extends TestLogger {
 	 * <p>NOTE: This test only fails spuriously without the fix of this commit. Thus, one has
 	 * to execute this test multiple times to see the failure.
 	 */
+	@Ignore
 	@Test
 	public void testTerminationFutureIsCompletedAfterSlotRelease() throws Exception {
 		final JobVertex jobVertex = createNoOpJobVertex();
@@ -426,6 +428,7 @@ public class ExecutionTest extends TestLogger {
 		assertThat(execution.getTaskRestore(), is(nullValue()));
 	}
 
+	@Ignore
 	@Test
 	public void testEagerSchedulingFailureReturnsSlot() throws Exception {
 		final JobVertex jobVertex = createNoOpJobVertex();
