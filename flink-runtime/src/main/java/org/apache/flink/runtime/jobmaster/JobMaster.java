@@ -1014,7 +1014,6 @@ public class JobMaster extends FencedRpcEndpoint<JobMasterId> implements JobMast
 	//-- job starting and stopping  -----------------------------------------------------------------
 
 	private Acknowledge startJobExecution(JobMasterId newJobMasterId) throws Exception {
-		validateRunsInMainThread();
 
 		checkNotNull(newJobMasterId, "The new JobMasterId must not be null.");
 
