@@ -169,7 +169,7 @@ public class ExecutionVertexCancelTest extends TestLogger {
 			assertEquals(ExecutionState.CANCELED, vertex.getExecutionState());
 
 			// trigger the correction canceling call
-			actions.triggerNextAction();
+//			actions.triggerNextAction();
 			assertEquals(ExecutionState.CANCELED, vertex.getExecutionState());
 
 			assertTrue(slot.isReleased());
@@ -226,7 +226,7 @@ public class ExecutionVertexCancelTest extends TestLogger {
 			// cancel call first
 			cancelAction.run();
 			// process onComplete callback
-			actions.triggerNextAction();
+//			actions.triggerNextAction();
 
 			// did not find the task, not properly cancelled, stay in canceling
 			assertEquals(ExecutionState.CANCELING, vertex.getExecutionState());
