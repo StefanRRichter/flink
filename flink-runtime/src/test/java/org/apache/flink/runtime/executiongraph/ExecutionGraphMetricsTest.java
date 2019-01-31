@@ -22,12 +22,9 @@ import org.apache.flink.api.common.time.Time;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.runtime.JobException;
 import org.apache.flink.runtime.clusterframework.types.SlotProfile;
-import org.apache.flink.runtime.concurrent.ScheduledExecutor;
 import org.apache.flink.runtime.execution.ExecutionState;
 import org.apache.flink.runtime.execution.SuppressRestartsException;
 import org.apache.flink.runtime.executiongraph.metrics.RestartTimeGauge;
-import org.apache.flink.runtime.executiongraph.restart.RestartCallback;
-import org.apache.flink.runtime.executiongraph.restart.RestartStrategy;
 import org.apache.flink.runtime.jobgraph.JobGraph;
 import org.apache.flink.runtime.jobgraph.JobStatus;
 import org.apache.flink.runtime.jobgraph.JobVertex;
@@ -85,7 +82,7 @@ public class ExecutionGraphMetricsTest extends TestLogger {
 			CompletableFuture<LogicalSlot> slotFuture2 = CompletableFuture.completedFuture(new TestingLogicalSlot());
 			when(scheduler.allocateSlot(any(SlotRequestId.class), any(ScheduledUnit.class), anyBoolean(), any(SlotProfile.class), any(Time.class))).thenReturn(slotFuture1, slotFuture2);
 
-			TestingRestartStrategy testingRestartStrategy = new TestingRestartStrategy();
+			TestRestartStrategy testingRestartStrategy = TestRestartStrategy.manuallyTriggered();
 
 			ExecutionGraph executionGraph = new ExecutionGraph(
 				executor,
@@ -154,7 +151,7 @@ public class ExecutionGraphMetricsTest extends TestLogger {
 			assertTrue(previousRestartingTime > 0);
 
 			// restart job
-			testingRestartStrategy.restartExecutionGraph();
+			testingRestartStrategy.triggerAll().join();
 
 			executionIDs.clear();
 
@@ -226,24 +223,4 @@ public class ExecutionGraphMetricsTest extends TestLogger {
 			executor.shutdownNow();
 		}
 	}
-
-	static class TestingRestartStrategy implements RestartStrategy {
-
-		private RestartCallback restarter;
-
-		@Override
-		public boolean canRestart() {
-			return true;
-		}
-
-		@Override
-		public void restart(RestartCallback restarter, ScheduledExecutor executor) {
-			this.restarter = restarter;
-		}
-
-		public void restartExecutionGraph() {
-			restarter.triggerFullRecovery();
-		}
-	}
-
 }

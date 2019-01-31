@@ -19,10 +19,7 @@
 package org.apache.flink.runtime.executiongraph;
 
 import org.apache.flink.api.common.JobID;
-import org.apache.flink.runtime.concurrent.ScheduledExecutor;
 import org.apache.flink.runtime.execution.ExecutionState;
-import org.apache.flink.runtime.executiongraph.restart.RestartCallback;
-import org.apache.flink.runtime.executiongraph.restart.RestartStrategy;
 import org.apache.flink.runtime.jobgraph.JobStatus;
 import org.apache.flink.runtime.jobgraph.JobVertex;
 import org.apache.flink.runtime.jobmanager.scheduler.CoLocationConstraint;
@@ -34,6 +31,7 @@ import org.apache.flink.util.FlinkException;
 import org.junit.ClassRule;
 import org.junit.Test;
 
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Predicate;
 
 import static org.apache.flink.runtime.jobgraph.JobStatus.FINISHED;
@@ -73,11 +71,15 @@ public class ExecutionGraphCoLocationRestartTest extends SchedulerTestBase {
 		groupVertex2.setSlotSharingGroup(sharingGroup);
 		groupVertex.setStrictlyCoLocatedWith(groupVertex2);
 
+		final AtomicBoolean hasRestarted = new AtomicBoolean(false);
+
 		//initiate and schedule job
 		final ExecutionGraph eg = ExecutionGraphTestUtils.createSimpleTestGraph(
 			new JobID(),
 			testingSlotProvider,
-			new OneTimeDirectRestartStrategy(),
+			new TestRestartStrategy(
+				() -> hasRestarted.compareAndSet(false, true),
+				false),
 			groupVertex,
 			groupVertex2);
 
@@ -146,20 +148,5 @@ public class ExecutionGraphCoLocationRestartTest extends SchedulerTestBase {
 			assertThat(constr1.getLocation(), equalTo(constr2.getLocation()));
 		}
 
-	}
-
-	private static final class OneTimeDirectRestartStrategy implements RestartStrategy {
-		private boolean hasRestarted = false;
-
-		@Override
-		public boolean canRestart() {
-			return !hasRestarted;
-		}
-
-		@Override
-		public void restart(RestartCallback restarter, ScheduledExecutor executor) {
-			hasRestarted = true;
-			restarter.triggerFullRecovery();
-		}
 	}
 }

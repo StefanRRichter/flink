@@ -33,14 +33,11 @@ import org.apache.flink.util.FlinkException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.annotation.Nullable;
-
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicReferenceFieldUpdater;
 import java.util.function.Consumer;
 
@@ -67,21 +64,15 @@ public class FailoverRegion {
 
 	private final List<ExecutionVertex> connectedExecutionVertexes;
 
-	/** An executor for unit testing that executes the recovery action. This should be null in production code. */
-	@Nullable
-	private final Executor testExecutor;
-
 	/** Current status of the job execution */
 	private volatile JobStatus state = JobStatus.RUNNING;
 
 	public FailoverRegion(
 		ExecutionGraph executionGraph,
-		List<ExecutionVertex> connectedExecutions,
-		@Nullable Executor testExecutor) {
+		List<ExecutionVertex> connectedExecutions) {
 
 		this.executionGraph = checkNotNull(executionGraph);
 		this.connectedExecutionVertexes = checkNotNull(connectedExecutions);
-		this.testExecutor = testExecutor;
 
 		LOG.debug("Created failover region {} with vertices: {}", id, connectedExecutions);
 	}
@@ -163,17 +154,10 @@ public class FailoverRegion {
 					final Consumer<Void> recoveryAction =
 						(Void value) -> allVerticesInTerminalState(globalModVersionOfFailover);
 
-					if (testExecutor == null) {
-						// branch for production code.
-						allTerminal.thenAccept(recoveryAction);
-					} else {
-						// this branch should only be taken for some unit tests.
-						allTerminal.thenAcceptAsync(recoveryAction, testExecutor);
-					}
+					allTerminal.thenAccept(recoveryAction);
 					break;
 				}
-			}
-			else {
+			} else {
 				LOG.info("FailoverRegion {} is {} when cancel.", id, state);
 				break;
 			}

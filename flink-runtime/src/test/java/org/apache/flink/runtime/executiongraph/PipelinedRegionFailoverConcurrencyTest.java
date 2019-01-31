@@ -27,7 +27,6 @@ import org.apache.flink.runtime.execution.SuppressRestartsException;
 import org.apache.flink.runtime.executiongraph.failover.FailoverStrategy;
 import org.apache.flink.runtime.executiongraph.failover.FailoverStrategy.Factory;
 import org.apache.flink.runtime.executiongraph.failover.RestartPipelinedRegionStrategy;
-import org.apache.flink.runtime.executiongraph.restart.FixedDelayRestartStrategy;
 import org.apache.flink.runtime.executiongraph.restart.RestartStrategy;
 import org.apache.flink.runtime.executiongraph.utils.SimpleSlotProvider;
 import org.apache.flink.runtime.jobgraph.JobGraph;
@@ -42,6 +41,7 @@ import org.junit.ClassRule;
 import org.junit.Test;
 
 import java.util.concurrent.Executor;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.apache.flink.runtime.executiongraph.ExecutionGraphTestUtils.waitUntilExecutionState;
 import static org.apache.flink.runtime.executiongraph.ExecutionGraphTestUtils.waitUntilJobStatus;
@@ -90,7 +90,7 @@ public class PipelinedRegionFailoverConcurrencyTest extends TestLogger {
 		final ExecutionGraph graph = createSampleGraph(
 				jid,
 				new FailoverPipelinedRegionWithCustomExecutor(executor),
-				new FixedDelayRestartStrategy(Integer.MAX_VALUE, 0),
+				TestRestartStrategy.directExecuting(),
 				slotProvider,
 				2);
 
@@ -158,7 +158,7 @@ public class PipelinedRegionFailoverConcurrencyTest extends TestLogger {
 		final ExecutionGraph graph = createSampleGraph(
 				jid,
 				new FailoverPipelinedRegionWithCustomExecutor(executor),
-				new FixedDelayRestartStrategy(Integer.MAX_VALUE, 0),
+				TestRestartStrategy.directExecuting(),
 				slotProvider,
 				2);
 
@@ -222,10 +222,12 @@ public class PipelinedRegionFailoverConcurrencyTest extends TestLogger {
 
 		final SimpleSlotProvider slotProvider = new SimpleSlotProvider(jid, parallelism);
 
+		final AtomicInteger restartCounter = new AtomicInteger(2);
+
 		final ExecutionGraph graph = createSampleGraph(
 				jid,
 				new FailoverPipelinedRegionWithCustomExecutor(executor),
-				new FixedDelayRestartStrategy(2, 0), // twice restart, no delay
+				new TestRestartStrategy(() -> restartCounter.getAndDecrement() > 0, false), // twice restart, no delay
 				slotProvider,
 				2);
 		RestartPipelinedRegionStrategy strategy = (RestartPipelinedRegionStrategy)graph.getFailoverStrategy();
@@ -362,7 +364,7 @@ public class PipelinedRegionFailoverConcurrencyTest extends TestLogger {
 
 		@Override
 		public FailoverStrategy create(ExecutionGraph executionGraph) {
-			return new RestartPipelinedRegionStrategy(executionGraph, executor);
+			return new RestartPipelinedRegionStrategy(executionGraph);
 		}
 	}
 }
