@@ -631,14 +631,12 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 
 			final TaskManagerGateway taskManagerGateway = slot.getTaskManagerGateway();
 
-			final CompletableFuture<Acknowledge> submitResultFuture = taskManagerGateway.submitTask(deployment, rpcTimeout);
-			ComponentMainThreadExecutor jobMasterMainThreadExecutor =
+			final ComponentMainThreadExecutor jobMasterMainThreadExecutor =
 				vertex.getExecutionGraph().getJobMasterMainThreadExecutor();
 
-			FutureUtils.whenCompleteAsyncIfNotDone(
-				submitResultFuture,
-				jobMasterMainThreadExecutor,
-				(ack, failure) -> {
+			executor.execute(() -> {
+				final CompletableFuture<Acknowledge> submitResultFuture = taskManagerGateway.submitTask(deployment, rpcTimeout);
+				submitResultFuture.whenCompleteAsync((ack, failure) -> {
 					// only respond to the failure case
 					if (failure != null) {
 						if (failure instanceof TimeoutException) {
@@ -651,7 +649,8 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 							markFailed(failure);
 						}
 					}
-				});
+				}, jobMasterMainThreadExecutor);
+			});
 		}
 		catch (Throwable t) {
 			markFailed(t);
