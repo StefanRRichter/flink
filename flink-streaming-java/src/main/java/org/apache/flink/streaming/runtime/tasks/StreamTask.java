@@ -220,13 +220,21 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 	//  Life cycle methods for specific implementations
 	// ------------------------------------------------------------------------
 
-	protected abstract void init() throws Exception;
+	public enum Status {
+		CONTINUE, YIELD, END
+	}
 
-	protected abstract void run() throws Exception;
+	protected abstract void init() throws Exception;
 
 	protected abstract void cleanup() throws Exception;
 
+	protected abstract Status defaultAction() throws Exception;
+
 	protected abstract void cancelTask() throws Exception;
+
+	protected final void run() throws Exception {
+		while (isRunning && defaultAction() != Status.END) ;
+	}
 
 	/**
 	 * Emits the {@link org.apache.flink.streaming.api.watermark.Watermark#MAX_WATERMARK MAX_WATERMARK}

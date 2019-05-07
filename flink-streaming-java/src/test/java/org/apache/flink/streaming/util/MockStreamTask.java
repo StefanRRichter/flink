@@ -80,8 +80,13 @@ public class MockStreamTask extends StreamTask {
 	@Override
 	public void init() { }
 
+//	@Override
+//	protected void run() { }
+
 	@Override
-	protected void run() { }
+	protected StreamTask.Status defaultAction() {
+		return Status.END;
+	}
 
 	@Override
 	protected void cleanup() { }

@@ -187,8 +187,14 @@ public class StreamTaskCancellationBarrierTest {
 			}
 		}
 
+//		@Override
+//		protected void run() throws Exception {}
+
+
 		@Override
-		protected void run() throws Exception {}
+		protected Status defaultAction() {
+			return Status.END;
+		}
 
 		@Override
 		protected void cleanup() throws Exception {}

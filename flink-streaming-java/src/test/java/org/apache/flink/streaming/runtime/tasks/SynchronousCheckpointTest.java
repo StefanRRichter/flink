@@ -173,10 +173,17 @@ public class SynchronousCheckpointTest {
 		@Override
 		protected void init() {}
 
+//		@Override
+//		protected void run() throws Exception {
+//			runningLatch.trigger();
+//			execLatch.await();
+//		}
+
 		@Override
-		protected void run() throws Exception {
+		protected Status defaultAction() throws Exception {
 			runningLatch.trigger();
 			execLatch.await();
+			return Status.END;
 		}
 
 		@Override

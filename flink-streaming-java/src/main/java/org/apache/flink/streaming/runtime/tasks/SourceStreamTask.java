@@ -97,9 +97,29 @@ public class SourceStreamTask<OUT, SRC extends SourceFunction<OUT>, OP extends S
 		// does not hold any resources, so no cleanup needed
 	}
 
+//	@Override
+//	protected void run() throws Exception {
+//		final AtomicReference<Throwable> exceptionHolder = new AtomicReference<>();
+//		final Thread sourceThread = new Thread(
+//			() -> {
+//				try {
+//					headOperator.run(getCheckpointLock(), getStreamStatusMaintainer());
+//				} catch (Throwable t) {
+//					exceptionHolder.set(t);
+//				}
+//			});
+//		sourceThread.start();
+//		sourceThread.join();
+//
+//		final Throwable sourceThreadThrowable = exceptionHolder.get();
+//		if (sourceThreadThrowable != null) {
+//			throw new Exception(exceptionHolder.get());
+//		}
+//	}
+
 	@Override
-	protected void run() throws Exception {
-		headOperator.run(getCheckpointLock(), getStreamStatusMaintainer());
+	protected Status defaultAction() throws Exception {
+		return Status.END;
 	}
 
 	@Override

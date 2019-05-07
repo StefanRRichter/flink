@@ -97,14 +97,19 @@ public class OneInputStreamTask<IN, OUT> extends StreamTask<OUT, OneInputStreamO
 		getEnvironment().getMetricGroup().gauge(MetricNames.IO_CURRENT_INPUT_WATERMARK, this.inputWatermarkGauge::getValue);
 	}
 
-	@Override
-	protected void run() throws Exception {
-		// cache processor reference on the stack, to make the code more JIT friendly
-		final StreamInputProcessor<IN> inputProcessor = this.inputProcessor;
+//	@Override
+//	protected void run() throws Exception {
+//		// cache processor reference on the stack, to make the code more JIT friendly
+//		final StreamInputProcessor<IN> inputProcessor = this.inputProcessor;
+//
+//		while (running && inputProcessor.processInput()) {
+//			// all the work happens in the "processInput" method
+//		}
+//	}
 
-		while (running && inputProcessor.processInput()) {
-			// all the work happens in the "processInput" method
-		}
+	@Override
+	protected Status defaultAction() throws Exception {
+		return inputProcessor.processInput() ? Status.CONTINUE : Status.END;
 	}
 
 	@Override

@@ -843,7 +843,9 @@ public class StreamTaskTest extends TestLogger {
 		protected void init() throws Exception {}
 
 		@Override
-		protected void run() throws Exception {}
+		protected Status defaultAction() throws Exception {
+			return Status.END;
+		}
 
 		@Override
 		protected void cleanup() throws Exception {}
@@ -1031,7 +1033,9 @@ public class StreamTaskTest extends TestLogger {
 		protected void init() throws Exception {}
 
 		@Override
-		protected void run() throws Exception {}
+		protected Status defaultAction() throws Exception {
+			return Status.END;
+		}
 
 		@Override
 		protected void cleanup() throws Exception {}
@@ -1058,11 +1062,19 @@ public class StreamTaskTest extends TestLogger {
 
 		}
 
+//		@Override
+//		protected void run() throws Exception {
+//			if (fail) {
+//				throw new RuntimeException();
+//			}
+//		}
+
 		@Override
-		protected void run() throws Exception {
+		protected Status defaultAction() {
 			if (fail) {
 				throw new RuntimeException();
 			}
+			return Status.END;
 		}
 
 		@Override
@@ -1148,8 +1160,26 @@ public class StreamTaskTest extends TestLogger {
 		@Override
 		protected void init() {}
 
+//		@Override
+//		protected void run() throws Exception {
+//			holder = new LockHolder(getCheckpointLock(), latch);
+//			holder.start();
+//			latch.await();
+//
+//			// we are at the point where cancelling can happen
+//			syncLatch.trigger();
+//
+//			// just put this to sleep until it is interrupted
+//			try {
+//				Thread.sleep(100000000);
+//			} catch (InterruptedException ignored) {
+//				// restore interruption state
+//				Thread.currentThread().interrupt();
+//			}
+//		}
+
 		@Override
-		protected void run() throws Exception {
+		protected Status defaultAction() throws Exception {
 			holder = new LockHolder(getCheckpointLock(), latch);
 			holder.start();
 			latch.await();
@@ -1164,6 +1194,7 @@ public class StreamTaskTest extends TestLogger {
 				// restore interruption state
 				Thread.currentThread().interrupt();
 			}
+			return Status.END;
 		}
 
 		@Override
@@ -1192,8 +1223,38 @@ public class StreamTaskTest extends TestLogger {
 		@Override
 		protected void init() {}
 
+//		@Override
+//		protected void run() throws Exception {
+//			final OneShotLatch latch = new OneShotLatch();
+//			final Object lock = new Object();
+//
+//			LockHolder holder = new LockHolder(lock, latch);
+//			holder.start();
+//			try {
+//				// cancellation should try and cancel this
+//				getCancelables().registerCloseable(holder);
+//
+//				// wait till the lock holder has the lock
+//				latch.await();
+//
+//				// we are at the point where cancelling can happen
+//				syncLatch.trigger();
+//
+//				// try to acquire the lock - this is not possible as long as the lock holder
+//				// thread lives
+//				//noinspection SynchronizationOnLocalVariableOrMethodParameter
+//				synchronized (lock) {
+//					// nothing
+//				}
+//			}
+//			finally {
+//				holder.close();
+//			}
+//
+//		}
+
 		@Override
-		protected void run() throws Exception {
+		protected Status defaultAction() throws Exception {
 			final OneShotLatch latch = new OneShotLatch();
 			final Object lock = new Object();
 
@@ -1219,7 +1280,7 @@ public class StreamTaskTest extends TestLogger {
 			finally {
 				holder.close();
 			}
-
+			return Status.END;
 		}
 
 		@Override
@@ -1258,9 +1319,15 @@ public class StreamTaskTest extends TestLogger {
 			});
 		}
 
+//		@Override
+//		protected void run() throws Exception {
+//			syncLatch.await();
+//		}
+
 		@Override
-		protected void run() throws Exception {
+		protected Status defaultAction() throws Exception {
 			syncLatch.await();
+			return Status.END;
 		}
 
 		@Override

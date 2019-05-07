@@ -223,11 +223,19 @@ public class StreamTaskTerminationTest extends TestLogger {
 		protected void init() {
 		}
 
+//		@Override
+//		protected void run() throws Exception {
+//			RUN_LATCH.trigger();
+//			// wait until we have started an asynchronous checkpoint
+//			CHECKPOINTING_LATCH.await();
+//		}
+
 		@Override
-		protected void run() throws Exception {
+		protected Status defaultAction() throws Exception {
 			RUN_LATCH.trigger();
 			// wait until we have started an asynchronous checkpoint
 			CHECKPOINTING_LATCH.await();
+			return Status.END;
 		}
 
 		@Override

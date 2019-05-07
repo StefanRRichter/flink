@@ -20,10 +20,10 @@ package org.apache.flink.streaming.runtime.tasks;
 import org.apache.flink.annotation.Internal;
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.runtime.execution.Environment;
-import org.apache.flink.streaming.api.watermark.Watermark;
 import org.apache.flink.streaming.runtime.io.BlockingQueueBroker;
 import org.apache.flink.streaming.runtime.io.RecordWriterOutput;
 import org.apache.flink.streaming.runtime.streamrecord.StreamRecord;
+import org.apache.flink.util.FlinkRuntimeException;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -43,68 +43,104 @@ public class StreamIterationHead<OUT> extends OneInputStreamTask<OUT, OUT> {
 
 	private volatile boolean running = true;
 
+	private final boolean shouldWait;
+	private final BlockingQueue<StreamRecord<OUT>> dataChannel;
+	private final long iterationWaitTime;
+	private final String brokerID;
+
 	public StreamIterationHead(Environment env) {
 		super(env);
+		final String iterationId = getConfiguration().getIterationId();
+		if (iterationId == null || iterationId.length() == 0) {
+			throw new FlinkRuntimeException("Missing iteration ID in the task configuration");
+		}
+
+		this.iterationWaitTime = getConfiguration().getIterationWaitTime();
+		this.shouldWait = iterationWaitTime > 0;
+		this.dataChannel = new ArrayBlockingQueue<>(1);
+		this.brokerID = createBrokerIdString(getEnvironment().getJobID(), iterationId,
+			getEnvironment().getTaskInfo().getIndexOfThisSubtask());
 	}
 
 	// ------------------------------------------------------------------------
 
+//	@Override
+//	protected void run() throws Exception {
+//
+//		final String iterationId = getConfiguration().getIterationId();
+//		if (iterationId == null || iterationId.length() == 0) {
+//			throw new Exception("Missing iteration ID in the task configuration");
+//		}
+//
+//		final String brokerID = createBrokerIdString(getEnvironment().getJobID(), iterationId ,
+//				getEnvironment().getTaskInfo().getIndexOfThisSubtask());
+//
+//		final long iterationWaitTime = getConfiguration().getIterationWaitTime();
+//		final boolean shouldWait = iterationWaitTime > 0;
+//
+//		final BlockingQueue<StreamRecord<OUT>> dataChannel = new ArrayBlockingQueue<StreamRecord<OUT>>(1);
+//
+//		// offer the queue for the tail
+//		BlockingQueueBroker.INSTANCE.handIn(brokerID, dataChannel);
+//		LOG.info("Iteration head {} added feedback queue under {}", getName(), brokerID);
+//
+//		// do the work
+//		try {
+//			@SuppressWarnings("unchecked")
+//			RecordWriterOutput<OUT>[] outputs = (RecordWriterOutput<OUT>[]) getStreamOutputs();
+//
+//			// If timestamps are enabled we make sure to remove cyclic watermark dependencies
+//			if (isSerializingTimestamps()) {
+//				synchronized (getCheckpointLock()) {
+//					for (RecordWriterOutput<OUT> output : outputs) {
+//						output.emitWatermark(new Watermark(Long.MAX_VALUE));
+//					}
+//				}
+//			}
+//
+//			while (running) {
+//				StreamRecord<OUT> nextRecord = shouldWait ?
+//					dataChannel.poll(iterationWaitTime, TimeUnit.MILLISECONDS) :
+//					dataChannel.take();
+//
+//				if (nextRecord != null) {
+//					synchronized (getCheckpointLock()) {
+//						for (RecordWriterOutput<OUT> output : outputs) {
+//							output.collect(nextRecord);
+//						}
+//					}
+//				}
+//				else {
+//					// done
+//					break;
+//				}
+//			}
+//		}
+//		finally {
+//			// make sure that we remove the queue from the broker, to prevent a resource leak
+//			BlockingQueueBroker.INSTANCE.remove(brokerID);
+//			LOG.info("Iteration head {} removed feedback queue under {}", getName(), brokerID);
+//		}
+//	}
+
 	@Override
-	protected void run() throws Exception {
+	protected Status defaultAction() throws Exception {
+		StreamRecord<OUT> nextRecord = shouldWait ?
+			dataChannel.poll(iterationWaitTime, TimeUnit.MILLISECONDS) :
+			dataChannel.take();
 
-		final String iterationId = getConfiguration().getIterationId();
-		if (iterationId == null || iterationId.length() == 0) {
-			throw new Exception("Missing iteration ID in the task configuration");
-		}
+		RecordWriterOutput<OUT>[] streamOutputs = (RecordWriterOutput<OUT>[]) getStreamOutputs();
 
-		final String brokerID = createBrokerIdString(getEnvironment().getJobID(), iterationId ,
-				getEnvironment().getTaskInfo().getIndexOfThisSubtask());
-
-		final long iterationWaitTime = getConfiguration().getIterationWaitTime();
-		final boolean shouldWait = iterationWaitTime > 0;
-
-		final BlockingQueue<StreamRecord<OUT>> dataChannel = new ArrayBlockingQueue<StreamRecord<OUT>>(1);
-
-		// offer the queue for the tail
-		BlockingQueueBroker.INSTANCE.handIn(brokerID, dataChannel);
-		LOG.info("Iteration head {} added feedback queue under {}", getName(), brokerID);
-
-		// do the work
-		try {
-			@SuppressWarnings("unchecked")
-			RecordWriterOutput<OUT>[] outputs = (RecordWriterOutput<OUT>[]) getStreamOutputs();
-
-			// If timestamps are enabled we make sure to remove cyclic watermark dependencies
-			if (isSerializingTimestamps()) {
-				synchronized (getCheckpointLock()) {
-					for (RecordWriterOutput<OUT> output : outputs) {
-						output.emitWatermark(new Watermark(Long.MAX_VALUE));
-					}
+		if (nextRecord != null) {
+			synchronized (getCheckpointLock()) {
+				for (RecordWriterOutput<OUT> output : streamOutputs) {
+					output.collect(nextRecord);
 				}
 			}
-
-			while (running) {
-				StreamRecord<OUT> nextRecord = shouldWait ?
-					dataChannel.poll(iterationWaitTime, TimeUnit.MILLISECONDS) :
-					dataChannel.take();
-
-				if (nextRecord != null) {
-					synchronized (getCheckpointLock()) {
-						for (RecordWriterOutput<OUT> output : outputs) {
-							output.collect(nextRecord);
-						}
-					}
-				}
-				else {
-					// done
-					break;
-				}
-			}
-		}
-		finally {
-			// make sure that we remove the queue from the broker, to prevent a resource leak
-			BlockingQueueBroker.INSTANCE.remove(brokerID);
-			LOG.info("Iteration head {} removed feedback queue under {}", getName(), brokerID);
+			return running ? Status.CONTINUE : Status.END;
+		} else {
+			// done
+			return Status.END;
 		}
 	}
 
@@ -117,12 +153,16 @@ public class StreamIterationHead<OUT> extends OneInputStreamTask<OUT, OUT> {
 
 	@Override
 	public void init() {
-		// does not hold any resources, no initialization necessary
+		// offer the queue for the tail
+		BlockingQueueBroker.INSTANCE.handIn(brokerID, dataChannel);
+		LOG.info("Iteration head {} added feedback queue under {}", getName(), brokerID);
 	}
 
 	@Override
-	protected void cleanup() throws Exception {
-		// does not hold any resources, no cleanup necessary
+	protected void cleanup() {
+		// make sure that we remove the queue from the broker, to prevent a resource leak
+		BlockingQueueBroker.INSTANCE.remove(brokerID);
+		LOG.info("Iteration head {} removed feedback queue under {}", getName(), brokerID);
 	}
 
 	// ------------------------------------------------------------------------

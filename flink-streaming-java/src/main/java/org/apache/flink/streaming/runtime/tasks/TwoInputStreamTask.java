@@ -109,14 +109,20 @@ public class TwoInputStreamTask<IN1, IN2, OUT> extends StreamTask<OUT, TwoInputS
 		getEnvironment().getMetricGroup().gauge(MetricNames.IO_CURRENT_INPUT_WATERMARK, minInputWatermarkGauge::getValue);
 	}
 
-	@Override
-	protected void run() throws Exception {
-		// cache processor reference on the stack, to make the code more JIT friendly
-		final StreamTwoInputProcessor<IN1, IN2> inputProcessor = this.inputProcessor;
+//	@Override
+//	protected void run() throws Exception {
+//		// cache processor reference on the stack, to make the code more JIT friendly
+//		final StreamTwoInputProcessor<IN1, IN2> inputProcessor = this.inputProcessor;
+//
+//		while (running && inputProcessor.processInput()) {
+//			// all the work happens in the "processInput" method
+//		}
+//	}
 
-		while (running && inputProcessor.processInput()) {
-			// all the work happens in the "processInput" method
-		}
+	@Override
+	protected Status defaultAction() throws Exception {
+		// TODO unify?
+		return inputProcessor.processInput() ? Status.CONTINUE : Status.END;
 	}
 
 	@Override

@@ -282,14 +282,25 @@ public class JobMasterStopWithSavepointIT extends AbstractTestBase {
 			this.finishLatch = new OneShotLatch();
 		}
 
+//		@Override
+//		protected void run() throws InterruptedException {
+//			final long taskIndex = getEnvironment().getTaskInfo().getIndexOfThisSubtask();
+//			if (taskIndex == 0) {
+//				numberOfRestarts.countDown();
+//			}
+//			invokeLatch.countDown();
+//			finishLatch.await();
+//		}
+
 		@Override
-		protected void run() throws InterruptedException {
+		protected Status defaultAction() throws Exception {
 			final long taskIndex = getEnvironment().getTaskInfo().getIndexOfThisSubtask();
 			if (taskIndex == 0) {
 				numberOfRestarts.countDown();
 			}
 			invokeLatch.countDown();
 			finishLatch.await();
+			return Status.END;
 		}
 
 		@Override
@@ -338,10 +349,18 @@ public class JobMasterStopWithSavepointIT extends AbstractTestBase {
 			this.finishLatch = new OneShotLatch();
 		}
 
+//		@Override
+//		protected void run() throws InterruptedException {
+//			invokeLatch.countDown();
+//			finishLatch.await();
+//		}
+
+
 		@Override
-		protected void run() throws InterruptedException {
+		protected Status defaultAction() throws Exception {
 			invokeLatch.countDown();
 			finishLatch.await();
+			return Status.END;
 		}
 
 		@Override
@@ -366,9 +385,15 @@ public class JobMasterStopWithSavepointIT extends AbstractTestBase {
 
 		}
 
-		@Override
-		protected void run() throws Exception {
+//		@Override
+//		protected void run() throws Exception {
+//
+//		}
 
+
+		@Override
+		protected Status defaultAction() throws Exception {
+			return Status.END;
 		}
 
 		@Override

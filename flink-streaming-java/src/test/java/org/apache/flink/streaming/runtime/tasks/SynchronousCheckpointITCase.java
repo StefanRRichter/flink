@@ -155,10 +155,17 @@ public class SynchronousCheckpointITCase {
 			super(environment);
 		}
 
+//		@Override
+//		protected void run() throws Exception {
+//			executionLatch.trigger();
+//			cancellationLatch.await();
+//		}
+
 		@Override
-		protected void run() throws Exception {
+		protected Status defaultAction() throws Exception {
 			executionLatch.trigger();
 			cancellationLatch.await();
+			return Status.END;
 		}
 
 		@Override
