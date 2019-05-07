@@ -190,7 +190,6 @@ public class StreamTaskCancellationBarrierTest {
 //		@Override
 //		protected void run() throws Exception {}
 
-
 		@Override
 		protected Status defaultAction() {
 			return Status.END;

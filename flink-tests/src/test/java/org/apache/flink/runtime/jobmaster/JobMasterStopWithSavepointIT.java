@@ -355,7 +355,6 @@ public class JobMasterStopWithSavepointIT extends AbstractTestBase {
 //			finishLatch.await();
 //		}
 
-
 		@Override
 		protected Status defaultAction() throws Exception {
 			invokeLatch.countDown();
@@ -389,7 +388,6 @@ public class JobMasterStopWithSavepointIT extends AbstractTestBase {
 //		protected void run() throws Exception {
 //
 //		}
-
 
 		@Override
 		protected Status defaultAction() throws Exception {

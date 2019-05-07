@@ -226,6 +226,9 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 	//  Life cycle methods for specific implementations
 	// ------------------------------------------------------------------------
 
+	/**
+	 * TODO.
+	 */
 	public enum Status {
 		CONTINUE, END
 	}

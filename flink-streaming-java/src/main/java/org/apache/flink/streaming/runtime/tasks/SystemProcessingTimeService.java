@@ -27,6 +27,7 @@ import org.slf4j.LoggerFactory;
 import javax.annotation.Nonnull;
 
 import java.time.Duration;
+import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.Delayed;
@@ -65,13 +66,16 @@ public class SystemProcessingTimeService extends ProcessingTimeService {
 
 	private final AtomicInteger status;
 
+	private final BlockingQueue<Runnable> taskMailbox;
+
 	public SystemProcessingTimeService(AsyncExceptionHandler failureHandler, Object checkpointLock) {
-		this(failureHandler, checkpointLock, null);
+		this(failureHandler, checkpointLock, new ArrayBlockingQueue<>(16), null);
 	}
 
 	public SystemProcessingTimeService(
 			AsyncExceptionHandler task,
 			Object checkpointLock,
+			BlockingQueue<Runnable> taskMailbox,
 			ThreadFactory threadFactory) {
 
 		this.task = checkNotNull(task);
@@ -91,6 +95,7 @@ public class SystemProcessingTimeService extends ProcessingTimeService {
 		// make sure shutdown removes all pending tasks
 		this.timerService.setContinueExistingPeriodicTasksAfterShutdownPolicy(false);
 		this.timerService.setExecuteExistingDelayedTasksAfterShutdownPolicy(false);
+		this.taskMailbox = taskMailbox;
 	}
 
 	@Override
