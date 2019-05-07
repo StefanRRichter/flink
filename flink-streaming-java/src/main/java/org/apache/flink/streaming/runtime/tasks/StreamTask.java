@@ -72,6 +72,7 @@ import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.FutureTask;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -318,7 +319,7 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 				ThreadFactory timerThreadFactory = new DispatcherThreadFactory(TRIGGER_THREAD_GROUP,
 					"Time Trigger for " + getName(), getUserCodeClassLoader());
 
-				timerService = new SystemProcessingTimeService(this, getCheckpointLock(), timerThreadFactory);
+				timerService = new SystemProcessingTimeService(this, getCheckpointLock(), mailbox, timerThreadFactory);
 			}
 
 			operatorChain = new OperatorChain<>(this, recordWriters);
@@ -627,7 +628,11 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 					.setBytesBufferedInAlignment(0L)
 					.setAlignmentDurationNanos(0L);
 
-			return performCheckpoint(checkpointMetaData, checkpointOptions, checkpointMetrics, advanceToEndOfEventTime);
+			FutureTask<Boolean> task = new FutureTask<>(
+				() -> performCheckpoint(checkpointMetaData, checkpointOptions, checkpointMetrics, advanceToEndOfEventTime));
+
+			mailbox.put(task);
+			return task.get();
 		}
 		catch (Exception e) {
 			// propagate exceptions only if the task is still in "running" state
@@ -765,7 +770,8 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 
 	@Override
 	public void notifyCheckpointComplete(long checkpointId) throws Exception {
-		synchronized (lock) {
+
+		final FutureTask<Void> task = new FutureTask<>(() -> {
 			if (isRunning) {
 				LOG.debug("Notification of complete checkpoint for task {}", getName());
 
@@ -776,11 +782,14 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 				}
 
 				syncSavepointLatch.acknowledgeCheckpointAndTrigger(checkpointId);
-			}
-			else {
+			} else {
 				LOG.debug("Ignoring notification of complete checkpoint for not-running task {}", getName());
 			}
-		}
+			return null;
+		});
+
+		mailbox.put(task);
+		task.get();
 	}
 
 	private void tryShutdownTimerService() {
