@@ -27,6 +27,8 @@ import org.apache.flink.streaming.api.functions.source.SourceFunction;
 import org.apache.flink.streaming.api.operators.StreamSource;
 import org.apache.flink.util.FlinkException;
 
+import java.util.concurrent.atomic.AtomicReference;
+
 /**
  * {@link StreamTask} for executing a {@link StreamSource}.
  *
@@ -97,25 +99,42 @@ public class SourceStreamTask<OUT, SRC extends SourceFunction<OUT>, OP extends S
 		// does not hold any resources, so no cleanup needed
 	}
 
-//	@Override
-//	protected void run() throws Exception {
-//		final AtomicReference<Throwable> exceptionHolder = new AtomicReference<>();
-//		final Thread sourceThread = new Thread(
-//			() -> {
-//				try {
-//					headOperator.run(getCheckpointLock(), getStreamStatusMaintainer());
-//				} catch (Throwable t) {
-//					exceptionHolder.set(t);
-//				}
-//			});
-//		sourceThread.start();
-//		sourceThread.join();
-//
-//		final Throwable sourceThreadThrowable = exceptionHolder.get();
-//		if (sourceThreadThrowable != null) {
-//			throw new Exception(exceptionHolder.get());
-//		}
-//	}
+	@Override
+	protected void run() throws Exception {
+		final AtomicReference<Throwable> exceptionHolder = new AtomicReference<>();
+		final Thread mailboxThread = Thread.currentThread();
+
+		// run legacy source fun in separate thread.
+		final Thread sourceThread = new Thread(
+			() -> {
+				try {
+					headOperator.run(getCheckpointLock(), getStreamStatusMaintainer());
+				} catch (Throwable t) {
+					exceptionHolder.set(t);
+				}
+				mailboxThread.interrupt();
+			});
+		sourceThread.start();
+
+		// we run an alternative mailbox handler that yields on default actions and synchronizes around actions
+		try {
+			while (isRunning()) {
+				Runnable letter = mailbox.take();
+				synchronized (getCheckpointLock()) {
+					letter.run();
+				}
+			}
+		} catch (InterruptedException ie) {
+			//TODO!!
+		}
+
+		sourceThread.join();
+
+		final Throwable sourceThreadThrowable = exceptionHolder.get();
+		if (sourceThreadThrowable != null) {
+			throw new Exception(exceptionHolder.get());
+		}
+	}
 
 	@Override
 	protected Status defaultAction() throws Exception {

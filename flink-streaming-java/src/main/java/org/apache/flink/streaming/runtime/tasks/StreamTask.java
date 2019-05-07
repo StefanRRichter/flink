@@ -68,6 +68,8 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadFactory;
@@ -182,6 +184,8 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 
 	private final SynchronousSavepointLatch syncSavepointLatch;
 
+	protected final BlockingQueue<Runnable> mailbox;
+
 	// ------------------------------------------------------------------------
 
 	/**
@@ -214,6 +218,7 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 		this.accumulatorMap = getEnvironment().getAccumulatorRegistry().getUserMap();
 		this.recordWriters = createRecordWriters(configuration, environment);
 		this.syncSavepointLatch = new SynchronousSavepointLatch();
+		this.mailbox = new ArrayBlockingQueue<>(128);
 	}
 
 	// ------------------------------------------------------------------------
@@ -221,7 +226,7 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 	// ------------------------------------------------------------------------
 
 	public enum Status {
-		CONTINUE, YIELD, END
+		CONTINUE, END
 	}
 
 	protected abstract void init() throws Exception;
@@ -232,8 +237,17 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 
 	protected abstract void cancelTask() throws Exception;
 
-	protected final void run() throws Exception {
-		while (isRunning && defaultAction() != Status.END) ;
+	protected void run() throws Exception {
+		Runnable letter;
+		while (isRunning()) {
+			while ((letter = mailbox.poll()) != null) {
+				letter.run();
+			}
+
+			if (defaultAction() == Status.END) {
+				break;
+			}
+		}
 	}
 
 	/**
@@ -587,6 +601,10 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 
 	public StreamStatusMaintainer getStreamStatusMaintainer() {
 		return operatorChain;
+	}
+
+	public BlockingQueue<Runnable> getMailbox() {
+		return mailbox;
 	}
 
 	RecordWriterOutput<?>[] getStreamOutputs() {

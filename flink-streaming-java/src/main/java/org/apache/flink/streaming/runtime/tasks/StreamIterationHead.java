@@ -20,6 +20,7 @@ package org.apache.flink.streaming.runtime.tasks;
 import org.apache.flink.annotation.Internal;
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.runtime.execution.Environment;
+import org.apache.flink.streaming.api.watermark.Watermark;
 import org.apache.flink.streaming.runtime.io.BlockingQueueBroker;
 import org.apache.flink.streaming.runtime.io.RecordWriterOutput;
 import org.apache.flink.streaming.runtime.streamrecord.StreamRecord;
@@ -125,13 +126,13 @@ public class StreamIterationHead<OUT> extends OneInputStreamTask<OUT, OUT> {
 
 	@Override
 	protected Status defaultAction() throws Exception {
+
 		StreamRecord<OUT> nextRecord = shouldWait ?
 			dataChannel.poll(iterationWaitTime, TimeUnit.MILLISECONDS) :
 			dataChannel.take();
 
-		RecordWriterOutput<OUT>[] streamOutputs = (RecordWriterOutput<OUT>[]) getStreamOutputs();
-
 		if (nextRecord != null) {
+			RecordWriterOutput<OUT>[] streamOutputs = (RecordWriterOutput<OUT>[]) getStreamOutputs();
 			synchronized (getCheckpointLock()) {
 				for (RecordWriterOutput<OUT> output : streamOutputs) {
 					output.collect(nextRecord);
@@ -156,6 +157,17 @@ public class StreamIterationHead<OUT> extends OneInputStreamTask<OUT, OUT> {
 		// offer the queue for the tail
 		BlockingQueueBroker.INSTANCE.handIn(brokerID, dataChannel);
 		LOG.info("Iteration head {} added feedback queue under {}", getName(), brokerID);
+
+		RecordWriterOutput<OUT>[] outputs = (RecordWriterOutput<OUT>[]) getStreamOutputs();
+
+		// If timestamps are enabled we make sure to remove cyclic watermark dependencies
+		if (isSerializingTimestamps()) {
+			synchronized (getCheckpointLock()) {
+				for (RecordWriterOutput<OUT> output : outputs) {
+					output.emitWatermark(new Watermark(Long.MAX_VALUE));
+				}
+			}
+		}
 	}
 
 	@Override
