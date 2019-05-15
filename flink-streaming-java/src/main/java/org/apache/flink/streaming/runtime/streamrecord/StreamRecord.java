@@ -40,6 +40,7 @@ public final class StreamRecord<T> extends StreamElement {
 	 * Creates a new StreamRecord. The record does not have a timestamp.
 	 */
 	public StreamRecord(T value) {
+		super(Type.RECORD);
 		this.value = value;
 	}
 
@@ -51,7 +52,7 @@ public final class StreamRecord<T> extends StreamElement {
 	 * @param timestamp The timestamp in milliseconds
 	 */
 	public StreamRecord(T value, long timestamp) {
-		this.value = value;
+		this(value);
 		this.timestamp = timestamp;
 		this.hasTimestamp = true;
 	}

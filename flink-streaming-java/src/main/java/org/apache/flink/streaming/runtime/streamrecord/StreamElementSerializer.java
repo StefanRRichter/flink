@@ -100,35 +100,41 @@ public final class StreamElementSerializer<T> extends TypeSerializer<StreamEleme
 	@Override
 	public StreamElement copy(StreamElement from) {
 		// we can reuse the timestamp since Instant is immutable
-		if (from.isRecord()) {
-			StreamRecord<T> fromRecord = from.asRecord();
-			return fromRecord.copy(typeSerializer.copy(fromRecord.getValue()));
-		}
-		else if (from.isWatermark() || from.isStreamStatus() || from.isLatencyMarker()) {
-			// is immutable
-			return from;
-		}
-		else {
-			throw new RuntimeException();
+		switch (from.getType()) {
+			case RECORD:
+				StreamRecord<T> fromRecord = from.asRecord();
+				return fromRecord.copy(typeSerializer.copy(fromRecord.getValue()));
+			case WATERMARK:
+			case STREAM_STATUS:
+			case LATENCY_MARKER:
+				// is immutable
+				return from;
+			default:
+				throw new RuntimeException();
 		}
 	}
 
 	@Override
 	public StreamElement copy(StreamElement from, StreamElement reuse) {
-		if (from.isRecord() && reuse.isRecord()) {
-			StreamRecord<T> fromRecord = from.asRecord();
-			StreamRecord<T> reuseRecord = reuse.asRecord();
 
-			T valueCopy = typeSerializer.copy(fromRecord.getValue(), reuseRecord.getValue());
-			fromRecord.copyTo(valueCopy, reuseRecord);
-			return reuse;
-		}
-		else if (from.isWatermark() || from.isStreamStatus() || from.isLatencyMarker()) {
-			// is immutable
-			return from;
-		}
-		else {
-			throw new RuntimeException("Cannot copy " + from + " -> " + reuse);
+		switch (from.getType()) {
+			case RECORD:
+				if (reuse.getType() == StreamElement.Type.RECORD) {
+					StreamRecord<T> fromRecord = from.asRecord();
+					StreamRecord<T> reuseRecord = reuse.asRecord();
+
+					T valueCopy = typeSerializer.copy(fromRecord.getValue(), reuseRecord.getValue());
+					fromRecord.copyTo(valueCopy, reuseRecord);
+					return reuse;
+				} else {
+					throw new RuntimeException("Cannot copy " + from + " -> " + reuse);
+				}
+			case WATERMARK:
+			case STREAM_STATUS:
+			case LATENCY_MARKER:
+				return from;
+			default:
+				throw new RuntimeException();
 		}
 	}
 
@@ -163,34 +169,35 @@ public final class StreamElementSerializer<T> extends TypeSerializer<StreamEleme
 
 	@Override
 	public void serialize(StreamElement value, DataOutputView target) throws IOException {
-		if (value.isRecord()) {
-			StreamRecord<T> record = value.asRecord();
+		switch (value.getType()) {
+			case RECORD:
+				StreamRecord<T> record = value.asRecord();
 
-			if (record.hasTimestamp()) {
-				target.write(TAG_REC_WITH_TIMESTAMP);
-				target.writeLong(record.getTimestamp());
-			} else {
-				target.write(TAG_REC_WITHOUT_TIMESTAMP);
-			}
-			typeSerializer.serialize(record.getValue(), target);
-		}
-		else if (value.isWatermark()) {
-			target.write(TAG_WATERMARK);
-			target.writeLong(value.asWatermark().getTimestamp());
-		}
-		else if (value.isStreamStatus()) {
-			target.write(TAG_STREAM_STATUS);
-			target.writeInt(value.asStreamStatus().getStatus());
-		}
-		else if (value.isLatencyMarker()) {
-			target.write(TAG_LATENCY_MARKER);
-			target.writeLong(value.asLatencyMarker().getMarkedTime());
-			target.writeLong(value.asLatencyMarker().getOperatorId().getLowerPart());
-			target.writeLong(value.asLatencyMarker().getOperatorId().getUpperPart());
-			target.writeInt(value.asLatencyMarker().getSubtaskIndex());
-		}
-		else {
-			throw new RuntimeException();
+				if (record.hasTimestamp()) {
+					target.write(TAG_REC_WITH_TIMESTAMP);
+					target.writeLong(record.getTimestamp());
+				} else {
+					target.write(TAG_REC_WITHOUT_TIMESTAMP);
+				}
+				typeSerializer.serialize(record.getValue(), target);
+				break;
+			case WATERMARK:
+				target.write(TAG_WATERMARK);
+				target.writeLong(value.asWatermark().getTimestamp());
+				break;
+			case STREAM_STATUS:
+				target.write(TAG_STREAM_STATUS);
+				target.writeInt(value.asStreamStatus().getStatus());
+				break;
+			case LATENCY_MARKER:
+				target.write(TAG_LATENCY_MARKER);
+				target.writeLong(value.asLatencyMarker().getMarkedTime());
+				target.writeLong(value.asLatencyMarker().getOperatorId().getLowerPart());
+				target.writeLong(value.asLatencyMarker().getOperatorId().getUpperPart());
+				target.writeInt(value.asLatencyMarker().getSubtaskIndex());
+				break;
+			default:
+				throw new RuntimeException();
 		}
 	}
 

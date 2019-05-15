@@ -176,18 +176,19 @@ public class AsyncWaitOperator<IN, OUT>
 		// head operator.
 		if (recoveredStreamElements != null) {
 			for (StreamElement element : recoveredStreamElements.get()) {
-				if (element.isRecord()) {
-					processElement(element.<IN>asRecord());
-				}
-				else if (element.isWatermark()) {
-					processWatermark(element.asWatermark());
-				}
-				else if (element.isLatencyMarker()) {
-					processLatencyMarker(element.asLatencyMarker());
-				}
-				else {
-					throw new IllegalStateException("Unknown record type " + element.getClass() +
-						" encountered while opening the operator.");
+				switch (element.getType()) {
+					case RECORD:
+						processElement(element.asRecord());
+						break;
+					case WATERMARK:
+						processWatermark(element.asWatermark());
+						break;
+					case LATENCY_MARKER:
+						processLatencyMarker(element.asLatencyMarker());
+						break;
+					default:
+						throw new IllegalStateException("Unknown record type " + element.getType() +
+							" encountered while opening the operator.");
 				}
 			}
 			recoveredStreamElements = null;

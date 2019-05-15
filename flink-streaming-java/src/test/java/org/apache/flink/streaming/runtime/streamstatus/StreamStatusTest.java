@@ -18,10 +18,13 @@
 
 package org.apache.flink.streaming.runtime.streamstatus;
 
+import org.apache.flink.streaming.runtime.streamrecord.StreamElement;
+
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -53,10 +56,7 @@ public class StreamStatusTest {
 	public void testTypeCasting() {
 		StreamStatus status = StreamStatus.ACTIVE;
 
-		assertTrue(status.isStreamStatus());
-		assertFalse(status.isRecord());
-		assertFalse(status.isWatermark());
-		assertFalse(status.isLatencyMarker());
+		assertSame(status.getType(), StreamElement.Type.STREAM_STATUS);
 
 		try {
 			status.asWatermark();

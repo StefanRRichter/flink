@@ -179,29 +179,30 @@ public class StreamInputProcessor<IN> {
 				if (result.isFullRecord()) {
 					StreamElement recordOrMark = deserializationDelegate.getInstance();
 
-					if (recordOrMark.isWatermark()) {
-						// handle watermark
-						statusWatermarkValve.inputWatermark(recordOrMark.asWatermark(), currentChannel);
-						continue;
-					} else if (recordOrMark.isStreamStatus()) {
-						// handle stream status
-						statusWatermarkValve.inputStreamStatus(recordOrMark.asStreamStatus(), currentChannel);
-						continue;
-					} else if (recordOrMark.isLatencyMarker()) {
-						// handle latency marker
-						synchronized (lock) {
-							streamOperator.processLatencyMarker(recordOrMark.asLatencyMarker());
-						}
-						continue;
-					} else {
-						// now we can do the actual processing
-						StreamRecord<IN> record = recordOrMark.asRecord();
-						synchronized (lock) {
-							numRecordsIn.inc();
-							streamOperator.setKeyContextElement1(record);
-							streamOperator.processElement(record);
-						}
-						return true;
+					switch (recordOrMark.getType()) {
+						case RECORD:
+							// now we can do the actual processing
+							StreamRecord<IN> record = recordOrMark.asRecord();
+							synchronized (lock) {
+								numRecordsIn.inc();
+								streamOperator.setKeyContextElement1(record);
+								streamOperator.processElement(record);
+							}
+							return true;
+						case WATERMARK:
+							statusWatermarkValve.inputWatermark(recordOrMark.asWatermark(), currentChannel);
+							continue;
+						case STREAM_STATUS:
+							// handle stream status
+							statusWatermarkValve.inputStreamStatus(recordOrMark.asStreamStatus(), currentChannel);
+							continue;
+						case LATENCY_MARKER:
+							synchronized (lock) {
+								streamOperator.processLatencyMarker(recordOrMark.asLatencyMarker());
+							}
+							continue;
+						default:
+							throw new IllegalStateException("Unknown stream element type: " + recordOrMark.getType());
 					}
 				}
 			}

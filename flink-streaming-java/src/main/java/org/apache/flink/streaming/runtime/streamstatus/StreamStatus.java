@@ -87,6 +87,7 @@ public final class StreamStatus extends StreamElement {
 	public final int status;
 
 	public StreamStatus(int status) {
+		super(Type.STREAM_STATUS);
 		if (status != IDLE_STATUS && status != ACTIVE_STATUS) {
 			throw new IllegalArgumentException("Invalid status value for StreamStatus; " +
 				"allowed values are " + ACTIVE_STATUS + " (for ACTIVE) and " + IDLE_STATUS + " (for IDLE).");

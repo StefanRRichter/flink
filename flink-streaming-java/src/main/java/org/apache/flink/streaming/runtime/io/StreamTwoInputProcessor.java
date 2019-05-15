@@ -215,56 +215,55 @@ public class StreamTwoInputProcessor<IN1, IN2> {
 
 				if (result.isFullRecord()) {
 					if (currentChannel < numInputChannels1) {
-						StreamElement recordOrWatermark = deserializationDelegate1.getInstance();
-						if (recordOrWatermark.isWatermark()) {
-							statusWatermarkValve1.inputWatermark(recordOrWatermark.asWatermark(), currentChannel);
-							continue;
-						}
-						else if (recordOrWatermark.isStreamStatus()) {
-							statusWatermarkValve1.inputStreamStatus(recordOrWatermark.asStreamStatus(), currentChannel);
-							continue;
-						}
-						else if (recordOrWatermark.isLatencyMarker()) {
-							synchronized (lock) {
-								streamOperator.processLatencyMarker1(recordOrWatermark.asLatencyMarker());
-							}
-							continue;
-						}
-						else {
-							StreamRecord<IN1> record = recordOrWatermark.asRecord();
-							synchronized (lock) {
-								numRecordsIn.inc();
-								streamOperator.setKeyContextElement1(record);
-								streamOperator.processElement1(record);
-							}
-							return true;
 
+						StreamElement recordOrWatermark = deserializationDelegate1.getInstance();
+						switch (recordOrWatermark.getType()) {
+							case RECORD:
+								StreamRecord<IN1> record = recordOrWatermark.asRecord();
+								synchronized (lock) {
+									numRecordsIn.inc();
+									streamOperator.setKeyContextElement1(record);
+									streamOperator.processElement1(record);
+								}
+								return true;
+							case WATERMARK:
+								statusWatermarkValve1.inputWatermark(recordOrWatermark.asWatermark(), currentChannel);
+								continue;
+							case STREAM_STATUS:
+								statusWatermarkValve1.inputStreamStatus(recordOrWatermark.asStreamStatus(), currentChannel);
+								continue;
+							case LATENCY_MARKER:
+								synchronized (lock) {
+									streamOperator.processLatencyMarker1(recordOrWatermark.asLatencyMarker());
+								}
+								continue;
+							default:
+								throw new IllegalStateException("Unknown stream element type: " + recordOrWatermark.getType());
 						}
-					}
-					else {
+					} else {
 						StreamElement recordOrWatermark = deserializationDelegate2.getInstance();
-						if (recordOrWatermark.isWatermark()) {
-							statusWatermarkValve2.inputWatermark(recordOrWatermark.asWatermark(), currentChannel - numInputChannels1);
-							continue;
-						}
-						else if (recordOrWatermark.isStreamStatus()) {
-							statusWatermarkValve2.inputStreamStatus(recordOrWatermark.asStreamStatus(), currentChannel - numInputChannels1);
-							continue;
-						}
-						else if (recordOrWatermark.isLatencyMarker()) {
-							synchronized (lock) {
-								streamOperator.processLatencyMarker2(recordOrWatermark.asLatencyMarker());
-							}
-							continue;
-						}
-						else {
-							StreamRecord<IN2> record = recordOrWatermark.asRecord();
-							synchronized (lock) {
-								numRecordsIn.inc();
-								streamOperator.setKeyContextElement2(record);
-								streamOperator.processElement2(record);
-							}
-							return true;
+						switch (recordOrWatermark.getType()) {
+							case RECORD:
+								StreamRecord<IN2> record = recordOrWatermark.asRecord();
+								synchronized (lock) {
+									numRecordsIn.inc();
+									streamOperator.setKeyContextElement2(record);
+									streamOperator.processElement2(record);
+								}
+								return true;
+							case WATERMARK:
+								statusWatermarkValve2.inputWatermark(recordOrWatermark.asWatermark(), currentChannel - numInputChannels1);
+								continue;
+							case STREAM_STATUS:
+								statusWatermarkValve2.inputStreamStatus(recordOrWatermark.asStreamStatus(), currentChannel - numInputChannels1);
+								continue;
+							case LATENCY_MARKER:
+								synchronized (lock) {
+									streamOperator.processLatencyMarker2(recordOrWatermark.asLatencyMarker());
+								}
+								continue;
+							default:
+								throw new IllegalStateException("Unknown stream element type: " + recordOrWatermark.getType());
 						}
 					}
 				}

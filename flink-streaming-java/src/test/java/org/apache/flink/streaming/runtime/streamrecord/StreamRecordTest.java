@@ -23,6 +23,7 @@ import org.junit.Test;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -35,18 +36,11 @@ public class StreamRecordTest {
 	public void testWithNoTimestamp() {
 		StreamRecord<String> record = new StreamRecord<>("test");
 
-		assertTrue(record.isRecord());
-		assertFalse(record.isWatermark());
+		assertSame(record.getType(), StreamElement.Type.RECORD);
 
 		assertFalse(record.hasTimestamp());
 		assertEquals("test", record.getValue());
 
-//		try {
-//			record.getTimestamp();
-//			fail("should throw an exception");
-//		} catch (IllegalStateException e) {
-//			assertTrue(e.getMessage().contains("timestamp"));
-//		}
 		// for now, the "no timestamp case" returns Long.MIN_VALUE
 		assertEquals(Long.MIN_VALUE, record.getTimestamp());
 
@@ -68,8 +62,7 @@ public class StreamRecordTest {
 	public void testWithTimestamp() {
 		StreamRecord<String> record = new StreamRecord<>("foo", 42);
 
-		assertTrue(record.isRecord());
-		assertFalse(record.isWatermark());
+		assertSame(record.getType(), StreamElement.Type.RECORD);
 
 		assertTrue(record.hasTimestamp());
 		assertEquals(42L, record.getTimestamp());

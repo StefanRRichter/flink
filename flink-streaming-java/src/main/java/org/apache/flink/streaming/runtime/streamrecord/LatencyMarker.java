@@ -44,6 +44,7 @@ public final class LatencyMarker extends StreamElement {
 	 * Creates a latency mark with the given timestamp.
 	 */
 	public LatencyMarker(long markedTime, OperatorID operatorId, int subtaskIndex) {
+		super(Type.LATENCY_MARKER);
 		this.markedTime = markedTime;
 		this.operatorId = operatorId;
 		this.subtaskIndex = subtaskIndex;

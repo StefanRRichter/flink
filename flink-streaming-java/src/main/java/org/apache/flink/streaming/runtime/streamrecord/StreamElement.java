@@ -29,35 +29,23 @@ import org.apache.flink.streaming.runtime.streamstatus.StreamStatus;
 public abstract class StreamElement {
 
 	/**
-	 * Checks whether this element is a watermark.
-	 * @return True, if this element is a watermark, false otherwise.
+	 * Enum of all stream element types.
 	 */
-	public final boolean isWatermark() {
-		return getClass() == Watermark.class;
+	public enum Type {
+		RECORD, STREAM_STATUS, WATERMARK, LATENCY_MARKER
+	}
+
+	private final Type type;
+
+	public StreamElement(Type type) {
+		this.type = type;
 	}
 
 	/**
-	 * Checks whether this element is a stream status.
-	 * @return True, if this element is a stream status, false otherwise.
+	 * Returns the specific tpe of the stream element.
 	 */
-	public final boolean isStreamStatus() {
-		return getClass() == StreamStatus.class;
-	}
-
-	/**
-	 * Checks whether this element is a record.
-	 * @return True, if this element is a record, false otherwise.
-	 */
-	public final boolean isRecord() {
-		return getClass() == StreamRecord.class;
-	}
-
-	/**
-	 * Checks whether this element is a record.
-	 * @return True, if this element is a record, false otherwise.
-	 */
-	public final boolean isLatencyMarker() {
-		return getClass() == LatencyMarker.class;
+	public Type getType() {
+		return type;
 	}
 
 	/**
