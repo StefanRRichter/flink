@@ -45,6 +45,7 @@ import org.apache.flink.streaming.runtime.streamrecord.StreamElementSerializer;
 import org.apache.flink.streaming.runtime.streamrecord.StreamRecord;
 import org.apache.flink.streaming.runtime.tasks.ProcessingTimeCallback;
 import org.apache.flink.streaming.runtime.tasks.StreamTask;
+import org.apache.flink.streaming.runtime.tasks.mailbox.TaskMailboxExecutor;
 import org.apache.flink.util.ExceptionUtils;
 import org.apache.flink.util.Preconditions;
 
@@ -90,8 +91,6 @@ public class AsyncWaitOperator<IN, OUT>
 	/** Timeout for the async collectors. */
 	private final long timeout;
 
-	protected transient Object checkpointingLock;
-
 	/** {@link TypeSerializer} for inputs while making snapshots. */
 	private transient StreamElementSerializer<IN> inStreamElementSerializer;
 
@@ -111,6 +110,8 @@ public class AsyncWaitOperator<IN, OUT>
 
 	/** Thread running the emitter. */
 	private transient Thread emitterThread;
+
+	private transient TaskMailboxExecutor mainThreadExecutor;
 
 	public AsyncWaitOperator(
 			AsyncFunction<IN, OUT> asyncFunction,
@@ -132,7 +133,7 @@ public class AsyncWaitOperator<IN, OUT>
 	public void setup(StreamTask<?, ?> containingTask, StreamConfig config, Output<StreamRecord<OUT>> output) {
 		super.setup(containingTask, config, output);
 
-		this.checkpointingLock = getContainingTask().getCheckpointLock();
+		this.mainThreadExecutor = containingTask.getTaskMailboxExecutor();
 
 		this.inStreamElementSerializer = new StreamElementSerializer<>(
 			getOperatorConfig().<IN>getTypeSerializerIn1(getUserCodeClassloader()));
@@ -163,7 +164,7 @@ public class AsyncWaitOperator<IN, OUT>
 		super.open();
 
 		// create the emitter
-		this.emitter = new Emitter<>(checkpointingLock, output, queue, this);
+		this.emitter = new Emitter<>(mainThreadExecutor, output, queue, this);
 
 		// start the emitter thread
 		this.emitterThread = new Thread(emitter, "AsyncIO-Emitter-Thread (" + getOperatorName() + ')');
@@ -272,12 +273,8 @@ public class AsyncWaitOperator<IN, OUT>
 	@Override
 	public void close() throws Exception {
 		try {
-			assert(Thread.holdsLock(checkpointingLock));
-
 			while (!queue.isEmpty()) {
-				// wait for the emitter thread to output the remaining elements
-				// for that he needs the checkpointing lock and thus we have to free it
-				checkpointingLock.wait();
+				mainThreadExecutor.yield();
 			}
 		}
 		finally {
@@ -364,16 +361,6 @@ public class AsyncWaitOperator<IN, OUT>
 				Thread.currentThread().interrupt();
 			}
 
-			/*
-			 * FLINK-5638: If we have the checkpoint lock we might have to free it for a while so
-			 * that the emitter thread can complete/react to the interrupt signal.
-			 */
-			if (Thread.holdsLock(checkpointingLock)) {
-				while (emitterThread.isAlive()) {
-					checkpointingLock.wait(100L);
-				}
-			}
-
 			emitterThread.join();
 		} else {
 			executor.shutdownNow();
@@ -394,13 +381,11 @@ public class AsyncWaitOperator<IN, OUT>
 	 * @throws InterruptedException if the current thread has been interrupted
 	 */
 	private <T> void addAsyncBufferEntry(StreamElementQueueEntry<T> streamElementQueueEntry) throws InterruptedException {
-		assert(Thread.holdsLock(checkpointingLock));
-
 		pendingStreamElementQueueEntry = streamElementQueueEntry;
 
 		while (!queue.tryPut(streamElementQueueEntry)) {
 			// we wait for the emitter to notify us if the queue has space left again
-			checkpointingLock.wait();
+			mainThreadExecutor.yield();
 		}
 
 		pendingStreamElementQueueEntry = null;

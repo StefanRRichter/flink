@@ -124,7 +124,7 @@ public class SourceStreamTask<OUT, SRC extends SourceFunction<OUT>, OP extends S
 
 	private void runAlternativeMailboxLoop() throws InterruptedException {
 
-		while (mailboxLoopRunning) {
+		while (isMailboxLoopRunning()) {
 
 			Runnable letter = mailbox.takeMail();
 
@@ -182,7 +182,7 @@ public class SourceStreamTask<OUT, SRC extends SourceFunction<OUT>, OP extends S
 				sourceExecutionThrowable = t;
 			} finally {
 				try {
-					mailbox.putAsHead(SourceStreamTask.this::stopEventProcessingMailboxLoop);
+					mailbox.putAsHead(mailboxPoisonLetter);
 				} catch (InterruptedException e) {
 					Thread.currentThread().interrupt();
 				}

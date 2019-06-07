@@ -18,18 +18,23 @@
 
 package org.apache.flink.streaming.runtime.tasks.mailbox;
 
+import org.apache.flink.core.testutils.OneShotLatch;
 import org.apache.flink.util.function.BiConsumerWithException;
 import org.apache.flink.util.function.FunctionWithException;
+import org.apache.flink.util.function.RunnableWithException;
 import org.apache.flink.util.function.ThrowingRunnable;
 
+import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
 import java.util.LinkedList;
-import java.util.Optional;
 import java.util.Queue;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Consumer;
 
 /**
  * Unit tests for {@link MailboxImpl}.
@@ -46,8 +51,14 @@ public class MailboxImplTest {
 	private Mailbox mailbox;
 
 	@Before
-	public void setUp() throws Exception {
+	public void setUp() {
 		mailbox = new MailboxImpl(CAPACITY_POW_2);
+		mailbox.open();
+	}
+
+	@After
+	public void tearDown() {
+		mailbox.close();
 	}
 
 	/**
@@ -55,72 +66,66 @@ public class MailboxImplTest {
 	 */
 	@Test
 	public void testClearAndPut() {
+
+		Runnable letterInstance = () -> {};
+
 		for (int i = 0; i < CAPACITY; ++i) {
-			Assert.assertTrue(mailbox.tryPutMail(() -> {}));
+			Assert.assertTrue(mailbox.tryPutMail(letterInstance));
 		}
 
-		mailbox.clearAndPut(POISON_LETTER);
+		final AtomicInteger dropCount = new AtomicInteger(0);
+		Mailbox.DroppedLetterHandler countHandler = droppedLetter -> {
+			if (droppedLetter == letterInstance) {
+				dropCount.incrementAndGet();
+			}
+		};
+
+		mailbox.clearAndPut(POISON_LETTER, countHandler);
 
 		Assert.assertTrue(mailbox.hasMail());
 		Assert.assertEquals(POISON_LETTER, mailbox.tryTakeMail().get());
 		Assert.assertFalse(mailbox.hasMail());
+		Assert.assertEquals(CAPACITY, dropCount.get());
 	}
 
-	/**
-	 * Test that #putAsHead works if the queue is not full.
-	 */
 	@Test
-	public void testPutAsHeadIfMoreCapacity() {
+	public void testPutAsHead() throws InterruptedException {
 
-		final AtomicInteger validator = new AtomicInteger(0);
+		Runnable instanceA = () -> {};
+		Runnable instanceB = () -> {};
+		Runnable instanceC = () -> {};
+		Runnable instanceD = () -> {};
+		Runnable instanceE = () -> {};
 
-		mailbox.putAsHead(validator::incrementAndGet);
-		mailbox.tryTakeMail().ifPresent(Runnable::run);
+		mailbox.putMail(instanceD);
+		mailbox.tryPutAsHead(instanceC);
+		mailbox.putMail(instanceE);
+		mailbox.putAsHead(instanceA);
+
+		OneShotLatch latch = new OneShotLatch();
+		Thread blockingPut = new Thread(() -> {
+			// ensure we are full
+			if (!mailbox.tryPutAsHead(() -> {})) {
+				latch.trigger();
+				try {
+					mailbox.putAsHead(instanceB);
+				} catch (InterruptedException e) {
+					Thread.currentThread().interrupt();
+				}
+			}
+		});
+
+		blockingPut.start();
+		latch.await();
+
+		Assert.assertSame(instanceA, mailbox.takeMail());
+		blockingPut.join();
+		Assert.assertSame(instanceB, mailbox.takeMail());
+		Assert.assertSame(instanceC, mailbox.takeMail());
+		Assert.assertSame(instanceD, mailbox.takeMail());
+		Assert.assertSame(instanceE, mailbox.takeMail());
+
 		Assert.assertFalse(mailbox.tryTakeMail().isPresent());
-		Assert.assertEquals(1, validator.get());
-
-		Assert.assertTrue(mailbox.tryPutMail(() -> validator.compareAndSet(2, 3)));
-		mailbox.putAsHead(() -> validator.compareAndSet(1, 2));
-
-		mailbox.tryTakeMail().ifPresent(Runnable::run);
-		mailbox.tryTakeMail().ifPresent(Runnable::run);
-
-		Assert.assertEquals(3, validator.get());
-	}
-
-	/**
-	 * Test that #putAsHead works if the head is full and even multiple times in a row.
-	 */
-	@Test
-	public void testPutAsHeadIfFull() {
-		testPutAsHeadIfFullInternal(1);
-		testPutAsHeadIfFullInternal(2);
-		testPutAsHeadIfFullInternal(CAPACITY);
-		testPutAsHeadIfFullInternal(CAPACITY + 1);
-	}
-
-	private void testPutAsHeadIfFullInternal(int numOverflowPuts) {
-
-		final AtomicInteger validator = new AtomicInteger(0);
-
-		for (int i = validator.get(); i < CAPACITY; ++i) {
-			final int val = numOverflowPuts + i;
-			Assert.assertTrue(mailbox.tryPutMail(() -> validator.compareAndSet(val, val + 1)));
-		}
-
-		Assert.assertFalse(mailbox.tryPutMail(() -> {}));
-
-		for (int i = 0; i < numOverflowPuts; ++i) {
-			final int val = numOverflowPuts - i - 1;
-			mailbox.putAsHead(() -> validator.compareAndSet(val, val + 1));
-		}
-
-		Optional<Runnable> runnable;
-		while ((runnable = mailbox.tryTakeMail()).isPresent()) {
-			runnable.get().run();
-		}
-
-		Assert.assertEquals(CAPACITY + numOverflowPuts, validator.get());
 	}
 
 	@Test
@@ -185,6 +190,140 @@ public class MailboxImplTest {
 	}
 
 	/**
+	 * Test that closing the mailbox unblocks pending accesses with correct exceptions.
+	 */
+	@Test
+	public void testCloseUnblocks() throws InterruptedException {
+		testAllPuttingUnblocksInternal(Mailbox::close);
+		setUp();
+		testUnblocksInternal(() -> mailbox.takeMail(), Mailbox::close, IllegalStateException.class);
+		setUp();
+		testUnblocksInternal(() -> {
+			mailbox.waitUntilHasMail();
+			throw new UnblockedException();
+		}, Mailbox::close, UnblockedException.class);
+	}
+
+	/**
+	 * Test that silencing the mailbox unblocks pending accesses with correct exceptions.
+	 */
+	@Test
+	public void testQuiesceUnblocks() throws InterruptedException {
+		testAllPuttingUnblocksInternal(Mailbox::quiesce);
+	}
+
+	@Test
+	public void testLifeCycleQuiesce() throws InterruptedException {
+		mailbox.putMail(() -> {});
+		mailbox.putMail(() -> {});
+		mailbox.quiesce();
+		testLifecyclePuttingInternal();
+		mailbox.takeMail();
+		Assert.assertTrue(mailbox.tryTakeMail().isPresent());
+		Assert.assertFalse(mailbox.tryTakeMail().isPresent());
+	}
+
+	@Test
+	public void testLifeCycleClose() throws InterruptedException {
+		mailbox.close();
+		testLifecyclePuttingInternal();
+
+		try {
+			mailbox.takeMail();
+			Assert.fail();
+		} catch (IllegalStateException ignore) {
+		}
+
+		try {
+			mailbox.tryTakeMail();
+			Assert.fail();
+		} catch (IllegalStateException ignore) {
+		}
+	}
+
+	private void testLifecyclePuttingInternal() throws InterruptedException {
+		try {
+			mailbox.tryPutMail(() -> {});
+			Assert.fail();
+		} catch (RejectedExecutionException ignore) {
+		}
+		try {
+			mailbox.tryPutAsHead(() -> {});
+			Assert.fail();
+		} catch (RejectedExecutionException ignore) {
+		}
+		try {
+			mailbox.putMail(() -> {});
+			Assert.fail();
+		} catch (RejectedExecutionException ignore) {
+		}
+		try {
+			mailbox.putAsHead(() -> {});
+			Assert.fail();
+		} catch (RejectedExecutionException ignore) {
+		}
+	}
+
+	private void testAllPuttingUnblocksInternal(Consumer<Mailbox> unblockMethod) throws InterruptedException {
+		testUnblocksInternal(() -> mailbox.putMail(() -> {}), unblockMethod, RejectedExecutionException.class);
+		setUp();
+		testUnblocksInternal(() -> mailbox.putAsHead(() -> {}), unblockMethod, RejectedExecutionException.class);
+		setUp();
+		testUnblocksInternal(() -> mailbox.clearAndPut(() -> {}, (Runnable r) -> {}), unblockMethod, RejectedExecutionException.class);
+		setUp();
+		testUnblocksInternal(() -> {
+			boolean putOk;
+			try {
+				putOk = mailbox.tryPutMail(() -> {});
+			} catch (RejectedExecutionException ignore) {
+				putOk = false;
+			}
+			if (!putOk) {
+				mailbox.waitUntilHasCapacity();
+				throw new UnblockedException();
+			}
+		}, unblockMethod, UnblockedException.class);
+	}
+
+	private void testUnblocksInternal(
+		RunnableWithException testMethod,
+		Consumer<Mailbox> unblockMethod,
+		Class<?> expectedExceptionClass) throws InterruptedException {
+		final Thread[] blockedThreads = new Thread[CAPACITY * 2];
+		final Exception[] exceptions = new Exception[blockedThreads.length];
+
+		CountDownLatch countDownLatch = new CountDownLatch(blockedThreads.length);
+
+		for (int i = 0; i < blockedThreads.length; ++i) {
+			final int id = i;
+			Thread blocked = new Thread(() -> {
+				try {
+					countDownLatch.countDown();
+					while (true) {
+						testMethod.run();
+					}
+				} catch (Exception ex) {
+					exceptions[id] = ex;
+				}
+			});
+			blockedThreads[i] = blocked;
+			blocked.start();
+		}
+
+		countDownLatch.await();
+		unblockMethod.accept(mailbox);
+
+		for (Thread blockedThread : blockedThreads) {
+			blockedThread.join();
+		}
+
+		for (Exception exception : exceptions) {
+			Assert.assertEquals(expectedExceptionClass, exception.getClass());
+		}
+
+	}
+
+	/**
 	 * Test producer-consumer pattern through the mailbox in a concurrent setting (n-writer / 1-reader).
 	 */
 	private void testPutTake(
@@ -225,5 +364,9 @@ public class MailboxImplTest {
 		for (int perThreadResult : results) {
 			Assert.assertEquals(numLettersPerThread, perThreadResult);
 		}
+	}
+
+	static final class UnblockedException extends Exception {
+
 	}
 }

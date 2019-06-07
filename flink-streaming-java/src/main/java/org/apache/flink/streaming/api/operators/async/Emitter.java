@@ -26,12 +26,16 @@ import org.apache.flink.streaming.api.operators.async.queue.AsyncResult;
 import org.apache.flink.streaming.api.operators.async.queue.AsyncWatermarkResult;
 import org.apache.flink.streaming.api.operators.async.queue.StreamElementQueue;
 import org.apache.flink.streaming.runtime.streamrecord.StreamRecord;
+import org.apache.flink.streaming.runtime.tasks.mailbox.TaskMailboxExecutor;
 import org.apache.flink.util.Preconditions;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Collection;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.function.Supplier;
 
 /**
  * Runnable responsible for consuming elements from the given queue and outputting them to the
@@ -44,8 +48,8 @@ public class Emitter<OUT> implements Runnable {
 
 	private static final Logger LOG = LoggerFactory.getLogger(Emitter.class);
 
-	/** Lock to hold before outputting. */
-	private final Object checkpointLock;
+	/** Access to the mailbox of the stream task to enqueue processing requests. */
+	private final TaskMailboxExecutor mailboxExecutor;
 
 	/** Output for the watermark elements. */
 	private final Output<StreamRecord<OUT>> output;
@@ -61,12 +65,12 @@ public class Emitter<OUT> implements Runnable {
 	private volatile boolean running;
 
 	public Emitter(
-			final Object checkpointLock,
+			final TaskMailboxExecutor mailboxExecutor,
 			final Output<StreamRecord<OUT>> output,
 			final StreamElementQueue streamElementQueue,
 			final OperatorActions operatorActions) {
 
-		this.checkpointLock = Preconditions.checkNotNull(checkpointLock, "checkpointLock");
+		this.mailboxExecutor = Preconditions.checkNotNull(mailboxExecutor, "mailboxExecutor");
 		this.output = Preconditions.checkNotNull(output, "output");
 		this.streamElementQueue = Preconditions.checkNotNull(streamElementQueue, "streamElementQueue");
 		this.operatorActions = Preconditions.checkNotNull(operatorActions, "operatorActions");
@@ -91,38 +95,36 @@ public class Emitter<OUT> implements Runnable {
 				// Thread got interrupted which means that it should shut down
 				LOG.debug("Emitter thread got interrupted, shutting down.");
 			}
+		} catch (ExecutionException e) {
+			if (running && e.getCause() instanceof RejectedExecutionException) {
+				operatorActions.failOperator(e);
+			} else {
+				// Thread got interrupted which means that it should shut down
+				LOG.debug("Mailbox closed with pending emit, shutting down.");
+			}
 		} catch (Throwable t) {
 			operatorActions.failOperator(new Exception("AsyncWaitOperator's emitter caught an " +
 				"unexpected throwable.", t));
 		}
 	}
 
-	private void output(AsyncResult asyncResult) throws InterruptedException {
-		if (asyncResult.isWatermark()) {
-			synchronized (checkpointLock) {
+	private void output(AsyncResult asyncResult) throws ExecutionException, InterruptedException {
+
+		final Supplier<Void> processingRequest = () -> {
+			if (asyncResult.isWatermark()) {
 				AsyncWatermarkResult asyncWatermarkResult = asyncResult.asWatermark();
 
 				LOG.debug("Output async watermark.");
 				output.emitWatermark(asyncWatermarkResult.getWatermark());
-
-				// remove the peeked element from the async collector buffer so that it is no longer
-				// checkpointed
-				streamElementQueue.poll();
-
-				// notify the main thread that there is again space left in the async collector
-				// buffer
-				checkpointLock.notifyAll();
-			}
-		} else {
-			AsyncCollectionResult<OUT> streamRecordResult = asyncResult.asResultCollection();
-
-			if (streamRecordResult.hasTimestamp()) {
-				timestampedCollector.setAbsoluteTimestamp(streamRecordResult.getTimestamp());
 			} else {
-				timestampedCollector.eraseTimestamp();
-			}
+				AsyncCollectionResult<OUT> streamRecordResult = asyncResult.asResultCollection();
 
-			synchronized (checkpointLock) {
+				if (streamRecordResult.hasTimestamp()) {
+					timestampedCollector.setAbsoluteTimestamp(streamRecordResult.getTimestamp());
+				} else {
+					timestampedCollector.eraseTimestamp();
+				}
+
 				LOG.debug("Output async stream element collection result.");
 
 				try {
@@ -138,16 +140,20 @@ public class Emitter<OUT> implements Runnable {
 						new Exception("An async function call terminated with an exception. " +
 							"Failing the AsyncWaitOperator.", e));
 				}
-
-				// remove the peeked element from the async collector buffer so that it is no longer
-				// checkpointed
-				streamElementQueue.poll();
-
-				// notify the main thread that there is again space left in the async collector
-				// buffer
-				checkpointLock.notifyAll();
 			}
-		}
+
+			// remove the peeked element from the async collector buffer so that it is no longer
+			// checkpointed
+			try {
+				streamElementQueue.poll();
+			} catch (InterruptedException e) {
+				Thread.currentThread().interrupt();
+			}
+
+			return null;
+		};
+
+		mailboxExecutor.executeSupplier(processingRequest).get();
 	}
 
 	public void stop() {

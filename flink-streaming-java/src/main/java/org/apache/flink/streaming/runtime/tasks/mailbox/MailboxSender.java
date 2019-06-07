@@ -20,6 +20,8 @@ package org.apache.flink.streaming.runtime.tasks.mailbox;
 
 import javax.annotation.Nonnull;
 
+import java.util.concurrent.RejectedExecutionException;
+
 /**
  * Producer-facing side of the {@link Mailbox} interface. This is used to enqueue letters. Multiple producers threads
  * can put to the same mailbox.
@@ -32,16 +34,18 @@ public interface MailboxSender {
 	 *
 	 * @param letter the letter to enqueue.
 	 * @return <code>true</code> iff successful.
+	 * @throws RejectedExecutionException if the mailbox is quiesced or closed.
 	 */
-	boolean tryPutMail(@Nonnull Runnable letter);
+	boolean tryPutMail(@Nonnull Runnable letter) throws RejectedExecutionException;
 
 	/**
 	 * Enqueues the given letter to the mailbox and blocks until there is capacity for a successful put.
 	 *
 	 * @param letter the letter to enqueue.
 	 * @throws InterruptedException on interruption.
+	 * @throws RejectedExecutionException if the mailbox is quiesced or closed.
 	 */
-	void putMail(@Nonnull Runnable letter) throws InterruptedException;
+	void putMail(@Nonnull Runnable letter) throws InterruptedException, RejectedExecutionException;
 
 	/**
 	 * This method blocks until the mailbox has again capacity to enqueue new letters.

@@ -20,11 +20,32 @@ package org.apache.flink.streaming.runtime.tasks.mailbox;
 
 import javax.annotation.Nonnull;
 
+import java.util.concurrent.RejectedExecutionException;
+
 /**
  * A mailbox is basically a blocking queue for inter-thread message exchange in form of {@link Runnable} objects between
  * multiple producer threads and a single consumer.
  */
-public interface Mailbox extends MailboxReceiver, MailboxSender {
+public interface Mailbox extends MailboxReceiver, MailboxSender, AutoCloseable {
+
+	/**
+	 * Open the mailbox. In this state, the mailbox supports put and take operations.
+	 */
+	void open();
+
+	/**
+	 * Quiesce the mailbox. In this state, the mailbox supports only take operations and all pending and future put
+	 * operations will throw {@link java.util.concurrent.RejectedExecutionException}.
+	 */
+	void quiesce();
+
+	/**
+	 * Close the mailbox. In this state, all pending and future put operations will throw
+	 * {@link java.util.concurrent.RejectedExecutionException} and all pending and future take operations will throw
+	 * {@link IllegalStateException}.
+	 */
+	@Override
+	void close();
 
 	/**
 	 * The effect of this is that all pending letters in the mailbox are dropped and the given priorityAction
@@ -33,17 +54,31 @@ public interface Mailbox extends MailboxReceiver, MailboxSender {
 	 * object and only rarely used, e.g. to submit special events like shutting down the mailbox loop.
 	 *
 	 * @param priorityAction action to enqueue atomically after the mailbox was cleared.
+	 * @throws RejectedExecutionException if the mailbox is quiesced or closed.
 	 */
-	void clearAndPut(@Nonnull Runnable priorityAction, @Nonnull DroppedLetterHandler droppedLetterHandler);
+	void clearAndPut(
+		@Nonnull Runnable priorityAction,
+		@Nonnull DroppedLetterHandler droppedLetterHandler) throws RejectedExecutionException;
 
 	/**
-	 * Adds the given action to the directly head of the mailbox. This method will block if the mailbox is full and
+	 * Adds the given action to the head of the mailbox. This method will block if the mailbox is full and
 	 * should therefore only be called from outside the mailbox main-thread to avoid deadlocks.
 	 *
 	 * @param priorityAction action to enqueue to the head of the mailbox.
 	 * @throws InterruptedException on interruption.
+	 * @throws RejectedExecutionException if the mailbox is quiesced or closed.
 	 */
-	void putAsHead(@Nonnull Runnable priorityAction) throws InterruptedException;
+	void putAsHead(@Nonnull Runnable priorityAction) throws InterruptedException, RejectedExecutionException;
+
+	/**
+	 * Adds the given action to the head of the mailbox if the mailbox is not full. Returns true if the letter
+	 * was successfully added to the mailbox.
+	 *
+	 * @param priorityAction action to enqueue to the head of the mailbox.
+	 * @return true if the letter was successfully added.
+	 * @throws RejectedExecutionException if the mailbox is quiesced or closed.
+	 */
+	boolean tryPutAsHead(@Nonnull Runnable priorityAction) throws RejectedExecutionException;
 
 	/**
 	 * Handler for letters that are dropped from the mailbox as part of

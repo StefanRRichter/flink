@@ -26,6 +26,7 @@ import javax.annotation.concurrent.ThreadSafe;
 
 import java.util.ArrayList;
 import java.util.Optional;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -35,6 +36,10 @@ import java.util.concurrent.locks.ReentrantLock;
  */
 @ThreadSafe
 public class MailboxImpl implements Mailbox {
+
+	enum State {
+		OPEN, QUIESCED, CLOSED
+	}
 
 	/**
 	 * The enqueued letters.
@@ -78,6 +83,12 @@ public class MailboxImpl implements Mailbox {
 	private volatile int count;
 
 	/**
+	 * The state of the mailbox in the lifecycle of open, quiesced, and closed.
+	 */
+	@GuardedBy("lock")
+	private volatile State state;
+
+	/**
 	 * A mask to wrap around the indexes of the ring buffer. We use this to avoid ifs or modulo ops.
 	 */
 	private final int moduloMask;
@@ -94,6 +105,7 @@ public class MailboxImpl implements Mailbox {
 		this.lock = new ReentrantLock();
 		this.notEmpty = lock.newCondition();
 		this.notFull = lock.newCondition();
+		this.state = State.CLOSED;
 	}
 
 	@Override
@@ -106,7 +118,12 @@ public class MailboxImpl implements Mailbox {
 		final ReentrantLock lock = this.lock;
 		lock.lock();
 		try {
-			return isEmpty() ? Optional.empty() : Optional.of(takeInternal());
+			if (isEmpty()) {
+				checkTakeStateConditions();
+				return Optional.empty();
+			} else {
+				return Optional.of(takeInternal());
+			}
 		} finally {
 			lock.unlock();
 		}
@@ -119,6 +136,7 @@ public class MailboxImpl implements Mailbox {
 		lock.lockInterruptibly();
 		try {
 			while (isEmpty()) {
+				checkTakeStateConditions();
 				notEmpty.await();
 			}
 			return takeInternal();
@@ -132,7 +150,7 @@ public class MailboxImpl implements Mailbox {
 		final ReentrantLock lock = this.lock;
 		lock.lockInterruptibly();
 		try {
-			while (isEmpty()) {
+			while (isEmpty() && isTakeAbleState()) {
 				notEmpty.await();
 			}
 		} finally {
@@ -148,6 +166,7 @@ public class MailboxImpl implements Mailbox {
 		lock.lock();
 		try {
 			if (isFull()) {
+				checkPutStateConditions();
 				return false;
 			} else {
 				putTailInternal(letter);
@@ -164,6 +183,7 @@ public class MailboxImpl implements Mailbox {
 		lock.lockInterruptibly();
 		try {
 			while (isFull()) {
+				checkPutStateConditions();
 				notFull.await();
 			}
 			putTailInternal(letter);
@@ -177,7 +197,7 @@ public class MailboxImpl implements Mailbox {
 		final ReentrantLock lock = this.lock;
 		lock.lockInterruptibly();
 		try {
-			while (isFull()) {
+			while (isFull() && isPutAbleState()) {
 				notFull.await();
 			}
 		} finally {
@@ -219,9 +239,27 @@ public class MailboxImpl implements Mailbox {
 		lock.lockInterruptibly();
 		try {
 			while (isFull()) {
+				checkPutStateConditions();
 				notFull.await();
 			}
 			putHeadInternal(priorityAction);
+		} finally {
+			lock.unlock();
+		}
+	}
+
+	@Override
+	public boolean tryPutAsHead(@Nonnull Runnable priorityAction) {
+		final ReentrantLock lock = this.lock;
+		lock.lock();
+		try {
+			if (isFull()) {
+				checkPutStateConditions();
+				return false;
+			} else {
+				putHeadInternal(priorityAction);
+				return true;
+			}
 		} finally {
 			lock.unlock();
 		}
@@ -231,6 +269,7 @@ public class MailboxImpl implements Mailbox {
 
 	private void putHeadInternal(Runnable letter) {
 		assert lock.isHeldByCurrentThread();
+		checkPutStateConditions();
 		headIndex = decreaseIndexWithWrapAround(headIndex);
 		this.ringBuffer[headIndex] = letter;
 		++count;
@@ -239,6 +278,7 @@ public class MailboxImpl implements Mailbox {
 
 	private void putTailInternal(Runnable letter) {
 		assert lock.isHeldByCurrentThread();
+		checkPutStateConditions();
 		this.ringBuffer[tailIndex] = letter;
 		tailIndex = increaseIndexWithWrapAround(tailIndex);
 		++count;
@@ -247,6 +287,7 @@ public class MailboxImpl implements Mailbox {
 
 	private Runnable takeInternal() {
 		assert lock.isHeldByCurrentThread();
+		checkTakeStateConditions();
 		final Runnable[] buffer = this.ringBuffer;
 		Runnable letter = buffer[headIndex];
 		buffer[headIndex] = null;
@@ -270,5 +311,66 @@ public class MailboxImpl implements Mailbox {
 
 	private boolean isEmpty() {
 		return count == 0;
+	}
+
+	private boolean isPutAbleState() {
+		return state == State.OPEN;
+	}
+
+	private boolean isTakeAbleState() {
+		return state != State.CLOSED;
+	}
+
+	private void checkPutStateConditions() {
+		final State state = this.state;
+		if (!isPutAbleState()) {
+			throw new RejectedExecutionException("Mailbox is in state " + state + ", but is required to be in state " +
+				State.OPEN + " for put operations.");
+		}
+	}
+
+	private void checkTakeStateConditions() {
+		final State state = this.state;
+		if (!isTakeAbleState()) {
+			throw new IllegalStateException("Mailbox is in state " + state + ", but is required to be in state " +
+				State.OPEN + " or " + State.QUIESCED + " for take operations.");
+		}
+	}
+
+	@Override
+	public void open() {
+		lock.lock();
+		try {
+			if (state == State.CLOSED) {
+				state = State.OPEN;
+			}
+		} finally {
+			lock.unlock();
+		}
+	}
+
+	@Override
+	public void quiesce() {
+		lock.lock();
+		try {
+			if (state == State.OPEN) {
+				state = State.QUIESCED;
+			}
+			notFull.signalAll();
+		} finally {
+			lock.unlock();
+		}
+	}
+
+	@Override
+	public void close() {
+		lock.lock();
+		try {
+			state = State.CLOSED;
+			notFull.signalAll();
+			notEmpty.signalAll();
+		} finally {
+			lock.unlock();
+		}
 	}
 }

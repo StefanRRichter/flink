@@ -35,6 +35,9 @@ import org.apache.flink.streaming.api.operators.StreamTaskStateInitializerImpl;
 import org.apache.flink.streaming.runtime.streamstatus.StreamStatusMaintainer;
 import org.apache.flink.streaming.runtime.tasks.ProcessingTimeService;
 import org.apache.flink.streaming.runtime.tasks.TestProcessingTimeService;
+import org.apache.flink.streaming.runtime.tasks.mailbox.MailboxSender;
+import org.apache.flink.streaming.runtime.tasks.mailbox.TaskMailboxExecutor;
+import org.apache.flink.streaming.runtime.tasks.mailbox.TestTaskMailboxExecutor;
 
 import java.util.Collections;
 import java.util.Map;
@@ -47,6 +50,7 @@ public class MockStreamTaskBuilder {
 	private final Environment environment;
 	private String name = "Mock Task";
 	private Object checkpointLock = new Object();
+	private TaskMailboxExecutor mailboxExecutor = new TestTaskMailboxExecutor();
 	private StreamConfig config = new StreamConfig(new Configuration());
 	private ExecutionConfig executionConfig = new ExecutionConfig();
 	private CloseableRegistry closableRegistry = new CloseableRegistry();
@@ -115,11 +119,17 @@ public class MockStreamTaskBuilder {
 		return this;
 	}
 
+	public MockStreamTaskBuilder setMailboxExecutor(TaskMailboxExecutor mailboxExecutor) {
+		this.mailboxExecutor = mailboxExecutor;
+		return this;
+	}
+
 	public MockStreamTask build() {
 		return new MockStreamTask(
 			environment,
 			name,
 			checkpointLock,
+			mailboxExecutor,
 			config,
 			executionConfig,
 			streamTaskStateInitializer,

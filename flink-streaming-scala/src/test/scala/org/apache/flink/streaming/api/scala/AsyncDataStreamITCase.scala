@@ -144,7 +144,7 @@ class MyAsyncFunction extends AsyncFunction[Int, Int] {
       if (input % 2 == 0) {
         Thread.sleep(AsyncDataStreamITCase.timeout + 1000)
       }
-
+      println("invoke" + input)
       resultFuture.complete(Seq(input * 2))
     } (ExecutionContext.global)
   }
@@ -165,11 +165,12 @@ class MyRichAsyncFunction extends RichAsyncFunction[Int, Int] {
       if (input % 2 == 0) {
         Thread.sleep(AsyncDataStreamITCase.timeout + 1000)
       }
-
+       println("invokeRich" + input)
       resultFuture.complete(Seq(input * 2))
     } (ExecutionContext.global)
   }
   override def timeout(input: Int, resultFuture: ResultFuture[Int]): Unit = {
+    println("timeoutR" + input)
     resultFuture.complete(Seq(input * 3))
   }
 }

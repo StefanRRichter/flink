@@ -27,6 +27,7 @@ import org.apache.flink.streaming.api.operators.async.queue.WatermarkQueueEntry;
 import org.apache.flink.streaming.api.watermark.Watermark;
 import org.apache.flink.streaming.runtime.streamrecord.StreamElement;
 import org.apache.flink.streaming.runtime.streamrecord.StreamRecord;
+import org.apache.flink.streaming.runtime.tasks.mailbox.TestTaskMailboxExecutor;
 import org.apache.flink.streaming.util.CollectorOutput;
 import org.apache.flink.util.TestLogger;
 
@@ -80,7 +81,6 @@ public class EmitterTest extends TestLogger {
 	 */
 	@Test
 	public void testEmitterWithOrderedQueue() throws Exception {
-		Object lock = new Object();
 		List<StreamElement> list = new ArrayList<>();
 		Output<StreamRecord<Integer>> output = new CollectorOutput<>(list);
 
@@ -99,7 +99,7 @@ public class EmitterTest extends TestLogger {
 
 		StreamElementQueue queue = new OrderedStreamElementQueue(capacity, executor, operatorActions);
 
-		final Emitter<Integer> emitter = new Emitter<>(lock, output, queue, operatorActions);
+		final Emitter<Integer> emitter = new Emitter<>(new TestTaskMailboxExecutor(), output, queue, operatorActions);
 
 		final Thread emitterThread = new Thread(emitter);
 		emitterThread.start();
@@ -119,10 +119,8 @@ public class EmitterTest extends TestLogger {
 			record1.complete(Arrays.asList(1, 2));
 			record3.complete(Arrays.asList(5, 6));
 
-			synchronized (lock) {
-				while (!queue.isEmpty()) {
-					lock.wait();
-				}
+			while (!queue.isEmpty()) {
+				Thread.sleep(1L);
 			}
 
 			Assert.assertEquals(expected, list);
@@ -137,7 +135,6 @@ public class EmitterTest extends TestLogger {
 	 */
 	@Test
 	public void testEmitterWithExceptions() throws Exception {
-		Object lock = new Object();
 		List<StreamElement> list = new ArrayList<>();
 		Output<StreamRecord<Integer>> output = new CollectorOutput<>(list);
 
@@ -151,7 +148,7 @@ public class EmitterTest extends TestLogger {
 
 		StreamElementQueue queue = new OrderedStreamElementQueue(capacity, executor, operatorActions);
 
-		final Emitter<Integer> emitter = new Emitter<>(lock, output, queue, operatorActions);
+		final Emitter<Integer> emitter = new Emitter<>(new TestTaskMailboxExecutor(), output, queue, operatorActions);
 
 		final Thread emitterThread = new Thread(emitter);
 		emitterThread.start();
@@ -170,10 +167,8 @@ public class EmitterTest extends TestLogger {
 			record2.completeExceptionally(testException);
 			record1.complete(Arrays.asList(1));
 
-			synchronized (lock) {
-				while (!queue.isEmpty()) {
-					lock.wait();
-				}
+			while (!queue.isEmpty()) {
+				Thread.sleep(1L);
 			}
 
 			Assert.assertEquals(expected, list);

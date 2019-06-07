@@ -76,6 +76,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -193,7 +194,11 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 
 	protected final Mailbox mailbox;
 
-	protected boolean mailboxLoopRunning;
+	protected final TaskMailboxExecutorImpl taskMailboxExecutor;
+
+	private boolean mailboxLoopRunning;
+
+	protected final Runnable mailboxPoisonLetter;
 
 	// ------------------------------------------------------------------------
 
@@ -228,7 +233,11 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 		this.recordWriters = createRecordWriters(configuration, environment);
 		this.syncSavepointLatch = new SynchronousSavepointLatch();
 		this.mailbox = new MailboxImpl();
+		this.taskMailboxExecutor = new TaskMailboxExecutorImpl(mailbox);
 		this.mailboxLoopRunning = false;
+		this.mailboxPoisonLetter = () -> {
+			mailboxLoopRunning = false;
+		};
 	}
 
 	// ------------------------------------------------------------------------
@@ -255,16 +264,22 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 	 */
 	private void run() throws Exception {
 		final ActionContext actionContext = new ActionContext();
+
+		mailbox.open();
+		mailboxLoopRunning = true;
+
 		while (true) {
+
 			if (mailbox.hasMail()) {
 				Optional<Runnable> maybeLetter;
 				while ((maybeLetter = mailbox.tryTakeMail()).isPresent()) {
-					maybeLetter.get().run();
-
-					// we check only here and not in the loop-head because only letters are allowed to change the flag
 					if (!mailboxLoopRunning) {
 						return;
 					}
+					maybeLetter.get().run();
+				}
+				if (!mailboxLoopRunning) {
+					return;
 				}
 			}
 
@@ -272,8 +287,8 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 		}
 	}
 
-	protected void stopEventProcessingMailboxLoop() {
-		this.mailboxLoopRunning = false;
+	protected boolean isMailboxLoopRunning() {
+		return mailboxLoopRunning;
 	}
 
 	/**
@@ -402,6 +417,9 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 				// make sure no new timers can come
 				timerService.quiesce();
 
+				// let the mailbox reject all new letters from this point
+				mailbox.quiesce();
+
 				// only set the StreamTask to not running after all operators have been closed!
 				// See FLINK-7430
 				isRunning = false;
@@ -421,6 +439,10 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 			disposed = true;
 		}
 		finally {
+
+			// close the mailbox
+			mailbox.close();
+
 			// clean up everything we initialized
 			isRunning = false;
 
@@ -474,7 +496,11 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 
 	@Override
 	public final void cancel() throws Exception {
-		mailbox.clearAndPut(this::stopEventProcessingMailboxLoop, (Runnable run) -> {});
+		try {
+			mailbox.clearAndPut(mailboxPoisonLetter, taskMailboxExecutor);
+		} catch (RejectedExecutionException rex) {
+			LOG.debug("Mailbox already closed in cancel().", rex);
+		}
 		isRunning = false;
 		canceled = true;
 
@@ -1357,10 +1383,15 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 		 */
 		public void allActionsCompleted() {
 			if (Thread.currentThread() == mailboxThread) {
-				stopEventProcessingMailboxLoop();
+				if (!mailbox.tryPutAsHead(mailboxPoisonLetter)) {
+					// mailbox is full - in this particular case we know for sure that we will still run through the
+					// break condition check inside the mailbox loop and so we can just run directly.
+					mailboxPoisonLetter.run();
+				}
 			} else {
+
 				try {
-					mailbox.putAsHead(StreamTask.this::stopEventProcessingMailboxLoop);
+					mailbox.putAsHead(mailboxPoisonLetter);
 				} catch (InterruptedException e) {
 					Thread.currentThread().interrupt();
 				}
