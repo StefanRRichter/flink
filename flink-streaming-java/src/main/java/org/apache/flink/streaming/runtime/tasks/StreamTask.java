@@ -474,7 +474,7 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 
 	@Override
 	public final void cancel() throws Exception {
-		mailbox.clearAndPut(this::stopEventProcessingMailboxLoop);
+		mailbox.clearAndPut(this::stopEventProcessingMailboxLoop, (Runnable run) -> {});
 		isRunning = false;
 		canceled = true;
 
@@ -1340,33 +1340,59 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 	 */
 	public final class ActionContext {
 
-		private final Runnable actionUnavailableLetter = ThrowingRunnable.unchecked(mailbox::waitUntilHasMail);
+		private final Thread mailboxThread;
+		private final Runnable actionUnavailableLetter;
+
+		public ActionContext() {
+			this(Thread.currentThread());
+		}
+
+		public ActionContext(Thread mailboxThread) {
+			this.mailboxThread = mailboxThread;
+			this.actionUnavailableLetter = ThrowingRunnable.unchecked(mailbox::waitUntilHasMail);
+		}
 
 		/**
 		 * This method must be called to end the stream task when all actions for the tasks have been performed.
 		 */
 		public void allActionsCompleted() {
-			mailbox.putAsHead(StreamTask.this::stopEventProcessingMailboxLoop);
+			if (Thread.currentThread() == mailboxThread) {
+				stopEventProcessingMailboxLoop();
+			} else {
+				try {
+					mailbox.putAsHead(StreamTask.this::stopEventProcessingMailboxLoop);
+				} catch (InterruptedException e) {
+					Thread.currentThread().interrupt();
+				}
+			}
 		}
 
 		/**
 		 * Calling this method signals that the mailbox-thread should continue invoking the default action, e.g. because
 		 * new input became available for processing.
-		 *
-		 * @throws InterruptedException on interruption.
 		 */
-		public void actionsAvailable() throws InterruptedException {
-			mailbox.putMail(DEFAULT_ACTION_AVAILABLE);
+		public void actionsAvailable() {
+			putOrExecuteDirectly(DEFAULT_ACTION_AVAILABLE);
 		}
 
 		/**
 		 * Calling this method signals that the mailbox-thread should (temporarily) stop invoking the default action,
 		 * e.g. because there is currently no input available.
-		 *
-		 * @throws InterruptedException on interruption.
 		 */
-		public void actionsUnavailable() throws InterruptedException {
-			mailbox.putMail(actionUnavailableLetter);
+		public void actionsUnavailable() {
+			putOrExecuteDirectly(actionUnavailableLetter);
+		}
+
+		private void putOrExecuteDirectly(Runnable letter) {
+			if (Thread.currentThread() == mailboxThread) {
+				letter.run();
+			} else {
+				try {
+					mailbox.putMail(letter);
+				} catch (InterruptedException e) {
+					Thread.currentThread().interrupt();
+				}
+			}
 		}
 	}
 }

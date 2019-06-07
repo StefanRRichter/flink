@@ -28,20 +28,32 @@ public interface Mailbox extends MailboxReceiver, MailboxSender {
 
 	/**
 	 * The effect of this is that all pending letters in the mailbox are dropped and the given priorityAction
-	 * is enqueued to the head of the mailbox. This method should only be invoked by code that has ownership of
-	 * the mailbox object and only rarely used, e.g. to submit special events like shutting down the mailbox loop.
+	 * is enqueued to the head of the mailbox. Dropped letters will be passed into the given
+	 * {@link DroppedLetterHandler}. This method should only be invoked by code that has ownership of the mailbox
+	 * object and only rarely used, e.g. to submit special events like shutting down the mailbox loop.
 	 *
 	 * @param priorityAction action to enqueue atomically after the mailbox was cleared.
 	 */
-	void clearAndPut(@Nonnull Runnable priorityAction);
+	void clearAndPut(@Nonnull Runnable priorityAction, @Nonnull DroppedLetterHandler droppedLetterHandler);
 
 	/**
-	 * Adds the given action to the directly head of the mailbox. The mailbox implementation takes care that
-	 * this method never blocks, even if the mailbox is full. This method should only be invoked by code that
-	 * has ownership of the mailbox object and only rarely used, e.g. to submit special events like shutting
-	 * down the mailbox loop.
+	 * Adds the given action to the directly head of the mailbox. This method will block if the mailbox is full and
+	 * should therefore only be called from outside the mailbox main-thread to avoid deadlocks.
 	 *
 	 * @param priorityAction action to enqueue to the head of the mailbox.
+	 * @throws InterruptedException on interruption.
 	 */
-	void putAsHead(@Nonnull Runnable priorityAction);
+	void putAsHead(@Nonnull Runnable priorityAction) throws InterruptedException;
+
+	/**
+	 * Handler for letters that are dropped from the mailbox as part of
+	 * {@link #clearAndPut(Runnable, DroppedLetterHandler)}.
+	 */
+	interface DroppedLetterHandler {
+		/**
+		 * Handle the given dropped letter.
+		 * @param droppedLetter the dropped letter.
+		 */
+		void handle(@Nonnull Runnable droppedLetter);
+	}
 }

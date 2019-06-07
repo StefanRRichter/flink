@@ -112,6 +112,7 @@ public class SourceStreamTask<OUT, SRC extends SourceFunction<OUT>, OP extends S
 			if (!isCanceled()) {
 				cancelTask();
 			}
+			sourceThread.interrupt();
 			throw mailboxEx;
 		}
 
@@ -180,7 +181,11 @@ public class SourceStreamTask<OUT, SRC extends SourceFunction<OUT>, OP extends S
 			} catch (Throwable t) {
 				sourceExecutionThrowable = t;
 			} finally {
-				mailbox.putAsHead(SourceStreamTask.this::stopEventProcessingMailboxLoop);
+				try {
+					mailbox.putAsHead(SourceStreamTask.this::stopEventProcessingMailboxLoop);
+				} catch (InterruptedException e) {
+					Thread.currentThread().interrupt();
+				}
 			}
 		}
 

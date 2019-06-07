@@ -24,6 +24,7 @@ import javax.annotation.Nonnull;
 import javax.annotation.concurrent.GuardedBy;
 import javax.annotation.concurrent.ThreadSafe;
 
+import java.util.ArrayList;
 import java.util.Optional;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
@@ -187,32 +188,40 @@ public class MailboxImpl implements Mailbox {
 	//------------------------------------------------------------------------------------------------------------------
 
 	@Override
-	public void clearAndPut(@Nonnull Runnable priorityAction) {
+	public void clearAndPut(@Nonnull Runnable priorityAction, @Nonnull DroppedLetterHandler handler) {
+		ArrayList<Runnable> droppedLetters = new ArrayList<>(ringBuffer.length);
+
 		lock.lock();
 		try {
 			int localCount = count;
 			while (localCount > 0) {
+				droppedLetters.add(ringBuffer[headIndex]);
 				ringBuffer[headIndex] = null;
 				headIndex = increaseIndexWithWrapAround(headIndex);
 				--localCount;
+				notFull.signal();
 			}
 			count = 0;
 			putTailInternal(priorityAction);
 		} finally {
 			lock.unlock();
 		}
+
+		for (Runnable droppedLetter : droppedLetters) {
+			handler.handle(droppedLetter);
+		}
+
 	}
 
 	@Override
-	public void putAsHead(@Nonnull Runnable priorityAction) {
-		final Runnable[] buffer = this.ringBuffer;
-		lock.lock();
+	public void putAsHead(@Nonnull Runnable priorityAction) throws InterruptedException {
+		final ReentrantLock lock = this.lock;
+		lock.lockInterruptibly();
 		try {
-			if (isFull()) {
-				buffer[headIndex] = new SquashedTwoRunnable(priorityAction, buffer[headIndex]);
-			} else {
-				putHeadInternal(priorityAction);
+			while (isFull()) {
+				notFull.await();
 			}
+			putHeadInternal(priorityAction);
 		} finally {
 			lock.unlock();
 		}
@@ -261,26 +270,5 @@ public class MailboxImpl implements Mailbox {
 
 	private boolean isEmpty() {
 		return count == 0;
-	}
-
-	/**
-	 * Runnable that is used to squash together two Runnable objects for a single slot in the mailbox to provide a
-	 * non-blocking put under full-mailbox condition for some exceptionally important messages.
-	 */
-	static final class SquashedTwoRunnable implements Runnable {
-
-		private final Runnable frontRunner;
-		private final Runnable follower;
-
-		SquashedTwoRunnable(Runnable frontRunner, Runnable follower) {
-			this.frontRunner = frontRunner;
-			this.follower = follower;
-		}
-
-		@Override
-		public void run() {
-			frontRunner.run();
-			follower.run();
-		}
 	}
 }
