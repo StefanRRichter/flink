@@ -57,6 +57,8 @@ import org.apache.flink.streaming.runtime.streamrecord.StreamRecord;
 import org.apache.flink.streaming.runtime.streamstatus.StreamStatusMaintainer;
 import org.apache.flink.streaming.runtime.tasks.mailbox.Mailbox;
 import org.apache.flink.streaming.runtime.tasks.mailbox.MailboxImpl;
+import org.apache.flink.streaming.runtime.tasks.mailbox.TaskMailboxExecutor;
+import org.apache.flink.streaming.runtime.tasks.mailbox.TaskMailboxExecutorImpl;
 import org.apache.flink.util.ExceptionUtils;
 import org.apache.flink.util.Preconditions;
 import org.apache.flink.util.function.ThrowingRunnable;
@@ -128,9 +130,6 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 	/** The logger used by the StreamTask and its subclasses. */
 	private static final Logger LOG = LoggerFactory.getLogger(StreamTask.class);
 
-	/** Special value, letter that terminates the mailbox loop. */
-	private static final Runnable POISON_LETTER = () -> {};
-
 	/** Special value, letter that "wakes up" a waiting mailbox loop. */
 	private static final Runnable DEFAULT_ACTION_AVAILABLE = () -> {};
 
@@ -194,6 +193,8 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 
 	protected final Mailbox mailbox;
 
+	protected boolean mailboxLoopRunning;
+
 	// ------------------------------------------------------------------------
 
 	/**
@@ -227,6 +228,7 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 		this.recordWriters = createRecordWriters(configuration, environment);
 		this.syncSavepointLatch = new SynchronousSavepointLatch();
 		this.mailbox = new MailboxImpl();
+		this.mailboxLoopRunning = false;
 	}
 
 	// ------------------------------------------------------------------------
@@ -257,16 +259,21 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 			if (mailbox.hasMail()) {
 				Optional<Runnable> maybeLetter;
 				while ((maybeLetter = mailbox.tryTakeMail()).isPresent()) {
-					Runnable letter = maybeLetter.get();
-					if (letter == POISON_LETTER) {
+					maybeLetter.get().run();
+
+					// we check only here and not in the loop-head because only letters are allowed to change the flag
+					if (!mailboxLoopRunning) {
 						return;
 					}
-					letter.run();
 				}
 			}
 
 			performDefaultAction(actionContext);
 		}
+	}
+
+	protected void stopEventProcessingMailboxLoop() {
+		this.mailboxLoopRunning = false;
 	}
 
 	/**
@@ -467,7 +474,7 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 
 	@Override
 	public final void cancel() throws Exception {
-		mailbox.clearAndPut(POISON_LETTER);
+		mailbox.clearAndPut(this::stopEventProcessingMailboxLoop);
 		isRunning = false;
 		canceled = true;
 
@@ -480,6 +487,10 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 		finally {
 			cancelables.close();
 		}
+	}
+
+	public TaskMailboxExecutor getTaskMailboxExecutor() {
+		return new TaskMailboxExecutorImpl(mailbox);
 	}
 
 	public final boolean isRunning() {
@@ -1335,7 +1346,7 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 		 * This method must be called to end the stream task when all actions for the tasks have been performed.
 		 */
 		public void allActionsCompleted() {
-			mailbox.clearAndPut(POISON_LETTER);
+			mailbox.putAsHead(StreamTask.this::stopEventProcessingMailboxLoop);
 		}
 
 		/**

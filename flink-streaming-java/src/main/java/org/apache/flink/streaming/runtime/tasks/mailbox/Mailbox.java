@@ -27,10 +27,21 @@ import javax.annotation.Nonnull;
 public interface Mailbox extends MailboxReceiver, MailboxSender {
 
 	/**
-	 * The effect of this is that all pending letters are dropped and the given priorityAction
-	 * is enqueued to the head of the mailbox.
+	 * The effect of this is that all pending letters in the mailbox are dropped and the given priorityAction
+	 * is enqueued to the head of the mailbox. This method should only be invoked by code that has ownership of
+	 * the mailbox object and only rarely used, e.g. to submit special events like shutting down the mailbox loop.
 	 *
 	 * @param priorityAction action to enqueue atomically after the mailbox was cleared.
 	 */
 	void clearAndPut(@Nonnull Runnable priorityAction);
+
+	/**
+	 * Adds the given action to the directly head of the mailbox. The mailbox implementation takes care that
+	 * this method never blocks, even if the mailbox is full. This method should only be invoked by code that
+	 * has ownership of the mailbox object and only rarely used, e.g. to submit special events like shutting
+	 * down the mailbox loop.
+	 *
+	 * @param priorityAction action to enqueue to the head of the mailbox.
+	 */
+	void putAsHead(@Nonnull Runnable priorityAction);
 }

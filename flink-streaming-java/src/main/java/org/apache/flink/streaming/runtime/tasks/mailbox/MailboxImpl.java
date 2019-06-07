@@ -149,7 +149,7 @@ public class MailboxImpl implements Mailbox {
 			if (isFull()) {
 				return false;
 			} else {
-				putInternal(letter);
+				putTailInternal(letter);
 				return true;
 			}
 		} finally {
@@ -165,7 +165,7 @@ public class MailboxImpl implements Mailbox {
 			while (isFull()) {
 				notFull.await();
 			}
-			putInternal(letter);
+			putTailInternal(letter);
 		} finally {
 			lock.unlock();
 		}
@@ -186,7 +186,49 @@ public class MailboxImpl implements Mailbox {
 
 	//------------------------------------------------------------------------------------------------------------------
 
-	private void putInternal(Runnable letter) {
+	@Override
+	public void clearAndPut(@Nonnull Runnable priorityAction) {
+		lock.lock();
+		try {
+			int localCount = count;
+			while (localCount > 0) {
+				ringBuffer[headIndex] = null;
+				headIndex = increaseIndexWithWrapAround(headIndex);
+				--localCount;
+			}
+			count = 0;
+			putTailInternal(priorityAction);
+		} finally {
+			lock.unlock();
+		}
+	}
+
+	@Override
+	public void putAsHead(@Nonnull Runnable priorityAction) {
+		final Runnable[] buffer = this.ringBuffer;
+		lock.lock();
+		try {
+			if (isFull()) {
+				buffer[headIndex] = new SquashedTwoRunnable(priorityAction, buffer[headIndex]);
+			} else {
+				putHeadInternal(priorityAction);
+			}
+		} finally {
+			lock.unlock();
+		}
+	}
+
+	//------------------------------------------------------------------------------------------------------------------
+
+	private void putHeadInternal(Runnable letter) {
+		assert lock.isHeldByCurrentThread();
+		headIndex = decreaseIndexWithWrapAround(headIndex);
+		this.ringBuffer[headIndex] = letter;
+		++count;
+		notEmpty.signal();
+	}
+
+	private void putTailInternal(Runnable letter) {
 		assert lock.isHeldByCurrentThread();
 		this.ringBuffer[tailIndex] = letter;
 		tailIndex = increaseIndexWithWrapAround(tailIndex);
@@ -209,6 +251,10 @@ public class MailboxImpl implements Mailbox {
 		return (old + 1) & moduloMask;
 	}
 
+	private int decreaseIndexWithWrapAround(int old) {
+		return (old - 1) & moduloMask;
+	}
+
 	private boolean isFull() {
 		return count >= ringBuffer.length;
 	}
@@ -217,20 +263,24 @@ public class MailboxImpl implements Mailbox {
 		return count == 0;
 	}
 
-	@Override
-	public void clearAndPut(@Nonnull Runnable shutdownAction) {
-		lock.lock();
-		try {
-			int localCount = count;
-			while (localCount > 0) {
-				ringBuffer[headIndex] = null;
-				headIndex = increaseIndexWithWrapAround(headIndex);
-				--localCount;
-			}
-			count = 0;
-			putInternal(shutdownAction);
-		} finally {
-			lock.unlock();
+	/**
+	 * Runnable that is used to squash together two Runnable objects for a single slot in the mailbox to provide a
+	 * non-blocking put under full-mailbox condition for some exceptionally important messages.
+	 */
+	static final class SquashedTwoRunnable implements Runnable {
+
+		private final Runnable frontRunner;
+		private final Runnable follower;
+
+		SquashedTwoRunnable(Runnable frontRunner, Runnable follower) {
+			this.frontRunner = frontRunner;
+			this.follower = follower;
+		}
+
+		@Override
+		public void run() {
+			frontRunner.run();
+			follower.run();
 		}
 	}
 }

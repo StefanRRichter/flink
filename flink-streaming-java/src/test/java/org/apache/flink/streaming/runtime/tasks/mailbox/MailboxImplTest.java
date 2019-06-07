@@ -27,7 +27,9 @@ import org.junit.Before;
 import org.junit.Test;
 
 import java.util.LinkedList;
+import java.util.Optional;
 import java.util.Queue;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Unit tests for {@link MailboxImpl}.
@@ -35,7 +37,7 @@ import java.util.Queue;
 public class MailboxImplTest {
 
 	private static final Runnable POISON_LETTER = () -> {};
-	private static final int CAPACITY_POW_2 = 1;
+	private static final int CAPACITY_POW_2 = 2;
 	private static final int CAPACITY = 1 << CAPACITY_POW_2;
 
 	/**
@@ -62,6 +64,63 @@ public class MailboxImplTest {
 		Assert.assertTrue(mailbox.hasMail());
 		Assert.assertEquals(POISON_LETTER, mailbox.tryTakeMail().get());
 		Assert.assertFalse(mailbox.hasMail());
+	}
+
+	/**
+	 * Test that #putAsHead works if the queue is not full.
+	 */
+	@Test
+	public void testPutAsHeadIfMoreCapacity() {
+
+		final AtomicInteger validator = new AtomicInteger(0);
+
+		mailbox.putAsHead(validator::incrementAndGet);
+		mailbox.tryTakeMail().ifPresent(Runnable::run);
+		Assert.assertFalse(mailbox.tryTakeMail().isPresent());
+		Assert.assertEquals(1, validator.get());
+
+		Assert.assertTrue(mailbox.tryPutMail(() -> validator.compareAndSet(2, 3)));
+		mailbox.putAsHead(() -> validator.compareAndSet(1, 2));
+
+		mailbox.tryTakeMail().ifPresent(Runnable::run);
+		mailbox.tryTakeMail().ifPresent(Runnable::run);
+
+		Assert.assertEquals(3, validator.get());
+	}
+
+	/**
+	 * Test that #putAsHead works if the head is full and even multiple times in a row.
+	 */
+	@Test
+	public void testPutAsHeadIfFull() {
+		testPutAsHeadIfFullInternal(1);
+		testPutAsHeadIfFullInternal(2);
+		testPutAsHeadIfFullInternal(CAPACITY);
+		testPutAsHeadIfFullInternal(CAPACITY + 1);
+	}
+
+	private void testPutAsHeadIfFullInternal(int numOverflowPuts) {
+
+		final AtomicInteger validator = new AtomicInteger(0);
+
+		for (int i = validator.get(); i < CAPACITY; ++i) {
+			final int val = numOverflowPuts + i;
+			Assert.assertTrue(mailbox.tryPutMail(() -> validator.compareAndSet(val, val + 1)));
+		}
+
+		Assert.assertFalse(mailbox.tryPutMail(() -> {}));
+
+		for (int i = 0; i < numOverflowPuts; ++i) {
+			final int val = numOverflowPuts - i - 1;
+			mailbox.putAsHead(() -> validator.compareAndSet(val, val + 1));
+		}
+
+		Optional<Runnable> runnable;
+		while ((runnable = mailbox.tryTakeMail()).isPresent()) {
+			runnable.get().run();
+		}
+
+		Assert.assertEquals(CAPACITY + numOverflowPuts, validator.get());
 	}
 
 	@Test

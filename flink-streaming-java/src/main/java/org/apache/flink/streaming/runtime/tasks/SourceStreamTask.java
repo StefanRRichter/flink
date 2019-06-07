@@ -45,8 +45,6 @@ import org.apache.flink.util.FlinkException;
 public class SourceStreamTask<OUT, SRC extends SourceFunction<OUT>, OP extends StreamSource<OUT, SRC>>
 	extends StreamTask<OUT, OP> {
 
-	private static final Runnable SOURCE_POISON_LETTER = () -> {};
-
 	private volatile boolean externallyInducedCheckpoints;
 
 	public SourceStreamTask(Environment env) {
@@ -125,12 +123,9 @@ public class SourceStreamTask<OUT, SRC extends SourceFunction<OUT>, OP extends S
 
 	private void runAlternativeMailboxLoop() throws InterruptedException {
 
-		while (true) {
+		while (mailboxLoopRunning) {
 
 			Runnable letter = mailbox.takeMail();
-			if (letter == SOURCE_POISON_LETTER) {
-				break;
-			}
 
 			synchronized (getCheckpointLock()) {
 				letter.run();
@@ -185,7 +180,7 @@ public class SourceStreamTask<OUT, SRC extends SourceFunction<OUT>, OP extends S
 			} catch (Throwable t) {
 				sourceExecutionThrowable = t;
 			} finally {
-				mailbox.clearAndPut(SOURCE_POISON_LETTER);
+				mailbox.putAsHead(SourceStreamTask.this::stopEventProcessingMailboxLoop);
 			}
 		}
 
