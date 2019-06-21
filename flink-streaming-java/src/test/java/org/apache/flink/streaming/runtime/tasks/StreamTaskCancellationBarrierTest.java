@@ -32,6 +32,7 @@ import org.apache.flink.streaming.api.operators.AbstractStreamOperator;
 import org.apache.flink.streaming.api.operators.StreamMap;
 import org.apache.flink.streaming.api.operators.co.CoStreamMap;
 import org.apache.flink.streaming.runtime.io.BarrierBufferTestBase;
+import org.apache.flink.streaming.runtime.tasks.StreamTaskTest.NoOpStreamTask;
 
 import org.junit.Test;
 
@@ -172,7 +173,7 @@ public class StreamTaskCancellationBarrierTest {
 	//  test tasks / functions
 	// ------------------------------------------------------------------------
 
-	private static class InitBlockingTask extends StreamTask<String, AbstractStreamOperator<String>> {
+	private static class InitBlockingTask extends NoOpStreamTask<String, AbstractStreamOperator<String>> {
 
 		private final Object lock = new Object();
 		private volatile boolean running = true;
@@ -189,14 +190,6 @@ public class StreamTaskCancellationBarrierTest {
 				}
 			}
 		}
-
-		@Override
-		protected void performDefaultAction(ActionContext context) throws Exception {
-			context.allActionsCompleted();
-		}
-
-		@Override
-		protected void cleanup() throws Exception {}
 
 		@Override
 		protected void cancelTask() throws Exception {

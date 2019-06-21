@@ -812,9 +812,6 @@ public class StreamTaskTest extends TestLogger {
 
 		@Override
 		protected void cleanup() throws Exception {}
-
-		@Override
-		protected void cancelTask() throws Exception {}
 	}
 
 	private static class BlockingCloseStreamOperator extends AbstractStreamOperator<Void> {
@@ -1015,9 +1012,6 @@ public class StreamTaskTest extends TestLogger {
 		@Override
 		protected void cleanup() throws Exception {}
 
-		@Override
-		protected void cancelTask() throws Exception {}
-
 		void finishInput() {
 			this.inputFinished = true;
 		}
@@ -1051,9 +1045,6 @@ public class StreamTaskTest extends TestLogger {
 
 		@Override
 		protected void cleanup() throws Exception {}
-
-		@Override
-		protected void cancelTask() throws Exception {}
 
 		@Override
 		public StreamTaskStateInitializer createStreamTaskStateInitializer() {
@@ -1220,12 +1211,12 @@ public class StreamTaskTest extends TestLogger {
 	/**
 	 * A task that register a processing time service callback.
 	 */
-	public static class TimeServiceTask extends StreamTask<String, AbstractStreamOperator<String>> {
+	public static class TimeServiceTask extends NoOpStreamTask<String, AbstractStreamOperator<String>> {
 
 		private final List<ClassLoader> classLoaders = Collections.synchronizedList(new ArrayList<>());
 
 		public TimeServiceTask(Environment env) {
-			super(env, null);
+			super(env);
 		}
 
 		public List<ClassLoader> getClassLoaders() {
@@ -1246,17 +1237,7 @@ public class StreamTaskTest extends TestLogger {
 		@Override
 		protected void performDefaultAction(ActionContext context) throws Exception {
 			syncLatch.await();
-			context.allActionsCompleted();
-		}
-
-		@Override
-		protected void cleanup() throws Exception {
-
-		}
-
-		@Override
-		protected void cancelTask() throws Exception {
-
+			super.performDefaultAction(context);
 		}
 	}
 

@@ -28,6 +28,7 @@ import org.apache.flink.streaming.api.functions.sink.DiscardingSink;
 import org.apache.flink.streaming.api.functions.source.SourceFunction;
 import org.apache.flink.streaming.api.graph.StreamGraph;
 import org.apache.flink.streaming.api.graph.StreamingJobGraphGenerator;
+import org.apache.flink.streaming.runtime.tasks.StreamTaskTest.NoOpStreamTask;
 import org.apache.flink.util.SerializedValue;
 import org.apache.flink.util.TestLogger;
 
@@ -75,21 +76,7 @@ public class CheckpointExceptionHandlerConfigurationTest extends TestLogger {
 			}
 		};
 
-		StreamTask streamTask = new StreamTask(environment, null) {
-			@Override
-			protected void init() throws Exception {}
-
-			@Override
-			protected void performDefaultAction(ActionContext context) throws Exception {
-				context.allActionsCompleted();
-			}
-
-			@Override
-			protected void cleanup() throws Exception {}
-
-			@Override
-			protected void cancelTask() throws Exception {}
-
+		StreamTask streamTask = new NoOpStreamTask(environment) {
 			@Override
 			protected CheckpointExceptionHandlerFactory createCheckpointExceptionHandlerFactory() {
 				return inspectingFactory;

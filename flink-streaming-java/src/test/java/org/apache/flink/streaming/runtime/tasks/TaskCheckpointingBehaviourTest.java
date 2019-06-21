@@ -522,8 +522,5 @@ public class TaskCheckpointingBehaviourTest extends TestLogger {
 
 		@Override
 		protected void cleanup() {}
-
-		@Override
-		protected void cancelTask() {}
 	}
 }
