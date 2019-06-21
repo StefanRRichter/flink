@@ -51,6 +51,7 @@ import org.apache.flink.streaming.api.operators.StreamOperator;
 import org.apache.flink.streaming.api.operators.StreamTaskStateInitializer;
 import org.apache.flink.streaming.api.operators.StreamTaskStateInitializerImpl;
 import org.apache.flink.streaming.runtime.io.RecordWriterOutput;
+import org.apache.flink.streaming.runtime.io.StreamInputProcessor;
 import org.apache.flink.streaming.runtime.partitioner.ConfigurableStreamPartitioner;
 import org.apache.flink.streaming.runtime.partitioner.StreamPartitioner;
 import org.apache.flink.streaming.runtime.streamrecord.StreamRecord;
@@ -134,6 +135,12 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 	 * ensure that we don't have concurrent method calls that void consistent checkpoints.
 	 */
 	private final Object lock = new Object();
+
+	/**
+	 * The input processor. Initialized in {@link #init()} method.
+	 */
+	@Nullable
+	protected StreamInputProcessor inputProcessor;
 
 	/** the head operator that consumes the input streams of this task. */
 	protected OP headOperator;
@@ -233,9 +240,13 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 
 	protected abstract void init() throws Exception;
 
-	protected abstract void cleanup() throws Exception;
-
 	protected void cancelTask() throws Exception {
+	}
+
+	protected void cleanup() throws Exception {
+		if (inputProcessor != null) {
+			inputProcessor.close();
+		}
 	}
 
 	/**
@@ -245,7 +256,11 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 	 * @param context context object for collaborative interaction between the action and the stream task.
 	 * @throws Exception on any problems in the action.
 	 */
-	protected abstract void performDefaultAction(ActionContext context) throws Exception;
+	protected void performDefaultAction(ActionContext context) throws Exception {
+		if (!inputProcessor.processInput()) {
+			context.allActionsCompleted();
+		}
+	}
 
 	/**
 	 * Emits the {@link org.apache.flink.streaming.api.watermark.Watermark#MAX_WATERMARK MAX_WATERMARK}
