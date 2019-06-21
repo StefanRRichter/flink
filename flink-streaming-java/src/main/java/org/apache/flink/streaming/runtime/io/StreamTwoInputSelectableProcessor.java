@@ -44,7 +44,6 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.util.Collection;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
 
 import static org.apache.flink.util.Preconditions.checkNotNull;
 import static org.apache.flink.util.Preconditions.checkState;
@@ -140,7 +139,21 @@ public final class StreamTwoInputSelectableProcessor<IN1, IN2> implements Stream
 		this.lastReadInputIndex = 1; // always try to read from the first input
 
 		this.isPrepared = false;
+	}
 
+	@Override
+	public boolean isFinished() {
+		return input1.isFinished() && input2.isFinished();
+	}
+
+	@Override
+	public CompletableFuture<?> isAvailable() {
+		if (inputSelection.isALLMaskOf2()) {
+			return isAnyInputAvailable();
+		} else {
+			StreamTaskInput input = (inputSelection.getInputMask() == InputSelection.FIRST.getInputMask()) ? input1 : input2;
+			return input.isAvailable();
+		}
 	}
 
 	@Override
@@ -163,18 +176,29 @@ public final class StreamTwoInputSelectableProcessor<IN1, IN2> implements Stream
 			if (recordOrMark != null) {
 				processElement1(recordOrMark, input1.getLastChannel());
 			}
+			checkFinished(input1, lastReadInputIndex);
 		} else {
 			recordOrMark = input2.pollNextNullable();
 			if (recordOrMark != null) {
 				processElement2(recordOrMark, input2.getLastChannel());
 			}
+			checkFinished(input2, lastReadInputIndex);
 		}
 
 		if (recordOrMark == null) {
 			setUnavailableInput(readingInputIndex);
 		}
 
-		return !checkFinished();
+		return recordOrMark != null;
+	}
+
+	private void checkFinished(StreamTaskInput input, int inputIndex) throws Exception {
+		if (input.isFinished()) {
+			synchronized (lock) {
+				operatorChain.endInput(getInputId(inputIndex));
+				inputSelection = inputSelector.nextSelection();
+			}
+		}
 	}
 
 	@Override
@@ -197,14 +221,12 @@ public final class StreamTwoInputSelectableProcessor<IN1, IN2> implements Stream
 		}
 	}
 
-	private int selectNextReadingInputIndex()
-		throws InterruptedException, ExecutionException, IOException {
-
-		int readingInputIndex;
-		while ((readingInputIndex = inputSelection.fairSelectNextIndexOutOf2(availableInputsMask, lastReadInputIndex)) == -1) {
-			if (!waitForAvailableInput(inputSelection)) {
-				return -1;
-			}
+	private int selectNextReadingInputIndex() throws IOException {
+		updateAvailability();
+		checkInputSelectionAgainstIsFinished();
+		int readingInputIndex = inputSelection.fairSelectNextIndexOutOf2(availableInputsMask, lastReadInputIndex);
+		if (readingInputIndex == -1) {
+			return -1;
 		}
 
 		// to avoid starvation, if the input selection is ALL and availableInputsMask is not ALL,
@@ -216,6 +238,30 @@ public final class StreamTwoInputSelectableProcessor<IN1, IN2> implements Stream
 		}
 
 		return readingInputIndex;
+	}
+
+	private void checkInputSelectionAgainstIsFinished() throws IOException {
+		if (inputSelection.isALLMaskOf2()) {
+			return;
+		}
+		if (inputSelection.isInputSelected(1) && input1.isFinished()) {
+			throw new IOException("Can not make a progress: only first input is selected but it is already finished");
+		}
+		if (inputSelection.isInputSelected(2) && input2.isFinished()) {
+			throw new IOException("Can not make a progress: only second input is selected but it is already finished");
+		}
+	}
+
+	private void updateAvailability() {
+		CompletableFuture<?> future1 = input1.isFinished() ? UNAVAILABLE : input1.isAvailable();
+		CompletableFuture<?> future2 = input2.isFinished() ? UNAVAILABLE : input2.isAvailable();
+
+		if (future1 == AVAILABLE) {
+			setAvailableInput(input1.getInputIndex());
+		}
+		if (future2 == AVAILABLE) {
+			setAvailableInput(input2.getInputIndex());
+		}
 	}
 
 	private void processElement1(StreamElement recordOrMark, int channel) throws Exception {
@@ -288,64 +334,17 @@ public final class StreamTwoInputSelectableProcessor<IN1, IN2> implements Stream
 		}
 	}
 
-	/**
-	 * @return false if both of the inputs are finished, true otherwise.
-	 */
-	private boolean waitForAvailableInput(InputSelection inputSelection)
-		throws ExecutionException, InterruptedException, IOException {
-
-		if (inputSelection.isALLMaskOf2()) {
-			return waitForAvailableEitherInput();
-		} else {
-			waitForOneInput(
-				(inputSelection.getInputMask() == InputSelection.FIRST.getInputMask()) ? input1 : input2);
-			return true;
+	private CompletableFuture<?> isAnyInputAvailable() {
+		if (input1.isFinished() && input2.isFinished()) {
+			return AVAILABLE;
 		}
-	}
-
-	private boolean waitForAvailableEitherInput()
-		throws ExecutionException, InterruptedException {
-
-		CompletableFuture<?> future1 = input1.isFinished() ? UNAVAILABLE : input1.isAvailable();
-		CompletableFuture<?> future2 = input2.isFinished() ? UNAVAILABLE : input2.isAvailable();
-
-		if (future1 == UNAVAILABLE && future2 == UNAVAILABLE) {
-			return false;
+		if (input1.isFinished()) {
+			return input2.isAvailable();
 		}
-
-		// block to wait for a available input
-		CompletableFuture.anyOf(future1, future2).get();
-
-		if (future1.isDone()) {
-			setAvailableInput(input1.getInputIndex());
+		if (input2.isFinished()) {
+			return input1.isAvailable();
 		}
-		if (future2.isDone()) {
-			setAvailableInput(input2.getInputIndex());
-		}
-
-		return true;
-	}
-
-	private void waitForOneInput(StreamTaskInput input)
-		throws IOException, ExecutionException, InterruptedException {
-
-		if (input.isFinished()) {
-			throw new IOException("Could not read the finished input: input" + (input.getInputIndex() + 1) +  ".");
-		}
-
-		input.isAvailable().get();
-		setAvailableInput(input.getInputIndex());
-	}
-
-	private boolean checkFinished() throws Exception {
-		if (getInput(lastReadInputIndex).isFinished()) {
-			synchronized (lock) {
-				operatorChain.endInput(getInputId(lastReadInputIndex));
-				inputSelection = inputSelector.nextSelection();
-			}
-		}
-
-		return input1.isFinished() && input2.isFinished();
+		return CompletableFuture.anyOf(input1.isAvailable(), input2.isAvailable());
 	}
 
 	private void setAvailableInput(int inputIndex) {

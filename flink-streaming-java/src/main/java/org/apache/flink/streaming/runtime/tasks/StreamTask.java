@@ -258,7 +258,13 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 	 */
 	protected void performDefaultAction(ActionContext context) throws Exception {
 		if (!inputProcessor.processInput()) {
-			context.allActionsCompleted();
+			if (inputProcessor.isFinished()) {
+				context.allActionsCompleted();
+			}
+			else {
+				SuspendedDefaultAction suspendedDefaultAction = context.suspendDefaultAction();
+				inputProcessor.isAvailable().thenRun(suspendedDefaultAction::resume);
+			}
 		}
 	}
 

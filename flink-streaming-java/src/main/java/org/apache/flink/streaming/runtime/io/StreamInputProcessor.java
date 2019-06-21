@@ -18,14 +18,17 @@
 
 package org.apache.flink.streaming.runtime.io;
 
+import org.apache.flink.runtime.io.AvailabilityListener;
+
 import java.io.Closeable;
 
 /**
  * Interface for processing records by StreamTask.
  */
-public interface StreamInputProcessor extends Closeable {
+public interface StreamInputProcessor extends AvailabilityListener, Closeable {
 	/**
-	 * @return true if {@link StreamTaskInput} is finished.
+	 * @return false if probably there are not more records available and caller should check
+	 * {@link #isAvailable()}. return true if {@link #isAvailable()} check can be safely omitted.
 	 */
 	boolean processInput() throws Exception;
 }
