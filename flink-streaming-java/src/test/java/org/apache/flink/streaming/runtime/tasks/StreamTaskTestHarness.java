@@ -30,7 +30,6 @@ import org.apache.flink.runtime.io.network.api.EndOfPartitionEvent;
 import org.apache.flink.runtime.io.network.partition.consumer.StreamTestSingleInputGate;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.runtime.jobgraph.OperatorID;
-import org.apache.flink.runtime.jobgraph.tasks.AbstractInvokable;
 import org.apache.flink.runtime.memory.MemoryManager;
 import org.apache.flink.runtime.operators.testutils.MockInputSplitProvider;
 import org.apache.flink.runtime.state.LocalRecoveryConfig;
@@ -56,8 +55,10 @@ import java.io.IOException;
 import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.function.Function;
+import java.util.function.Supplier;
 
 import static org.apache.flink.util.Preconditions.checkNotNull;
 
@@ -235,11 +236,10 @@ public class StreamTaskTestHarness<OUT> {
 
 		initializeInputs();
 		initializeOutput();
-
-		this.task = taskFactory.apply(mockEnv);
-
-		taskThread = new TaskThread(task);
+		CountDownLatch waitForTaskCreationLatch = new CountDownLatch(1);
+		taskThread = new TaskThread(() -> taskFactory.apply(mockEnv), waitForTaskCreationLatch);
 		taskThread.start();
+		waitForTaskCreationLatch.await();
 		return taskThread;
 	}
 
@@ -291,8 +291,8 @@ public class StreamTaskTestHarness<OUT> {
 			throw new IllegalStateException("Task thread was not started.");
 		}
 		else {
-			if (taskThread.task instanceof StreamTask) {
-				StreamTask<?, ?> streamTask = (StreamTask<?, ?>) taskThread.task;
+			if (task != null) {
+				StreamTask<?, ?> streamTask = task;
 				while (!streamTask.isRunning()) {
 					Thread.sleep(10);
 					if (!taskThread.isAlive()) {
@@ -442,18 +442,21 @@ public class StreamTaskTestHarness<OUT> {
 
 	private class TaskThread extends Thread {
 
-		private final AbstractInvokable task;
-
+		private final Supplier<StreamTask<OUT, ?>> taskFactory;
+		private final CountDownLatch taskCreationLatch;
 		private volatile Throwable error;
 
-		TaskThread(AbstractInvokable task) {
+		TaskThread(Supplier<StreamTask<OUT, ?>> taskFactory, CountDownLatch taskCreationLatch) {
 			super("Task Thread");
-			this.task = task;
+			this.taskFactory = taskFactory;
+			this.taskCreationLatch = taskCreationLatch;
 		}
 
 		@Override
 		public void run() {
 			try {
+				task = taskFactory.get();
+				taskCreationLatch.countDown();
 				task.invoke();
 				shutdownIOManager();
 				shutdownMemoryManager();
