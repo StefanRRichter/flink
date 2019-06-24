@@ -46,6 +46,7 @@ import org.apache.flink.streaming.runtime.streamrecord.StreamRecord;
 import org.apache.flink.streaming.runtime.tasks.ProcessingTimeCallback;
 import org.apache.flink.streaming.runtime.tasks.StreamTask;
 import org.apache.flink.streaming.runtime.tasks.mailbox.TaskMailboxExecutor;
+import org.apache.flink.streaming.runtime.tasks.mailbox.TaskMailboxLegacyExecutorImpl;
 import org.apache.flink.util.ExceptionUtils;
 import org.apache.flink.util.Preconditions;
 
@@ -136,8 +137,8 @@ public class AsyncWaitOperator<IN, OUT>
 	public void setup(StreamTask<?, ?> containingTask, StreamConfig config, Output<StreamRecord<OUT>> output) {
 		super.setup(containingTask, config, output);
 
-		this.mainThreadExecutor = containingTask.getTaskMailboxExecutor();
-		this.checkpointingLock = getContainingTask().getCheckpointLock();
+		this.checkpointingLock = containingTask.getCheckpointLock();
+		this.mainThreadExecutor = new TaskMailboxLegacyExecutorImpl(containingTask.getTaskMailboxExecutor(), checkpointingLock);
 
 		this.inStreamElementSerializer = new StreamElementSerializer<>(
 			getOperatorConfig().<IN>getTypeSerializerIn1(getUserCodeClassloader()));
@@ -278,13 +279,7 @@ public class AsyncWaitOperator<IN, OUT>
 	public void close() throws Exception {
 		try {
 			while (!queue.isEmpty()) {
-				// TODO: once we no longer support legacy sources, the following `if` can simply become
-				//  `mainThreadExecutor.yield()'
-				if (!mainThreadExecutor.tryYield()) {
-					// We give up the lock while there is no action for yielding, so that potentially a legacy source
-					// loop (using the lock in/around letter execution) can make progress
-					checkpointingLock.wait();
-				}
+				mainThreadExecutor.yield();
 			}
 		}
 		finally {
@@ -405,33 +400,11 @@ public class AsyncWaitOperator<IN, OUT>
 	private <T> void addAsyncBufferEntry(StreamElementQueueEntry<T> streamElementQueueEntry) throws InterruptedException {
 		pendingStreamElementQueueEntry = streamElementQueueEntry;
 
-		// TODO: once we no longer support legacy sources, the following `if` can simply become
-		//  `while(!queue.tryPut(...)) { mainThreadExecutor.yield() }'. Currently, this case makes a difference between
-		//  new mailbox and the legacy source compatibility loop that requires us to give up the lock. We will receive
-		//  a notify on the lock at the end of each processing-letter execution (see {Emitter}) so we can try to put again.
-		if (!queue.tryPut(streamElementQueueEntry)) {
-			if (mainThreadExecutor.isMailboxThread()) {
-				tryPutOrYield(streamElementQueueEntry);
-			} else {
-				tryPutOrWait(streamElementQueueEntry);
-			}
+		while (!queue.tryPut(streamElementQueueEntry)) {
+			mainThreadExecutor.yield();
 		}
 
 		pendingStreamElementQueueEntry = null;
-	}
-
-	private <T> void tryPutOrWait(StreamElementQueueEntry<T> streamElementQueueEntry) throws InterruptedException {
-		do {
-			checkpointingLock.wait();
-		} while (!queue.tryPut(streamElementQueueEntry));
-	}
-
-	private <T> void tryPutOrYield(StreamElementQueueEntry<T> streamElementQueueEntry) throws InterruptedException {
-		do {
-			if (!mainThreadExecutor.tryYield()) {
-				checkpointingLock.wait();
-			}
-		} while (!queue.tryPut(streamElementQueueEntry));
 	}
 
 	@Override

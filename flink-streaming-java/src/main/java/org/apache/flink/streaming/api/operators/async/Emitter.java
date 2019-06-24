@@ -157,15 +157,7 @@ public class Emitter<OUT> implements Runnable {
 			}
 		};
 
-		CompletableFuture<Void> writebackFuture = CompletableFuture.runAsync(processingRequest, mailboxExecutor);
-
-		// TODO: This is needed for support of legacy source compatibility. This is the counterpart to waiting on
-		//  the checkpointing lock in {AsyncWaitOperator#addAsyncBufferEntry}.
-		synchronized (checkpointLock) {
-			checkpointLock.notifyAll();
-		}
-
-		writebackFuture.get();
+		CompletableFuture.runAsync(processingRequest, mailboxExecutor).get();
 	}
 
 	public void stop() {
