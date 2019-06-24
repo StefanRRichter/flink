@@ -261,8 +261,11 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 	 * Runs the stream-tasks main processing loop.
 	 */
 	private void run() throws Exception {
+
+		assert taskMailboxExecutor.isMailboxThread() : "StreamTask::run must be executed by declared mailbox thread!";
+
 		final Mailbox mailbox = taskMailboxExecutor.getMailbox();
-		final ActionContext actionContext = new ActionContext(taskMailboxExecutor);
+		final ActionContext actionContext = new ActionContext(taskMailboxExecutor, mailboxPoisonLetter);
 
 		mailboxLoopRunning = true;
 
@@ -1374,12 +1377,14 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 	 */
 	public final class ActionContext {
 
+		private final Runnable mailboxPoisonLetter;
 		private final Runnable actionUnavailableLetter;
 		private final TaskMailboxExecutorServiceImpl mailboxExecutorService;
 
-		public ActionContext(TaskMailboxExecutorServiceImpl mailboxExecutorService) {
+		public ActionContext(TaskMailboxExecutorServiceImpl mailboxExecutorService, Runnable mailboxPoisonLetter) {
 			final Mailbox mailbox = taskMailboxExecutor.getMailbox();
 			this.actionUnavailableLetter = ThrowingRunnable.unchecked(() -> mailbox.takeMail().run());
+			this.mailboxPoisonLetter = mailboxPoisonLetter;
 			this.mailboxExecutorService = mailboxExecutorService;
 		}
 
@@ -1395,7 +1400,7 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 						mailboxPoisonLetter.run();
 					}
 				} else {
-					taskMailboxExecutor.getMailbox().putFirst(mailboxPoisonLetter);
+					mailboxExecutorService.getMailbox().putFirst(mailboxPoisonLetter);
 				}
 			} catch (InterruptedException e) {
 				Thread.currentThread().interrupt();

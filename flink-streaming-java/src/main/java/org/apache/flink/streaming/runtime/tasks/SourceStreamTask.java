@@ -126,6 +126,8 @@ public class SourceStreamTask<OUT, SRC extends SourceFunction<OUT>, OP extends S
 
 	private void runAlternativeMailboxLoop() throws InterruptedException, MailboxStateException {
 
+		assert taskMailboxExecutor.isMailboxThread() : "Alternative mailbox loop must run in declared mailbox thread!";
+
 		final Mailbox mailbox = taskMailboxExecutor.getMailbox();
 		while (isMailboxLoopRunning()) {
 
