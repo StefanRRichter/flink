@@ -174,7 +174,7 @@ public class SynchronousCheckpointTest {
 		protected void init() {}
 
 		@Override
-		protected void performDefaultAction(ActionContext context) throws Exception {
+		public void performDefaultAction(DefaultActionContext context) throws Exception {
 			runningLatch.trigger();
 			execLatch.await();
 			context.allActionsCompleted();

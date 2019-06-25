@@ -64,7 +64,7 @@ public class TwoInputStreamTask<IN1, IN2, OUT> extends AbstractTwoInputStreamTas
 	}
 
 	@Override
-	protected void performDefaultAction(ActionContext context) throws Exception {
+	public void performDefaultAction(DefaultActionContext context) throws Exception {
 		if (!inputProcessor.processInput()) {
 			context.allActionsCompleted();
 		}

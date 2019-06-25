@@ -285,7 +285,7 @@ public class JobMasterStopWithSavepointIT extends AbstractTestBase {
 		}
 
 		@Override
-		protected void performDefaultAction(ActionContext context) throws Exception {
+		public void performDefaultAction(DefaultActionContext context) throws Exception {
 			final long taskIndex = getEnvironment().getTaskInfo().getIndexOfThisSubtask();
 			if (taskIndex == 0) {
 				numberOfRestarts.countDown();
@@ -342,7 +342,7 @@ public class JobMasterStopWithSavepointIT extends AbstractTestBase {
 		}
 
 		@Override
-		protected void performDefaultAction(ActionContext context) throws Exception {
+		public void performDefaultAction(DefaultActionContext context) throws Exception {
 			invokeLatch.countDown();
 			finishLatch.await();
 			context.allActionsCompleted();
@@ -371,7 +371,7 @@ public class JobMasterStopWithSavepointIT extends AbstractTestBase {
 		}
 
 		@Override
-		protected void performDefaultAction(ActionContext context) throws Exception {
+		public void performDefaultAction(DefaultActionContext context) throws Exception {
 			context.allActionsCompleted();
 		}
 

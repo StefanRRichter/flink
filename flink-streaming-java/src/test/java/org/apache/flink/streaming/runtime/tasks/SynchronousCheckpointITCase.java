@@ -151,7 +151,7 @@ public class SynchronousCheckpointITCase {
 		}
 
 		@Override
-		protected void performDefaultAction(ActionContext context) throws Exception {
+		public void performDefaultAction(DefaultActionContext context) throws Exception {
 			if (!isRunning) {
 				isRunning = true;
 				eventQueue.put(Event.TASK_IS_RUNNING);

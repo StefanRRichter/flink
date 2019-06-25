@@ -18,6 +18,8 @@
 
 package org.apache.flink.streaming.runtime.tasks.mailbox;
 
+import org.apache.flink.annotation.Internal;
+
 import javax.annotation.Nonnull;
 
 import java.util.List;
@@ -26,6 +28,7 @@ import java.util.List;
  * A mailbox is basically a blocking queue for inter-thread message exchange in form of {@link Runnable} objects between
  * multiple producer threads and a single consumer. This has a lifecycle of closed -> open -> (quiesced) -> closed.
  */
+@Internal
 public interface Mailbox extends MailboxReceiver, MailboxSender {
 
 	/**
