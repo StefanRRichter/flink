@@ -31,7 +31,7 @@ import java.io.IOException;
 
 /**
  * Utility for creating {@link CheckpointBarrierHandler} based on checkpoint mode
- * for {@link StreamInputProcessor} and {@link StreamTwoInputProcessor}.
+ * for {@link StreamOneInputProcessor} and {@link StreamTwoInputProcessor}.
  */
 @Internal
 public class InputProcessorUtil {
